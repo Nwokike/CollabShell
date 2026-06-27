@@ -345,6 +345,7 @@ def build_onboarding_view(
         return dots
 
     async def _on_get_started(e):
+        state.onboarding_done = True
         await storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
         if on_complete:
             on_complete()

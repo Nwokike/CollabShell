@@ -46,6 +46,7 @@ class AppState:
     cli_version: str = ""
     cli_available: bool = False
     update_available_version: str | None = None
+    onboarding_done: bool = False
 
     # ── History ───────────────────────────────────────────────────────────────
     history_sessions: list = []
@@ -61,6 +62,7 @@ class AppState:
         self.history_sessions = []
         self.session_history = []
         self.update_available_version = None
+        self.onboarding_done = False
         self.ad_service = None
 
 

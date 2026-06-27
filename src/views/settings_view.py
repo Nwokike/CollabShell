@@ -183,7 +183,11 @@ def build_settings_view(
         await colab_service.clear_token()
         state.is_authenticated = False
         state.auth_email = ""
-        _snack("Token cleared. Use onboarding to sign in again.")
+        state.onboarding_done = False
+        await storage.set(constants.STORAGE_ONBOARDING_DONE, "false")
+        _snack("Token cleared. Redirecting to onboarding...")
+        page.route = "/onboarding"
+        page.update()
 
     async def _on_whoami(e):
         _snack("Checking credentials...")

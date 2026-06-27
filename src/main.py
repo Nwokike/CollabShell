@@ -239,8 +239,7 @@ async def main(page: ft.Page):
         page.views.clear()
 
         # Onboarding gate
-        onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
-        if onboarding_done != "true" and route != "/onboarding":
+        if not state.onboarding_done and route != "/onboarding":
             page.route = "/onboarding"
             await route_change()
             return
@@ -450,7 +449,8 @@ async def main(page: ft.Page):
     # ── Initial route ─────────────────────────────────────────────────────────
     async def _initial_route():
         onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
-        if onboarding_done == "true":
+        state.onboarding_done = onboarding_done == "true"
+        if state.onboarding_done:
             await navigate("/home")
         else:
             await navigate("/onboarding")
