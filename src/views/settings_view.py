@@ -273,7 +273,7 @@ def build_settings_view(
                                     width=110,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(
+                                    on_select=lambda e: page.run_task(
                                         _on_auth_method_change, e
                                     ),
                                 ),
@@ -360,7 +360,7 @@ def build_settings_view(
                                     width=130,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(
+                                    on_select=lambda e: page.run_task(
                                         _on_gpu_default, e
                                     ),
                                 ),
@@ -400,7 +400,7 @@ def build_settings_view(
                                     width=130,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(
+                                    on_select=lambda e: page.run_task(
                                         _on_tpu_default, e
                                     ),
                                 ),
@@ -461,7 +461,7 @@ def build_settings_view(
                                     width=100,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(
+                                    on_select=lambda e: page.run_task(
                                         _on_timeout_change, e
                                     ),
                                 ),
@@ -502,7 +502,7 @@ def build_settings_view(
                                     width=100,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(
+                                    on_select=lambda e: page.run_task(
                                         _on_log_format_change, e
                                     ),
                                 ),

@@ -473,8 +473,13 @@ async def main(page: ft.Page):
     # ── Initial route ─────────────────────────────────────────────────────────
     async def _initial_route():
         await _init_cli()
-        onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
-        state.onboarding_done = onboarding_done == "true"
+        if state.is_authenticated:
+            state.onboarding_done = True
+            await storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
+        else:
+            onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
+            state.onboarding_done = onboarding_done == "true"
+
         if state.onboarding_done and state.is_authenticated:
             await navigate("/home")
         else:
