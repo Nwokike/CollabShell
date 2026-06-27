@@ -15,17 +15,23 @@ def build_onboarding_view(
     storage,
     on_complete=None,
     snack=None,
-):
-    """Build the 3-page onboarding view."""
+) -> ft.View:
+    """Build the onboarding view with swipeable slides and OAuth2 integration."""
 
+    current_page = {"index": 0}
+    indicator_row = ft.Ref[ft.Row]()
+    slide_container = ft.Ref[ft.Container]()
+    next_btn = ft.Ref[ft.FilledButton]()
+    back_btn = ft.Ref[ft.TextButton]()
+
+    # Refs for Page 3 OAuth
     sign_in_btn = ft.Ref[ft.FilledButton]()
     auth_code_field = ft.Ref[ft.TextField]()
     auth_status_text = ft.Ref[ft.Text]()
     auth_url_text = ft.Ref[ft.Text]()
-    get_started_btn = ft.Ref[ft.FilledButton]()
-    page_indicator = ft.Ref[ft.Row]()
     verify_btn = ft.Ref[ft.FilledTonalButton]()
 
+    # ── Page 1 Content ──
     def _feature_row(icon, title, subtitle):
         return ft.Container(
             content=ft.Row(
@@ -61,11 +67,10 @@ def build_onboarding_view(
             padding=ft.Padding(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )
 
-    # ── Page 1: Welcome ──
-    page1 = ft.Container(
-        content=ft.Column(
+    def _build_page_1():
+        return ft.Column(
             controls=[
-                ft.Container(height=tokens.SPACE_XXXL),
+                ft.Container(height=tokens.SPACE_XL),
                 ft.Icon(ft.Icons.CLOUD_ROUNDED, size=80, color=ft.Colors.PRIMARY),
                 ft.Text(
                     constants.APP_NAME,
@@ -79,7 +84,7 @@ def build_onboarding_view(
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                ft.Container(height=tokens.SPACE_XXL),
+                ft.Container(height=tokens.SPACE_LG),
                 _feature_row(
                     ft.Icons.PLAY_ARROW_ROUNDED,
                     "Execute Python",
@@ -98,15 +103,13 @@ def build_onboarding_view(
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_SM,
-        ),
-        padding=ft.Padding(tokens.SPACE_XL, 0, tokens.SPACE_XL, 0),
-    )
+        )
 
-    # ── Page 2: How it works ──
-    page2 = ft.Container(
-        content=ft.Column(
+    # ── Page 2 Content ──
+    def _build_page_2():
+        return ft.Column(
             controls=[
-                ft.Container(height=tokens.SPACE_XXXL),
+                ft.Container(height=tokens.SPACE_XL),
                 ft.Icon(
                     ft.Icons.ROCKET_LAUNCH_ROUNDED, size=80, color=ft.Colors.PRIMARY
                 ),
@@ -116,7 +119,7 @@ def build_onboarding_view(
                     weight=ft.FontWeight.W_700,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                ft.Container(height=tokens.SPACE_LG),
+                ft.Container(height=tokens.SPACE_SM),
                 _feature_row(
                     ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
                     "1. Create a session",
@@ -137,7 +140,7 @@ def build_onboarding_view(
                     "4. Stop when done",
                     "Stop the session to free resources. Or let it auto-stop.",
                 ),
-                ft.Container(height=tokens.SPACE_MD),
+                ft.Container(height=tokens.SPACE_SM),
                 ft.Container(
                     content=ft.Text(
                         "💡 CPU sessions are always free. GPU/TPU have usage limits on the free tier.",
@@ -157,15 +160,72 @@ def build_onboarding_view(
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_SM,
-        ),
-        padding=ft.Padding(tokens.SPACE_XL, 0, tokens.SPACE_XL, 0),
-    )
+        )
 
-    # ── Page 3: Sign In ──
-    page3 = ft.Container(
-        content=ft.Column(
+    # ── Page 3 Content ──
+    async def _start_auth():
+        try:
+            if sign_in_btn.current:
+                sign_in_btn.current.disabled = True
+                sign_in_btn.current.content = ft.Text("Generating link...")
+            page.update()
+
+            url = await colab_service.get_auth_url()
+            await ft.UrlLauncher().launch_url(url)
+
+            if auth_url_text.current:
+                auth_url_text.current.value = "A browser window opened. Sign in, then paste the authorization code below."
+                auth_url_text.current.visible = True
+            if auth_code_field.current:
+                auth_code_field.current.visible = True
+            if verify_btn.current:
+                verify_btn.current.visible = True
+
+            if sign_in_btn.current:
+                sign_in_btn.current.content = ft.Text("Link opened in browser")
+            page.update()
+        except Exception as ex:
+            if sign_in_btn.current:
+                sign_in_btn.current.disabled = False
+                sign_in_btn.current.content = ft.Text(constants.LBL_SIGN_IN)
+            if auth_status_text.current:
+                auth_status_text.current.value = f"Error: {ex}"
+                auth_status_text.current.color = AppColors.ERROR
+                auth_status_text.current.visible = True
+            page.update()
+
+    async def _submit_code():
+        code = auth_code_field.current.value.strip() if auth_code_field.current else ""
+        if not code:
+            return
+
+        if auth_status_text.current:
+            auth_status_text.current.value = "Verifying..."
+            auth_status_text.current.color = ft.Colors.ON_SURFACE_VARIANT
+            auth_status_text.current.visible = True
+        page.update()
+
+        result = await colab_service.authenticate_oauth2(code)
+        if result["success"]:
+            state.is_authenticated = True
+            state.auth_email = result["email"]
+            if auth_status_text.current:
+                auth_status_text.current.value = f"✅ Signed in as {result['email']}"
+                auth_status_text.current.color = AppColors.SUCCESS
+                auth_status_text.current.visible = True
+            if next_btn.current:
+                next_btn.current.disabled = False
+        else:
+            if auth_status_text.current:
+                auth_status_text.current.value = f"❌ {result['error']}"
+                auth_status_text.current.color = AppColors.ERROR
+                auth_status_text.current.visible = True
+        page.update()
+
+    def _build_page_3():
+        return ft.Column(
             controls=[
-                ft.Container(height=tokens.SPACE_XXXL),
+                ft.Container(height=tokens.SPACE_XL),
                 ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=80, color=ft.Colors.PRIMARY),
                 ft.Text(
                     "Sign in to Google",
@@ -262,153 +322,86 @@ def build_onboarding_view(
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_SM,
-        ),
-        padding=ft.Padding(tokens.SPACE_XL, 0, tokens.SPACE_XL, 0),
-    )
+        )
 
-    async def _start_auth():
-        try:
-            sign_in_btn.current.disabled = True
-            sign_in_btn.current.content = ft.Text("Generating link...")
-            page.update()
-
-            url = await colab_service.get_auth_url()
-            await ft.UrlLauncher().launch_url(url)
-
-            if auth_url_text.current:
-                auth_url_text.current.value = "A browser window opened. Sign in, then paste the authorization code below."
-                auth_url_text.current.visible = True
-            if auth_code_field.current:
-                auth_code_field.current.visible = True
-            if verify_btn.current:
-                verify_btn.current.visible = True
-
-            sign_in_btn.current.content = ft.Text("Link opened in browser")
-            page.update()
-        except Exception as ex:
-            sign_in_btn.current.disabled = False
-            sign_in_btn.current.content = ft.Text(constants.LBL_SIGN_IN)
-            if auth_status_text.current:
-                auth_status_text.current.value = f"Error: {ex}"
-                auth_status_text.current.color = AppColors.ERROR
-                auth_status_text.current.visible = True
-            page.update()
-
-    async def _submit_code():
-        code = auth_code_field.current.value.strip() if auth_code_field.current else ""
-        if not code:
-            return
-
-        if auth_status_text.current:
-            auth_status_text.current.value = "Verifying..."
-            auth_status_text.current.color = ft.Colors.ON_SURFACE_VARIANT
-            auth_status_text.current.visible = True
-        page.update()
-
-        result = await colab_service.authenticate_oauth2(code)
-        if result["success"]:
-            state.is_authenticated = True
-            state.auth_email = result["email"]
-            if auth_status_text.current:
-                auth_status_text.current.value = f"✅ Signed in as {result['email']}"
-                auth_status_text.current.color = AppColors.SUCCESS
-                auth_status_text.current.visible = True
-            if get_started_btn.current:
-                get_started_btn.current.disabled = False
+    # ── Page Controller & Update ──
+    def _build_slide(index):
+        if index == 0:
+            return _build_page_1()
+        elif index == 1:
+            return _build_page_2()
         else:
-            if auth_status_text.current:
-                auth_status_text.current.value = f"❌ {result['error']}"
-                auth_status_text.current.color = AppColors.ERROR
-                auth_status_text.current.visible = True
-        page.update()
+            return _build_page_3()
 
-    # ── Page container ────────────────────────────────────────────────────────
-    pages_container = ft.Tabs(
-        selected_index=0,
-        animation_duration=300,
-        tabs=[
-            ft.Tab(content=page1),
-            ft.Tab(content=page2),
-            ft.Tab(content=page3),
-        ],
-        label_visibility=False,
-        divider_height=0,
-        expand=True,
-    )
-
-    def _on_next(e):
-        idx = pages_container.selected_index
-        if idx < 2:
-            pages_container.selected_index = idx + 1
-            page.update()
-
-    def _on_back(e):
-        idx = pages_container.selected_index
-        if idx > 0:
-            pages_container.selected_index = idx - 1
-            page.update()
+    def _build_indicators():
+        dots = []
+        for i in range(3):
+            dots.append(
+                ft.Container(
+                    width=10 if i == current_page["index"] else 6,
+                    height=6,
+                    border_radius=3,
+                    bgcolor=ft.Colors.PRIMARY
+                    if i == current_page["index"]
+                    else ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE),
+                )
+            )
+        return dots
 
     async def _on_get_started(e):
         await storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
         if on_complete:
             on_complete()
 
-    def _on_tab_change(e):
-        idx = pages_container.selected_index
-        if page_indicator.current:
-            for i, dot in enumerate(page_indicator.current.controls):
-                dot.bgcolor = (
-                    ft.Colors.PRIMARY
-                    if i == idx
-                    else ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE)
-                )
-
-        if get_started_btn.current:
+    def _update_view():
+        idx = current_page["index"]
+        if slide_container.current:
+            slide_container.current.content = _build_slide(idx)
+        if indicator_row.current:
+            indicator_row.current.controls = _build_indicators()
+        if back_btn.current:
+            back_btn.current.visible = idx > 0
+        if next_btn.current:
             if idx == 2:
-                get_started_btn.current.content = ft.Text("Get Started")
-                get_started_btn.current.on_click = lambda e: page.run_task(
-                    _on_get_started, e
-                )
-                get_started_btn.current.disabled = not state.is_authenticated
+                next_btn.current.content = ft.Text("Get Started")
+                next_btn.current.on_click = lambda e: page.run_task(_on_get_started, e)
+                next_btn.current.disabled = not state.is_authenticated
             else:
-                get_started_btn.current.content = ft.Text("Next")
-                get_started_btn.current.on_click = _on_next
-                get_started_btn.current.disabled = False
+                next_btn.current.content = ft.Text("Next")
+                next_btn.current.on_click = _on_next
+                next_btn.current.disabled = False
         page.update()
 
-    pages_container.on_change = _on_tab_change
+    def _on_next(e):
+        if current_page["index"] < 2:
+            current_page["index"] += 1
+            _update_view()
 
+    def _on_back(e):
+        if current_page["index"] > 0:
+            current_page["index"] -= 1
+            _update_view()
+
+    def _on_swipe(e: ft.DragEndEvent):
+        if e.primary_velocity is not None:
+            if e.primary_velocity < -200:  # Swipe left → next
+                _on_next(e)
+            elif e.primary_velocity > 200:  # Swipe right → back
+                _on_back(e)
+
+    # ── Structure ──
     nav_row = ft.Container(
         content=ft.Row(
             controls=[
-                ft.TextButton("Back", on_click=_on_back),
+                ft.TextButton("Back", ref=back_btn, on_click=_on_back, visible=False),
                 ft.Row(
-                    controls=[
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            border_radius=4,
-                            bgcolor=ft.Colors.PRIMARY,
-                        ),
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            border_radius=4,
-                            bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE),
-                        ),
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            border_radius=4,
-                            bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE),
-                        ),
-                    ],
+                    ref=indicator_row,
+                    controls=_build_indicators(),
                     spacing=tokens.SPACE_SM,
-                    ref=page_indicator,
                 ),
                 ft.FilledButton(
                     "Next",
-                    ref=get_started_btn,
+                    ref=next_btn,
                     on_click=_on_next,
                 ),
             ],
@@ -420,13 +413,26 @@ def build_onboarding_view(
         ),
     )
 
+    slide_content_container = ft.GestureDetector(
+        content=ft.Container(
+            ref=slide_container,
+            content=_build_slide(0),
+            expand=True,
+            padding=ft.Padding(tokens.SPACE_XL, 0, tokens.SPACE_XL, 0),
+        ),
+        on_horizontal_drag_end=_on_swipe,
+    )
+
     return ft.View(
         "/onboarding",
         [
-            ft.Column(
-                controls=[pages_container, nav_row],
+            ft.SafeArea(
+                content=ft.Column(
+                    controls=[slide_content_container, nav_row],
+                    expand=True,
+                    spacing=0,
+                ),
                 expand=True,
-                spacing=0,
             )
         ],
         padding=0,
