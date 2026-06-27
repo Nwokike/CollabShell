@@ -449,10 +449,11 @@ def build_session_view(
     )
 
     # ── AppBar ────────────────────────────────────────────────────────────────
-    app_bar = ft.AppBar(
-        leading=ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=on_back),
-        title=ft.Text(session_name, weight=ft.FontWeight.W_600),
-        center_title=True,
+    from core.styles import standard_brand_appbar
+
+    app_bar = standard_brand_appbar(
+        title_text=session_name,
+        on_back=on_back,
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────

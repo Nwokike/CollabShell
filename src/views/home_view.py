@@ -23,70 +23,38 @@ def build_home_view(
 
     # ── Header ────────────────────────────────────────────────────────────────
     header = ft.Container(
-        content=ft.Column(
+        content=ft.Row(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.Container(
-                            content=ft.Image(
-                                src="icon.png",
-                                width=40,
-                                height=40,
-                                fit=ft.BoxFit.CONTAIN,
-                            ),
-                            width=60,
-                            height=60,
-                            border_radius=tokens.RADIUS_LG,
-                            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY),
-                            alignment=ft.Alignment.CENTER,
-                        ),
-                        ft.Text(
-                            "Cloud GPUs from your phone",
-                            size=tokens.FONT_LG,
-                            weight=ft.FontWeight.W_700,
-                            expand=True,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_LG,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ft.Icon(
+                    ft.Icons.CHECK_CIRCLE_ROUNDED
+                    if state.is_authenticated
+                    else ft.Icons.WARNING_ROUNDED,
+                    size=tokens.ICON_SM,
+                    color=AppColors.SUCCESS
+                    if state.is_authenticated
+                    else AppColors.WARNING,
                 ),
-                # Auth status chip
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Icon(
-                                ft.Icons.CHECK_CIRCLE_ROUNDED
-                                if state.is_authenticated
-                                else ft.Icons.WARNING_ROUNDED,
-                                size=tokens.ICON_SM,
-                                color=AppColors.SUCCESS
-                                if state.is_authenticated
-                                else AppColors.WARNING,
-                            ),
-                            ft.Text(
-                                f"Signed in as {state.auth_email}"
-                                if state.is_authenticated
-                                else "Not signed in",
-                                size=tokens.FONT_XS,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                            ),
-                        ],
-                        spacing=tokens.SPACE_SM,
-                    ),
-                    padding=ft.Padding(
-                        tokens.SPACE_MD,
-                        tokens.SPACE_SM,
-                        tokens.SPACE_MD,
-                        tokens.SPACE_SM,
-                    ),
-                    border_radius=tokens.RADIUS_PILL,
-                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+                ft.Text(
+                    f"Signed in as {state.auth_email}"
+                    if state.is_authenticated
+                    else "Not signed in",
+                    size=tokens.FONT_XS,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
             ],
-            spacing=tokens.SPACE_MD,
+            spacing=tokens.SPACE_SM,
+            alignment=ft.MainAxisAlignment.START,
         ),
         padding=ft.Padding(
-            tokens.SPACE_LG, tokens.SPACE_LG, tokens.SPACE_LG, tokens.SPACE_SM
+            tokens.SPACE_MD,
+            tokens.SPACE_SM,
+            tokens.SPACE_MD,
+            tokens.SPACE_SM,
+        ),
+        border_radius=tokens.RADIUS_PILL,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+        margin=ft.Margin(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_SM
         ),
     )
 

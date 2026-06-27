@@ -145,10 +145,11 @@ def build_run_view(
         page.update()
 
     # ── Layout ────────────────────────────────────────────────────────────────
-    app_bar = ft.AppBar(
-        leading=ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=on_back),
-        title=ft.Text("Quick Run", weight=ft.FontWeight.W_600),
-        center_title=True,
+    from core.styles import standard_brand_appbar
+
+    app_bar = standard_brand_appbar(
+        title_text="Quick Run",
+        on_back=on_back,
     )
 
     view_content = ft.Column(

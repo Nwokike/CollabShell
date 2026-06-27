@@ -268,7 +268,6 @@ def build_history_view(
                                 ref=session_dropdown_ref,
                                 label="Session",
                                 options=[],
-                                prefix_icon=ft.Icons.LABEL_OUTLINE_ROUNDED,
                                 border_radius=tokens.RADIUS_MD,
                                 on_change=_on_session_change,
                             ),

@@ -395,23 +395,49 @@ async def main(page: ft.Page):
                 "/settings": "Settings",
             }
             tag_text = page_tags.get(route, "Colab")
-            page_tag = ft.Container(
-                content=ft.Text(
-                    tag_text,
-                    size=14,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
+
+            brand_leading = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Image(
+                            src="icon.png",
+                            width=24,
+                            height=24,
+                            fit=ft.BoxFit.CONTAIN,
+                        ),
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "Colab",
+                                    size=13,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.ON_SURFACE,
+                                ),
+                                ft.Text(
+                                    "Cloud GPUs",
+                                    size=8,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=0,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                    ],
+                    spacing=6,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                padding=ft.Padding(16, 0, 0, 0),
-                alignment=ft.Alignment.CENTER_LEFT,
+                padding=ft.Padding(12, 0, 0, 0),
             )
 
             if not top_view.appbar:
                 top_view.appbar = ft.AppBar()
-            top_view.appbar.leading = page_tag
-            top_view.appbar.leading_width = 100
-            top_view.appbar.title = ft.Image(
-                src="icon.png", width=32, height=32, fit=ft.BoxFit.CONTAIN
+            top_view.appbar.leading = brand_leading
+            top_view.appbar.leading_width = 150
+            top_view.appbar.title = ft.Text(
+                tag_text,
+                size=16,
+                weight=ft.FontWeight.W_700,
+                color=ft.Colors.ON_SURFACE,
             )
             top_view.appbar.center_title = True
             top_view.appbar.actions = [theme_btn]

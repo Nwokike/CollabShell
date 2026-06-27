@@ -259,15 +259,17 @@ def build_files_view(
         )
 
     # ── AppBar ────────────────────────────────────────────────────────────────
-    app_bar = ft.AppBar(
-        leading=ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, on_click=on_back),
-        title=ft.Text("Files", weight=ft.FontWeight.W_600),
-        center_title=True,
+    from core.styles import standard_brand_appbar
+
+    app_bar = standard_brand_appbar(
+        title_text="Files",
+        on_back=on_back,
         actions=[
             ft.IconButton(
                 icon=ft.Icons.REFRESH_ROUNDED,
                 on_click=lambda e: page.run_task(_load_files),
                 tooltip="Refresh",
+                icon_size=20,
             ),
         ],
     )

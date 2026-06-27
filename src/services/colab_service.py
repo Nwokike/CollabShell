@@ -63,6 +63,25 @@ class ColabService:
 
     # ── Auth ──────────────────────────────────────────────────────────────────
 
+    async def _ensure_online(self):
+        """Raise ConnectionError if device is offline."""
+        import socket
+        import asyncio
+
+        def _check():
+            try:
+                socket.setdefaulttimeout(2.0)
+                socket.gethostbyname("oauth2.googleapis.com")
+                return True
+            except Exception:
+                return False
+
+        is_online = await asyncio.to_thread(_check)
+        if not is_online:
+            from core.constants import ERR_NETWORK
+
+            raise ConnectionError(ERR_NETWORK)
+
     async def get_auth_url(self) -> str:
         """Generate the OAuth2 authorization URL for the user to visit."""
 
