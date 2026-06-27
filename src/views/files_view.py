@@ -88,7 +88,9 @@ def build_files_view(
                 title=ft.Text(f"Delete {name}?"),
                 content=ft.Text("This cannot be undone."),
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.TextButton(
+                        content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                    ),
                     ft.FilledButton(
                         "Delete",
                         on_click=lambda e: page.run_task(_confirm_delete, e),

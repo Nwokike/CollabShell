@@ -393,7 +393,12 @@ def build_onboarding_view(
     nav_row = ft.Container(
         content=ft.Row(
             controls=[
-                ft.TextButton("Back", ref=back_btn, on_click=_on_back, visible=False),
+                ft.TextButton(
+                    content=ft.Text("Back"),
+                    ref=back_btn,
+                    on_click=_on_back,
+                    visible=False,
+                ),
                 ft.Row(
                     ref=indicator_row,
                     controls=_build_indicators(),

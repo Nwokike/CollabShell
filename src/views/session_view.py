@@ -163,8 +163,12 @@ def build_session_view(
                 "This will restart the Python kernel. All variables will be lost."
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
-                ft.FilledButton("Restart", on_click=_close_and_restart),
+                ft.TextButton(
+                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                ),
+                ft.FilledButton(
+                    content=ft.Text("Restart"), on_click=_close_and_restart
+                ),
             ],
         )
         page.show_dialog(confirm_dialog)
@@ -193,8 +197,10 @@ def build_session_view(
                 "This will terminate the session and release all resources."
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
-                ft.FilledButton("Stop", on_click=_close_and_stop),
+                ft.TextButton(
+                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                ),
+                ft.FilledButton(content=ft.Text("Stop"), on_click=_close_and_stop),
             ],
         )
         page.show_dialog(confirm_dialog)
@@ -263,7 +269,9 @@ def build_session_view(
                 spacing=tokens.SPACE_SM,
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                ft.TextButton(
+                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                ),
                 ft.FilledButton(
                     "Install", on_click=lambda e: page.run_task(_do_install, e)
                 ),

@@ -81,7 +81,7 @@ def build_hardware_picker(
 
     # Create button
     create_btn = ft.FilledButton(
-        content="Create Session",
+        content=ft.Text("Create Session"),
         icon=ft.Icons.ROCKET_LAUNCH_ROUNDED,
         on_click=on_create,
         style=ft.ButtonStyle(

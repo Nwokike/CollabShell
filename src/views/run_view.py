@@ -331,7 +331,9 @@ def build_run_view(
                     # Run button
                     ft.Container(
                         content=ft.FilledButton(
-                            "Run Script" if not is_running else "Running...",
+                            content=ft.Text(
+                                "Run Script" if not is_running else "Running..."
+                            ),
                             icon=ft.Icons.ROCKET_LAUNCH_ROUNDED,
                             on_click=lambda e: page.run_task(_on_run, e),
                             disabled=is_running,

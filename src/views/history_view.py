@@ -321,7 +321,9 @@ def build_history_view(
                         # Export button
                         ft.Container(
                             content=ft.OutlinedButton(
-                                f"Export as .{state.default_log_format or 'ipynb'}",
+                                content=ft.Text(
+                                    f"Export as .{state.default_log_format or 'ipynb'}"
+                                ),
                                 icon=ft.Icons.DOWNLOAD_ROUNDED,
                                 on_click=lambda e: page.run_task(_on_export, e),
                                 width=float("inf"),
