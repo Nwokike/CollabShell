@@ -121,8 +121,6 @@ async def main(page: ft.Page):
             logger.error("CLI init failed: %s", e)
             state.cli_available = False
 
-    page.run_task(_init_cli)
-
     # ── Navigation ────────────────────────────────────────────────────────────
     async def navigate(route: str):
         page.route = route
@@ -448,9 +446,10 @@ async def main(page: ft.Page):
 
     # ── Initial route ─────────────────────────────────────────────────────────
     async def _initial_route():
+        await _init_cli()
         onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
         state.onboarding_done = onboarding_done == "true"
-        if state.onboarding_done:
+        if state.onboarding_done and state.is_authenticated:
             await navigate("/home")
         else:
             await navigate("/onboarding")

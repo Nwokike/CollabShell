@@ -371,6 +371,7 @@ class ColabService:
 
     async def list_sessions(self, auth_method: str = "oauth2") -> list:
         """List all active sessions. Returns list of session dicts."""
+        await self._ensure_online()
 
         def _list():
             from colab_cli.auth import AuthProvider
@@ -466,6 +467,7 @@ class ColabService:
         self, session_name: str, auth_method: str = "oauth2"
     ) -> bool:
         """Restart a session's kernel."""
+        await self._ensure_online()
 
         def _restart():
             from colab_cli.auth import AuthProvider
@@ -620,6 +622,7 @@ class ColabService:
         auth_method: str = "oauth2",
     ) -> list:
         """List files at a remote path. Returns list of file dicts."""
+        await self._ensure_online()
 
         def _ls():
             from colab_cli.auth import AuthProvider
@@ -706,6 +709,7 @@ class ColabService:
         auth_method: str = "oauth2",
     ) -> bool:
         """Download a remote file to a local path."""
+        await self._ensure_online()
 
         def _download():
             from colab_cli.auth import AuthProvider
@@ -822,6 +826,7 @@ except:
         on_output: Optional[Callable] = None,
     ) -> bool:
         """Authenticate with Google on the VM."""
+        await self._ensure_online()
         code = "import os\nos.environ['USE_AUTH_EPHEM'] = '0'\nfrom google.colab import auth\nauth.authenticate_user()"
         try:
             await self.exec_code(
