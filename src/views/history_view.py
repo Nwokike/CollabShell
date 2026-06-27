@@ -99,6 +99,9 @@ def build_history_view(
                 snack("Select a session first")
             return
 
+        if state.ad_service:
+            await state.ad_service.show_interstitial()
+
         fmt = state.default_log_format or "ipynb"
         export_dir = os.path.join(os.path.expanduser("~"), "Downloads")
         os.makedirs(export_dir, exist_ok=True)

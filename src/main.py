@@ -14,6 +14,7 @@ from core.state import state
 from core.theme import AppTheme
 from services.colab_service import ColabService
 from services.storage_service import StorageService
+from services.ad_service import AdService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +59,9 @@ async def main(page: ft.Page):
     page.on_error = on_error
 
     storage = StorageService(page)
+    ad_service = AdService(page)
+    state.ad_service = ad_service
+    page.run_task(ad_service.preload_interstitial)
 
     # ── Load saved settings ───────────────────────────────────────────────────
     try:
@@ -180,6 +184,7 @@ async def main(page: ft.Page):
             tpu = tpu_ref.current.value if tpu_ref.current else None
 
             page.pop_dialog()
+            await ad_service.show_interstitial()
             state.is_provisioning = True
             _snack("Creating session...")
 

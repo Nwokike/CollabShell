@@ -105,15 +105,18 @@ def solid_card(content: ft.Control, **kwargs) -> ft.Container:
     )
 
 
-def build_banner_ad(
-    page: ft.Page, unit_id: str = "ca-app-pub-5679949845754640/5131365762"
-) -> ft.Control:
+def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     """Build a glass-container-wrapped banner ad (mobile only)."""
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
         return ft.Container(width=0, height=0)
 
     try:
         import flet_ads as fta
+        from services.ad_service import AdService
+
+        if not unit_id:
+            ad_service = AdService(page)
+            unit_id = ad_service.banner_id
 
         ad = fta.BannerAd(
             unit_id=unit_id,

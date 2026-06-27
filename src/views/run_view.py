@@ -77,6 +77,8 @@ def build_run_view(
 
         output_lines.clear()
         is_running = True
+        if state.ad_service:
+            await state.ad_service.show_interstitial()
         state.is_executing = True
         page.update()
 

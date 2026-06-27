@@ -51,6 +51,9 @@ class AppState:
     history_sessions: list = []
     session_history: list = []
 
+    # ── Services ──────────────────────────────────────────────────────────────
+    ad_service = None
+
     def __init__(self):
         self.active_sessions = []
         self.exec_output_lines = []
@@ -58,6 +61,7 @@ class AppState:
         self.history_sessions = []
         self.session_history = []
         self.update_available_version = None
+        self.ad_service = None
 
 
 state = AppState()
