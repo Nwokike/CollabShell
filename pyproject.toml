@@ -1,0 +1,27 @@
+[project]
+name = "colab"
+version = "1.0.0"
+description = "Colab — Cloud GPUs from your phone"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flet>=0.85.3",
+    "google-colab-cli>=0.6.0",
+]
+
+[tool.flet]
+org = "ng.kiri"
+product = "Colab"
+build_number = 1
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.app.boot_screen]
+show = true
+message = "Initializing Colab..."
+
+[dependency-groups]
+dev = [
+    "ruff",
+]
