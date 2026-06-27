@@ -478,7 +478,7 @@ def build_session_view(
     )
 
     return ft.View(
-        f"/session?session={session_name}",
-        [view_content],
+        route=f"/session?session={session_name}",
+        controls=[view_content],
         padding=0,
     )

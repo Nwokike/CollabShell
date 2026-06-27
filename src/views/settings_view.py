@@ -733,7 +733,7 @@ def build_settings_view(
     )
 
     return ft.View(
-        "/settings",
-        [view_content],
+        route="/settings",
+        controls=[view_content],
         padding=0,
     )

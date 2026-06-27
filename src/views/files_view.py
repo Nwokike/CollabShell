@@ -340,7 +340,7 @@ def build_files_view(
     )
 
     return ft.View(
-        f"/files?session={session_name}",
-        [view_content],
+        route=f"/files?session={session_name}",
+        controls=[view_content],
         padding=0,
     )

@@ -351,7 +351,7 @@ def build_history_view(
     )
 
     return ft.View(
-        "/history",
-        [view_content],
+        route="/history",
+        controls=[view_content],
         padding=0,
     )

@@ -429,8 +429,8 @@ def build_onboarding_view(
     )
 
     return ft.View(
-        "/onboarding",
-        [
+        route="/onboarding",
+        controls=[
             ft.SafeArea(
                 content=ft.Column(
                     controls=[slide_content_container, nav_row],

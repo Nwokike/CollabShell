@@ -376,7 +376,7 @@ def build_run_view(
     )
 
     return ft.View(
-        "/run",
-        [view_content],
+        route="/run",
+        controls=[view_content],
         padding=0,
     )

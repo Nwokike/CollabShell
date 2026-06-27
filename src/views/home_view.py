@@ -228,7 +228,7 @@ def build_home_view(
     )
 
     return ft.View(
-        "/home",
-        [content],
+        route="/home",
+        controls=[content],
         padding=0,
     )
