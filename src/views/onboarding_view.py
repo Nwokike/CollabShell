@@ -269,7 +269,7 @@ def build_onboarding_view(
                 ft.Container(height=tokens.SPACE_LG),
                 # Sign in button
                 ft.FilledButton(
-                    constants.LBL_SIGN_IN,
+                    content=ft.Text(constants.LBL_SIGN_IN),
                     ref=sign_in_btn,
                     icon=ft.Icons.LOGIN_ROUNDED,
                     width=float("inf"),
@@ -304,7 +304,7 @@ def build_onboarding_view(
                     on_submit=lambda e: page.run_task(_submit_code),
                 ),
                 ft.FilledTonalButton(
-                    "Verify Code",
+                    content=ft.Text("Verify Code"),
                     ref=verify_btn,
                     icon=ft.Icons.VERIFIED_ROUNDED,
                     visible=False,
@@ -405,7 +405,7 @@ def build_onboarding_view(
                     spacing=tokens.SPACE_SM,
                 ),
                 ft.FilledButton(
-                    "Next",
+                    content=ft.Text("Next"),
                     ref=next_btn,
                     on_click=_on_next,
                 ),
