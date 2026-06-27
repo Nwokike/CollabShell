@@ -25,8 +25,7 @@ def build_files_view(
     files = []
     is_loading = False
 
-    file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
+    file_picker = page.file_picker
 
     async def _load_files(path=None):
         nonlocal current_path, files, is_loading
@@ -161,6 +160,9 @@ def build_files_view(
 
     file_picker.on_result = _on_upload_picked
 
+    async def _on_upload_click(e):
+        await file_picker.pick_files(dialog_title="Select file to upload")
+
     async def _do_upload(local_path, remote_path):
         state.is_uploading = True
         if snack:
@@ -278,7 +280,7 @@ def build_files_view(
     upload_fab = ft.FloatingActionButton(
         "Upload",
         icon=ft.Icons.UPLOAD_FILE_ROUNDED,
-        on_click=lambda e: file_picker.pick_files(dialog_title="Select file to upload"),
+        on_click=lambda e: page.run_task(_on_upload_click, e),
     )
 
     # Load files on view creation

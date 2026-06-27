@@ -129,6 +129,7 @@ def build_terminal(
         content=ft.Column(
             controls=[title_bar, code_input],
             spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         ),
         border_radius=tokens.RADIUS_MD,
         border=ft.Border.all(1, ft.Colors.with_opacity(0.2, "#FFFFFF")),

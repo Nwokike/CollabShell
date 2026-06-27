@@ -68,6 +68,10 @@ async def main(page: ft.Page):
     state.ad_service = ad_service
     page.run_task(ad_service.preload_interstitial)
 
+    file_picker = ft.FilePicker()
+    page.services.append(file_picker)
+    page.file_picker = file_picker
+
     # ── Load saved settings ───────────────────────────────────────────────────
     try:
         theme_str = await storage.get(constants.STORAGE_THEME)
@@ -188,8 +192,31 @@ async def main(page: ft.Page):
 
             page.pop_dialog()
             await ad_service.show_interstitial()
+
+            loading_dialog = ft.AlertDialog(
+                modal=True,
+                content=ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.ProgressRing(
+                                width=24,
+                                height=24,
+                                stroke_width=3,
+                            ),
+                            ft.Text(
+                                "Creating session...",
+                                size=13,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                        ],
+                        spacing=12,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(24, 20, 24, 20),
+                ),
+            )
+            page.show_dialog(loading_dialog)
             state.is_provisioning = True
-            _snack("Creating session...")
 
             try:
                 result = await colab_service.new_session(
@@ -198,6 +225,7 @@ async def main(page: ft.Page):
                     tpu=tpu if tpu else None,
                     auth_method=state.auth_method,
                 )
+                page.pop_dialog()  # Dismiss spinner
                 _snack(f"✅ Session '{result['name']}' created!")
 
                 sessions = await colab_service.list_sessions(
@@ -206,6 +234,7 @@ async def main(page: ft.Page):
                 state.active_sessions = sessions
                 await route_change()
             except Exception as ex:
+                page.pop_dialog()  # Dismiss spinner
                 _snack(f"❌ {ex}")
             state.is_provisioning = False
             page.update()

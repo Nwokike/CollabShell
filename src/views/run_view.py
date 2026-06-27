@@ -28,8 +28,7 @@ def build_run_view(
     output_lines = []
     is_running = False
 
-    file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
+    file_picker = page.file_picker
 
     def _on_file_picked(e: ft.FilePickerResultEvent):
         if e.files and script_path_ref.current:
@@ -37,6 +36,12 @@ def build_run_view(
             page.update()
 
     file_picker.on_result = _on_file_picked
+
+    async def _on_browse_click(e):
+        await file_picker.pick_files(
+            allowed_extensions=["py"],
+            dialog_title="Select Python Script",
+        )
 
     hardware_type = "CPU"
 
@@ -177,11 +182,8 @@ def build_run_view(
                                             ),
                                             ft.IconButton(
                                                 icon=ft.Icons.FOLDER_OPEN_ROUNDED,
-                                                on_click=lambda e: (
-                                                    file_picker.pick_files(
-                                                        allowed_extensions=["py"],
-                                                        dialog_title="Select Python Script",
-                                                    )
+                                                on_click=lambda e: page.run_task(
+                                                    _on_browse_click, e
                                                 ),
                                                 tooltip="Browse",
                                             ),
