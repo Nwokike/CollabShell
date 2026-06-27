@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Colab — Cloud GPUs from your phone.
 
 Main entry point: page config, routing, service bootstrapping.
@@ -6,6 +7,10 @@ Main entry point: page config, routing, service bootstrapping.
 from __future__ import annotations
 
 import logging
+
+from core.storage_patch import apply_storage_patches
+
+apply_storage_patches()
 
 import flet as ft
 

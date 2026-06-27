@@ -21,3 +21,4 @@ Thumbs.db
 credentials.json
 token.json
 oauth_code.txt
+storage/
