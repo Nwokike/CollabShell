@@ -364,9 +364,7 @@ async def main(page: ft.Page):
                     page.theme_mode == ft.ThemeMode.SYSTEM
                     and page.platform_brightness == ft.Brightness.DARK
                 )
-                page.theme_mode = (
-                    ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
-                )
+                page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
                 state.theme_mode = page.theme_mode
                 await storage.set(
                     constants.STORAGE_THEME,

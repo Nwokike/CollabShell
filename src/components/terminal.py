@@ -28,9 +28,24 @@ def build_terminal(
                 # macOS dots
                 ft.Row(
                     controls=[
-                        ft.Container(width=12, height=12, border_radius=6, bgcolor=AppColors.TERMINAL_DOT_RED),
-                        ft.Container(width=12, height=12, border_radius=6, bgcolor=AppColors.TERMINAL_DOT_YELLOW),
-                        ft.Container(width=12, height=12, border_radius=6, bgcolor=AppColors.TERMINAL_DOT_GREEN),
+                        ft.Container(
+                            width=12,
+                            height=12,
+                            border_radius=6,
+                            bgcolor=AppColors.TERMINAL_DOT_RED,
+                        ),
+                        ft.Container(
+                            width=12,
+                            height=12,
+                            border_radius=6,
+                            bgcolor=AppColors.TERMINAL_DOT_YELLOW,
+                        ),
+                        ft.Container(
+                            width=12,
+                            height=12,
+                            border_radius=6,
+                            bgcolor=AppColors.TERMINAL_DOT_GREEN,
+                        ),
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
@@ -45,8 +60,12 @@ def build_terminal(
                 ),
                 # Run / Stop button
                 ft.IconButton(
-                    icon=ft.Icons.STOP_ROUNDED if is_running else ft.Icons.PLAY_ARROW_ROUNDED,
-                    icon_color=AppColors.TERMINAL_DOT_GREEN if not is_running else AppColors.TERMINAL_DOT_RED,
+                    icon=ft.Icons.STOP_ROUNDED
+                    if is_running
+                    else ft.Icons.PLAY_ARROW_ROUNDED,
+                    icon_color=AppColors.TERMINAL_DOT_GREEN
+                    if not is_running
+                    else AppColors.TERMINAL_DOT_RED,
                     icon_size=tokens.ICON_LG,
                     on_click=on_run,
                     tooltip="Stop" if is_running else "Run",
@@ -54,7 +73,12 @@ def build_terminal(
                 if not is_running
                 else ft.Row(
                     controls=[
-                        ft.ProgressRing(width=18, height=18, stroke_width=2, color=AppColors.TERMINAL_DOT_GREEN),
+                        ft.ProgressRing(
+                            width=18,
+                            height=18,
+                            stroke_width=2,
+                            color=AppColors.TERMINAL_DOT_GREEN,
+                        ),
                         ft.IconButton(
                             icon=ft.Icons.STOP_ROUNDED,
                             icon_color=AppColors.TERMINAL_DOT_RED,
@@ -69,7 +93,9 @@ def build_terminal(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         bgcolor=AppColors.TERMINAL_HEADER,
-        padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM),
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM
+        ),
         border_radius=ft.BorderRadius(tokens.RADIUS_MD, tokens.RADIUS_MD, 0, 0),
     )
 
@@ -93,7 +119,9 @@ def build_terminal(
             font_family="RobotoMono",
             size=tokens.FONT_SM,
         ),
-        content_padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD),
+        content_padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD
+        ),
         border_radius=ft.BorderRadius(0, 0, tokens.RADIUS_MD, tokens.RADIUS_MD),
     )
 

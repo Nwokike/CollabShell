@@ -38,7 +38,11 @@ def _format_size(size_bytes) -> str:
         return ""
     for unit in ("B", "KB", "MB", "GB"):
         if size_bytes < 1024:
-            return f"{size_bytes:.0f} {unit}" if unit == "B" else f"{size_bytes:.1f} {unit}"
+            return (
+                f"{size_bytes:.0f} {unit}"
+                if unit == "B"
+                else f"{size_bytes:.1f} {unit}"
+            )
         size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
 
@@ -71,7 +75,9 @@ def build_file_item(
                         ft.Text(
                             name,
                             size=tokens.FONT_MD,
-                            weight=ft.FontWeight.W_500 if is_dir else ft.FontWeight.W_400,
+                            weight=ft.FontWeight.W_500
+                            if is_dir
+                            else ft.FontWeight.W_400,
                             max_lines=1,
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
@@ -85,7 +91,9 @@ def build_file_item(
                     expand=True,
                 ),
                 ft.Icon(
-                    ft.Icons.CHEVRON_RIGHT_ROUNDED if is_dir else ft.Icons.MORE_VERT_ROUNDED,
+                    ft.Icons.CHEVRON_RIGHT_ROUNDED
+                    if is_dir
+                    else ft.Icons.MORE_VERT_ROUNDED,
                     size=tokens.ICON_MD,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
@@ -93,7 +101,9 @@ def build_file_item(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_MD,
         ),
-        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+        padding=ft.Padding(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
+        ),
         on_click=on_click,
         ink=True,
     )

@@ -169,7 +169,9 @@ def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
         ),
         bgcolor=color,
         border_radius=tokens.RADIUS_XS,
-        padding=ft.Padding(tokens.SPACE_SM, tokens.SPACE_XXS, tokens.SPACE_SM, tokens.SPACE_XXS),
+        padding=ft.Padding(
+            tokens.SPACE_SM, tokens.SPACE_XXS, tokens.SPACE_SM, tokens.SPACE_XXS
+        ),
     )
 
 

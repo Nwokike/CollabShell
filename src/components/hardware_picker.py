@@ -34,9 +34,17 @@ def build_hardware_picker(
         ref=hardware_type_ref,
         selected={"CPU"},
         segments=[
-            ft.Segment(value="CPU", label=ft.Text("CPU"), icon=ft.Icon(ft.Icons.MEMORY_ROUNDED)),
-            ft.Segment(value="GPU", label=ft.Text("GPU"), icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED)),
-            ft.Segment(value="TPU", label=ft.Text("TPU"), icon=ft.Icon(ft.Icons.BOLT_ROUNDED)),
+            ft.Segment(
+                value="CPU", label=ft.Text("CPU"), icon=ft.Icon(ft.Icons.MEMORY_ROUNDED)
+            ),
+            ft.Segment(
+                value="GPU",
+                label=ft.Text("GPU"),
+                icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED),
+            ),
+            ft.Segment(
+                value="TPU", label=ft.Text("TPU"), icon=ft.Icon(ft.Icons.BOLT_ROUNDED)
+            ),
         ],
     )
 
@@ -73,10 +81,14 @@ def build_hardware_picker(
 
     # Create button
     create_btn = ft.FilledButton(
-        text="Create Session",
+        content="Create Session",
         icon=ft.Icons.ROCKET_LAUNCH_ROUNDED,
         on_click=on_create,
-        style=ft.ButtonStyle(padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_MD, tokens.SPACE_XL, tokens.SPACE_MD)),
+        style=ft.ButtonStyle(
+            padding=ft.Padding(
+                tokens.SPACE_XL, tokens.SPACE_MD, tokens.SPACE_XL, tokens.SPACE_MD
+            )
+        ),
         width=float("inf"),
     )
 
@@ -115,5 +127,7 @@ def build_hardware_picker(
             spacing=tokens.SPACE_SM,
             scroll=ft.ScrollMode.AUTO,
         ),
-        padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL),
+        padding=ft.Padding(
+            tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL
+        ),
     )

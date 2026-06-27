@@ -1,10 +1,11 @@
 """Quick Run view — one-shot script execution (colab run equivalent)."""
 
+from __future__ import annotations
+
 import flet as ft
 
 from core import tokens, constants
-from core.styles import glass_card, section_header, tip_text, build_banner_ad
-from core.theme import AppColors
+from core.styles import section_header, tip_text, build_banner_ad
 from components.output_panel import build_output_panel
 
 
@@ -13,7 +14,8 @@ def build_run_view(
     colab_service,
     state,
     on_back=None,
-):
+    snack=None,
+) -> ft.View:
     """Build the Quick Run view for one-shot script execution."""
 
     script_path_ref = ft.Ref[ft.TextField]()
@@ -47,15 +49,19 @@ def build_run_view(
 
     async def _on_run(e):
         nonlocal is_running
-        script = script_path_ref.current.value.strip() if script_path_ref.current else ""
+        script = (
+            script_path_ref.current.value.strip() if script_path_ref.current else ""
+        )
         if not script:
-            page.open(ft.SnackBar(content=ft.Text("Please select a script file")))
-            page.update()
+            if snack:
+                snack("Please select a script file")
             return
 
         args_str = args_ref.current.value.strip() if args_ref.current else ""
         args = args_str.split() if args_str else []
-        sess_name = session_name_ref.current.value.strip() if session_name_ref.current else None
+        sess_name = (
+            session_name_ref.current.value.strip() if session_name_ref.current else None
+        )
         gpu = None
         tpu = None
         if hardware_type == "GPU" and gpu_ref.current:
@@ -63,7 +69,11 @@ def build_run_view(
         elif hardware_type == "TPU" and tpu_ref.current:
             tpu = tpu_ref.current.value
         keep = keep_ref.current.value if keep_ref.current else False
-        timeout_val = float(timeout_ref.current.value) if timeout_ref.current and timeout_ref.current.value else 30.0
+        timeout_val = (
+            float(timeout_ref.current.value)
+            if timeout_ref.current and timeout_ref.current.value
+            else 30.0
+        )
 
         output_lines.clear()
         is_running = True
@@ -71,13 +81,16 @@ def build_run_view(
         page.update()
 
         try:
-            # Quick Run creates a session, runs the script, and optionally keeps the session
-            # For now we use new_session + exec_file since run_script needs the full run.py logic
-            output_lines.append(f"[*] Creating session{' (' + gpu + ')' if gpu else ' (' + tpu + ')' if tpu else ' (CPU)'}...")
+            output_lines.append(
+                f"[*] Creating session{' (' + gpu + ')' if gpu else ' (' + tpu + ')' if tpu else ' (CPU)'}..."
+            )
             page.update()
 
             session_info = await colab_service.new_session(
-                name=sess_name, gpu=gpu, tpu=tpu, auth_method=state.auth_method,
+                name=sess_name,
+                gpu=gpu,
+                tpu=tpu,
+                auth_method=state.auth_method,
             )
             sn = session_info["name"]
             output_lines.append(f"[*] Session '{sn}' created. Running script...")
@@ -93,19 +106,20 @@ def build_run_view(
                 code = argv_setup + code
 
             await colab_service.exec_code(
-                code, sn,
+                code,
+                sn,
                 timeout=timeout_val,
                 auth_method=state.auth_method,
                 on_output=lambda t: _append_output(t),
             )
 
-            output_lines.append(f"\n[*] Script finished.")
+            output_lines.append("\n[*] Script finished.")
 
             if not keep:
                 output_lines.append(f"[*] Stopping session '{sn}'...")
                 page.update()
                 await colab_service.stop_session(sn, auth_method=state.auth_method)
-                output_lines.append(f"[*] Session stopped.")
+                output_lines.append("[*] Session stopped.")
             else:
                 output_lines.append(f"[*] Session '{sn}' kept alive.")
 
@@ -135,7 +149,7 @@ def build_run_view(
         center_title=True,
     )
 
-    content = ft.Column(
+    view_content = ft.Column(
         controls=[
             app_bar,
             ft.Column(
@@ -160,16 +174,20 @@ def build_run_view(
                                             ),
                                             ft.IconButton(
                                                 icon=ft.Icons.FOLDER_OPEN_ROUNDED,
-                                                on_click=lambda e: file_picker.pick_files(
-                                                    allowed_extensions=["py"],
-                                                    dialog_title="Select Python Script",
+                                                on_click=lambda e: (
+                                                    file_picker.pick_files(
+                                                        allowed_extensions=["py"],
+                                                        dialog_title="Select Python Script",
+                                                    )
                                                 ),
                                                 tooltip="Browse",
                                             ),
                                         ],
                                         spacing=tokens.SPACE_SM,
                                     ),
-                                    padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
+                                    padding=ft.Padding(
+                                        tokens.SPACE_LG, 0, tokens.SPACE_LG, 0
+                                    ),
                                 ),
                                 ft.Container(
                                     content=ft.TextField(
@@ -180,7 +198,12 @@ def build_run_view(
                                         border_radius=tokens.RADIUS_MD,
                                         text_size=tokens.FONT_MD,
                                     ),
-                                    padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0),
+                                    padding=ft.Padding(
+                                        tokens.SPACE_LG,
+                                        tokens.SPACE_SM,
+                                        tokens.SPACE_LG,
+                                        0,
+                                    ),
                                 ),
                             ],
                             spacing=0,
@@ -193,15 +216,29 @@ def build_run_view(
                             selected={"CPU"},
                             on_change=_on_hardware_change,
                             segments=[
-                                ft.Segment(value="CPU", label=ft.Text("CPU"), icon=ft.Icon(ft.Icons.MEMORY_ROUNDED)),
-                                ft.Segment(value="GPU", label=ft.Text("GPU"), icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED)),
-                                ft.Segment(value="TPU", label=ft.Text("TPU"), icon=ft.Icon(ft.Icons.BOLT_ROUNDED)),
+                                ft.Segment(
+                                    value="CPU",
+                                    label=ft.Text("CPU"),
+                                    icon=ft.Icon(ft.Icons.MEMORY_ROUNDED),
+                                ),
+                                ft.Segment(
+                                    value="GPU",
+                                    label=ft.Text("GPU"),
+                                    icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED),
+                                ),
+                                ft.Segment(
+                                    value="TPU",
+                                    label=ft.Text("TPU"),
+                                    icon=ft.Icon(ft.Icons.BOLT_ROUNDED),
+                                ),
                             ],
                         ),
                         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
                     ),
                     ft.Container(
-                        content=tip_text("CPU is always free. T4 GPU and TPU are free with limits."),
+                        content=tip_text(
+                            "CPU is always free. T4 GPU and TPU are free with limits."
+                        ),
                         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
                     ),
                     ft.Container(
@@ -217,20 +254,28 @@ def build_run_view(
                             value="T4",
                             border_radius=tokens.RADIUS_MD,
                         ),
-                        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0),
+                        padding=ft.Padding(
+                            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
+                        ),
                     ),
                     ft.Container(
                         content=ft.Dropdown(
                             ref=tpu_ref,
                             label="TPU Model",
                             options=[
-                                ft.dropdown.Option(key="v5e1", text="v5e1  ·  Free tier"),
-                                ft.dropdown.Option(key="v6e1", text="v6e1  ·  Free tier"),
+                                ft.dropdown.Option(
+                                    key="v5e1", text="v5e1  ·  Free tier"
+                                ),
+                                ft.dropdown.Option(
+                                    key="v6e1", text="v6e1  ·  Free tier"
+                                ),
                             ],
                             value="v5e1",
                             border_radius=tokens.RADIUS_MD,
                         ),
-                        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0),
+                        padding=ft.Padding(
+                            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
+                        ),
                     ),
                     # Options
                     section_header("OPTIONS"),
@@ -248,7 +293,10 @@ def build_run_view(
                                 ft.Dropdown(
                                     ref=timeout_ref,
                                     label="Timeout",
-                                    options=[ft.dropdown.Option(str(t), f"{t}s") for t in constants.TIMEOUT_OPTIONS],
+                                    options=[
+                                        ft.dropdown.Option(str(t), f"{t}s")
+                                        for t in constants.TIMEOUT_OPTIONS
+                                    ],
                                     value=str(state.default_timeout),
                                     border_radius=tokens.RADIUS_MD,
                                 ),
@@ -257,7 +305,11 @@ def build_run_view(
                                         ft.Switch(ref=keep_ref, value=False),
                                         ft.Column(
                                             controls=[
-                                                ft.Text("Keep session alive", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
+                                                ft.Text(
+                                                    "Keep session alive",
+                                                    size=tokens.FONT_MD,
+                                                    weight=ft.FontWeight.W_500,
+                                                ),
                                                 ft.Text(
                                                     "Session stays running after script finishes",
                                                     size=tokens.FONT_XS,
@@ -279,16 +331,23 @@ def build_run_view(
                     # Run button
                     ft.Container(
                         content=ft.FilledButton(
-                            text="Run Script" if not is_running else "Running...",
+                            "Run Script" if not is_running else "Running...",
                             icon=ft.Icons.ROCKET_LAUNCH_ROUNDED,
                             on_click=lambda e: page.run_task(_on_run, e),
                             disabled=is_running,
                             width=float("inf"),
                             style=ft.ButtonStyle(
-                                padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_MD, tokens.SPACE_XL, tokens.SPACE_MD),
+                                padding=ft.Padding(
+                                    tokens.SPACE_XL,
+                                    tokens.SPACE_MD,
+                                    tokens.SPACE_XL,
+                                    tokens.SPACE_MD,
+                                ),
                             ),
                         ),
-                        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
+                        padding=ft.Padding(
+                            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0
+                        ),
                     ),
                     # Output
                     ft.Container(
@@ -297,7 +356,9 @@ def build_run_view(
                             is_visible=True,
                             on_clear=_on_clear,
                         ),
-                        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
+                        padding=ft.Padding(
+                            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0
+                        ),
                     ),
                     ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
                     build_banner_ad(page),
@@ -312,4 +373,8 @@ def build_run_view(
         spacing=0,
     )
 
-    return content
+    return ft.View(
+        "/run",
+        [view_content],
+        padding=0,
+    )

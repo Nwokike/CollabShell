@@ -24,7 +24,9 @@ def build_output_panel(
 
     output_controls = []
     for line in output_lines:
-        is_error = line.startswith("Error") or line.startswith("Traceback") or "Error:" in line
+        is_error = (
+            line.startswith("Error") or line.startswith("Traceback") or "Error:" in line
+        )
         output_controls.append(
             ft.Text(
                 line,
@@ -50,7 +52,11 @@ def build_output_panel(
     header = ft.Container(
         content=ft.Row(
             controls=[
-                ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=tokens.ICON_SM, color=ft.Colors.with_opacity(0.5, "#FFFFFF")),
+                ft.Icon(
+                    ft.Icons.TERMINAL_ROUNDED,
+                    size=tokens.ICON_SM,
+                    color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
+                ),
                 ft.Text(
                     "OUTPUT",
                     size=tokens.FONT_XXS,
@@ -65,17 +71,23 @@ def build_output_panel(
                     icon_color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
                     on_click=on_clear,
                     tooltip="Clear output",
-                ) if on_clear else ft.Container(width=0),
+                )
+                if on_clear
+                else ft.Container(width=0),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM),
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM
+        ),
     )
 
     output_list = ft.ListView(
         controls=output_controls,
         spacing=tokens.SPACE_XXS,
-        padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD),
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD
+        ),
         auto_scroll=True,
         height=200,
     )

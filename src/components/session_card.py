@@ -15,7 +15,7 @@ def build_session_card(
     session dict keys: name, accelerator, variant, status, running, last_execution, accelerator_label
     """
     name = session.get("name", "?")
-    accel_label = session.get("accelerator_label", "CPU")
+    session.get("accelerator_label", "CPU")
     variant = session.get("variant", "DEFAULT")
     status = session.get("status", "IDLE")
     running = session.get("running")
@@ -72,7 +72,9 @@ def build_session_card(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_MD,
         ),
-        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+        padding=ft.Padding(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
+        ),
         border_radius=tokens.RADIUS_MD,
         bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),

@@ -31,6 +31,7 @@ class ColabService:
     async def init(self) -> bool:
         """Initialize the colab_cli State singleton and check availability."""
         try:
+
             def _init():
                 from colab_cli.common import State
                 from colab_cli.auto_update import get_app_version
@@ -40,7 +41,7 @@ class ColabService:
                 self._cli_available = True
                 return version
 
-            version = await asyncio.to_thread(_init)
+            await asyncio.to_thread(_init)
             return True
         except Exception as e:
             logger.error("Failed to init colab_cli: %s", e)
@@ -49,9 +50,12 @@ class ColabService:
 
     async def get_version(self) -> str:
         """Return the installed CLI version."""
+
         def _get():
             from colab_cli.auto_update import get_app_version
+
             return get_app_version()
+
         try:
             return await asyncio.to_thread(_get)
         except Exception:
@@ -61,9 +65,9 @@ class ColabService:
 
     async def get_auth_url(self) -> str:
         """Generate the OAuth2 authorization URL for the user to visit."""
+
         def _get_url():
             from colab_cli.auth import PUBLIC_SCOPES, REMOTE_REDIRECT_URI
-            import json
             from importlib import resources
             from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -83,9 +87,13 @@ class ColabService:
 
         Returns {"success": bool, "email": str, "error": str}.
         """
+
         def _auth(code):
-            from colab_cli.auth import PUBLIC_SCOPES, REMOTE_REDIRECT_URI, TOKEN_CONFIG_PATH
-            import json
+            from colab_cli.auth import (
+                PUBLIC_SCOPES,
+                REMOTE_REDIRECT_URI,
+                TOKEN_CONFIG_PATH,
+            )
             from importlib import resources
             from google_auth_oauthlib.flow import InstalledAppFlow
             from google.auth.transport.requests import Request
@@ -107,6 +115,7 @@ class ColabService:
             creds.refresh(Request())
             import urllib.request
             import urllib.parse
+
             qs = urllib.parse.urlencode({"access_token": creds.token})
             url = f"https://oauth2.googleapis.com/tokeninfo?{qs}"
             with urllib.request.urlopen(url, timeout=10) as resp:
@@ -128,25 +137,36 @@ class ColabService:
 
         Returns {"authenticated": bool, "email": str, "expires_in": str, "auth_method": str}.
         """
+
         def _check():
             from colab_cli.auth import TOKEN_CONFIG_PATH, get_credentials, AuthProvider
-            import json
             import urllib.request
             import urllib.parse
 
             # Check if token file exists
             if not os.path.exists(TOKEN_CONFIG_PATH):
-                return {"authenticated": False, "email": "", "expires_in": "", "auth_method": "oauth2"}
+                return {
+                    "authenticated": False,
+                    "email": "",
+                    "expires_in": "",
+                    "auth_method": "oauth2",
+                }
 
             try:
                 sess = get_credentials(provider=AuthProvider.OAUTH2)
                 creds = sess.credentials
                 from google.auth.transport.requests import Request as _Req
+
                 creds.refresh(_Req())
 
                 token = creds.token
                 if not token:
-                    return {"authenticated": False, "email": "", "expires_in": "", "auth_method": "oauth2"}
+                    return {
+                        "authenticated": False,
+                        "email": "",
+                        "expires_in": "",
+                        "auth_method": "oauth2",
+                    }
 
                 qs = urllib.parse.urlencode({"access_token": token})
                 url = f"https://oauth2.googleapis.com/tokeninfo?{qs}"
@@ -169,18 +189,26 @@ class ColabService:
                 }
             except Exception as e:
                 logger.warning("Auth check failed: %s", e)
-                return {"authenticated": False, "email": "", "expires_in": "", "auth_method": "oauth2"}
+                return {
+                    "authenticated": False,
+                    "email": "",
+                    "expires_in": "",
+                    "auth_method": "oauth2",
+                }
 
         return await asyncio.to_thread(_check)
 
     async def clear_token(self) -> bool:
         """Delete the cached OAuth2 token."""
+
         def _clear():
             from colab_cli.auth import TOKEN_CONFIG_PATH
+
             if os.path.exists(TOKEN_CONFIG_PATH):
                 os.remove(TOKEN_CONFIG_PATH)
                 return True
             return False
+
         return await asyncio.to_thread(_clear)
 
     # ── Sessions ──────────────────────────────────────────────────────────────
@@ -196,12 +224,12 @@ class ColabService:
 
         Returns a dict with session info or raises an exception.
         """
+
         def _new():
             import uuid
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
-            from colab_cli.client import Accelerator, Variant, Client, Prod, ColabRequestError
-            from colab_cli.auth import get_credentials
+            from colab_cli.client import Accelerator, Variant, ColabRequestError
             from colab_cli.state import SessionState
             from colab_cli.commands.session import spawn_keep_alive
             from colab_cli.utils import get_status_code
@@ -216,17 +244,24 @@ class ColabService:
 
             if tpu:
                 variant = Variant.TPU
-                accelerator = Accelerator.V5E1 if tpu.lower() == "v5e1" else Accelerator.V6E1
+                accelerator = (
+                    Accelerator.V5E1 if tpu.lower() == "v5e1" else Accelerator.V6E1
+                )
             elif gpu:
                 variant = Variant.GPU
                 mapping = {
-                    "a100": Accelerator.A100, "h100": Accelerator.H100,
-                    "l4": Accelerator.L4, "t4": Accelerator.T4, "g4": Accelerator.G4,
+                    "a100": Accelerator.A100,
+                    "h100": Accelerator.H100,
+                    "l4": Accelerator.L4,
+                    "t4": Accelerator.T4,
+                    "g4": Accelerator.G4,
                 }
                 accelerator = mapping.get(gpu.lower(), Accelerator.T4)
 
             try:
-                res = st.client.assign(uuid.uuid4(), variant=variant, accelerator=accelerator)
+                res = st.client.assign(
+                    uuid.uuid4(), variant=variant, accelerator=accelerator
+                )
             except ColabRequestError as e:
                 if get_status_code(e) == 400 and accelerator != Accelerator.NONE:
                     raise ValueError(
@@ -236,6 +271,7 @@ class ColabService:
                 raise
 
             from colab_cli.client import PostAssignmentResponse
+
             if isinstance(res, PostAssignmentResponse):
                 token = res.runtime_proxy_info.token
                 url = res.runtime_proxy_info.url
@@ -246,12 +282,20 @@ class ColabService:
                     if hasattr(res, "runtime_proxy_info")
                     else getattr(res, "runtime_proxy_token", "")
                 )
-                url = res.runtime_proxy_info.url if hasattr(res, "runtime_proxy_info") else ""
+                url = (
+                    res.runtime_proxy_info.url
+                    if hasattr(res, "runtime_proxy_info")
+                    else ""
+                )
                 endpoint = res.endpoint
 
             s = SessionState(
-                name=session_name, token=token, url=url, endpoint=endpoint,
-                variant=variant.value, accelerator=accelerator.value,
+                name=session_name,
+                token=token,
+                url=url,
+                endpoint=endpoint,
+                variant=variant.value,
+                accelerator=accelerator.value,
             )
 
             # Pre-flight keep-alive
@@ -262,16 +306,21 @@ class ColabService:
 
             st.store.add(s)
             s.keep_alive_pid = spawn_keep_alive(
-                endpoint, session_name,
+                endpoint,
+                session_name,
                 auth_provider=st.auth_provider,
                 config_path=st.config_path,
             )
             st.store.add(s)
-            st.history.log_event(session_name, "session_created", {
-                "endpoint": endpoint,
-                "variant": variant.value,
-                "accelerator": accelerator.value,
-            })
+            st.history.log_event(
+                session_name,
+                "session_created",
+                {
+                    "endpoint": endpoint,
+                    "variant": variant.value,
+                    "accelerator": accelerator.value,
+                },
+            )
 
             return {
                 "name": session_name,
@@ -285,6 +334,7 @@ class ColabService:
 
     async def list_sessions(self, auth_method: str = "oauth2") -> list:
         """List all active sessions. Returns list of session dicts."""
+
         def _list():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -299,7 +349,9 @@ class ColabService:
 
             for a in assignments:
                 name = name_by_ep.get(a.endpoint, "?")
-                accel_label = "CPU" if a.accelerator.value == "NONE" else a.accelerator.value
+                accel_label = (
+                    "CPU" if a.accelerator.value == "NONE" else a.accelerator.value
+                )
                 status = "IDLE"
                 running = None
                 last_exec = None
@@ -316,16 +368,18 @@ class ColabService:
                             "time": s.last_execution[2],
                         }
 
-                results.append({
-                    "name": name,
-                    "endpoint": a.endpoint,
-                    "accelerator": a.accelerator.value,
-                    "variant": a.variant.name,
-                    "accelerator_label": accel_label,
-                    "status": status,
-                    "running": running,
-                    "last_execution": last_exec,
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "endpoint": a.endpoint,
+                        "accelerator": a.accelerator.value,
+                        "variant": a.variant.name,
+                        "accelerator_label": accel_label,
+                        "status": status,
+                        "running": running,
+                        "last_execution": last_exec,
+                    }
+                )
 
             return results
 
@@ -335,8 +389,11 @@ class ColabService:
             logger.error("list_sessions failed: %s", e)
             return []
 
-    async def stop_session(self, session_name: str, auth_method: str = "oauth2") -> bool:
+    async def stop_session(
+        self, session_name: str, auth_method: str = "oauth2"
+    ) -> bool:
         """Stop a session by name."""
+
         def _stop():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State, kill_process
@@ -361,13 +418,18 @@ class ColabService:
 
             st.client.unassign(s.endpoint)
             st.store.remove(session_name)
-            st.history.log_event(session_name, "session_terminated", {"reason": "user_requested"})
+            st.history.log_event(
+                session_name, "session_terminated", {"reason": "user_requested"}
+            )
             return True
 
         return await asyncio.to_thread(_stop)
 
-    async def restart_kernel(self, session_name: str, auth_method: str = "oauth2") -> bool:
+    async def restart_kernel(
+        self, session_name: str, auth_method: str = "oauth2"
+    ) -> bool:
         """Restart a session's kernel."""
+
         def _restart():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -390,9 +452,12 @@ class ColabService:
                 st.store.add(s)
 
             runtime = ColabRuntime(
-                s.url, s.token,
-                kernel_id=s.kernel_id, session_id=s.session_id,
-                on_kernel_started=on_started, on_session_started=on_sess,
+                s.url,
+                s.token,
+                kernel_id=s.kernel_id,
+                session_id=s.session_id,
+                on_kernel_started=on_started,
+                on_session_started=on_sess,
             )
             try:
                 runtime.restart()
@@ -413,6 +478,7 @@ class ColabService:
         on_output: Optional[Callable] = None,
     ) -> list:
         """Execute Python code in a session. Returns list of outputs."""
+
         def _exec():
             import datetime
             from colab_cli.auth import AuthProvider
@@ -435,9 +501,12 @@ class ColabService:
                 st.store.add(s)
 
             runtime = ColabRuntime(
-                s.url, s.token,
-                kernel_id=s.kernel_id, session_id=s.session_id,
-                on_kernel_started=on_started, on_session_started=on_sess,
+                s.url,
+                s.token,
+                kernel_id=s.kernel_id,
+                session_id=s.session_id,
+                on_kernel_started=on_started,
+                on_session_started=on_sess,
             )
 
             # Set working directory
@@ -447,6 +516,7 @@ class ColabService:
                 )
             except Exception as e:
                 from colab_cli.utils import is_terminal_error
+
                 if is_terminal_error(e):
                     st.prune_session(session_name)
                     raise ValueError("Session lost (404/401). It may have timed out.")
@@ -454,7 +524,8 @@ class ColabService:
 
             s.running = "exec(code)"
             s.last_execution = (
-                "code", None,
+                "code",
+                None,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             st.store.add(s)
@@ -472,9 +543,12 @@ class ColabService:
                         if tb:
                             # Strip ANSI codes for display
                             import re
-                            text = re.sub(r'\x1b\[[0-9;]*m', '', "\n".join(tb))
+
+                            text = re.sub(r"\x1b\[[0-9;]*m", "", "\n".join(tb))
                         else:
-                            text = f"{out.get('ename', 'Error')}: {out.get('evalue', '')}"
+                            text = (
+                                f"{out.get('ename', 'Error')}: {out.get('evalue', '')}"
+                            )
                     if text:
                         on_output(text)
 
@@ -484,9 +558,14 @@ class ColabService:
                     output_hook=output_hook if on_output else None,
                     timeout=timeout,
                 )
-                st.history.log_event(session_name, "execution", {
-                    "code": code, "outputs": outputs,
-                })
+                st.history.log_event(
+                    session_name,
+                    "execution",
+                    {
+                        "code": code,
+                        "outputs": outputs,
+                    },
+                )
                 return outputs
             finally:
                 s.running = None
@@ -497,8 +576,14 @@ class ColabService:
 
     # ── Files ─────────────────────────────────────────────────────────────────
 
-    async def ls(self, path: str = "content", session_name: str = None, auth_method: str = "oauth2") -> list:
+    async def ls(
+        self,
+        path: str = "content",
+        session_name: str = None,
+        auth_method: str = "oauth2",
+    ) -> list:
         """List files at a remote path. Returns list of file dicts."""
+
         def _ls():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -519,11 +604,23 @@ class ColabService:
             if data.get("type") == "directory":
                 items = data.get("content", [])
                 return sorted(
-                    [{"name": i.get("name"), "type": i.get("type"), "size": i.get("size", 0)}
-                     for i in items],
+                    [
+                        {
+                            "name": i.get("name"),
+                            "type": i.get("type"),
+                            "size": i.get("size", 0),
+                        }
+                        for i in items
+                    ],
                     key=lambda x: (x["type"] != "directory", x["name"]),
                 )
-            return [{"name": data.get("name"), "type": data.get("type"), "size": data.get("size", 0)}]
+            return [
+                {
+                    "name": data.get("name"),
+                    "type": data.get("type"),
+                    "size": data.get("size", 0),
+                }
+            ]
 
         return await asyncio.to_thread(_ls)
 
@@ -535,6 +632,7 @@ class ColabService:
         auth_method: str = "oauth2",
     ) -> bool:
         """Upload a local file to the remote session."""
+
         def _upload():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -550,9 +648,15 @@ class ColabService:
 
             client = ContentsClient(s)
             client.upload(local_path, remote_path)
-            st.history.log_event(name, "file_operation", {
-                "op": "upload", "local": local_path, "remote": remote_path,
-            })
+            st.history.log_event(
+                name,
+                "file_operation",
+                {
+                    "op": "upload",
+                    "local": local_path,
+                    "remote": remote_path,
+                },
+            )
             return True
 
         return await asyncio.to_thread(_upload)
@@ -565,6 +669,7 @@ class ColabService:
         auth_method: str = "oauth2",
     ) -> bool:
         """Download a remote file to a local path."""
+
         def _download():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -580,15 +685,24 @@ class ColabService:
 
             client = ContentsClient(s)
             client.download(remote_path, local_path)
-            st.history.log_event(name, "file_operation", {
-                "op": "download", "remote": remote_path, "local": local_path,
-            })
+            st.history.log_event(
+                name,
+                "file_operation",
+                {
+                    "op": "download",
+                    "remote": remote_path,
+                    "local": local_path,
+                },
+            )
             return True
 
         return await asyncio.to_thread(_download)
 
-    async def rm(self, path: str, session_name: str = None, auth_method: str = "oauth2") -> bool:
+    async def rm(
+        self, path: str, session_name: str = None, auth_method: str = "oauth2"
+    ) -> bool:
         """Delete a remote file."""
+
         def _rm():
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
@@ -621,7 +735,13 @@ class ColabService:
         """Mount Google Drive at the given path."""
         code = f"from google.colab import drive\ndrive.mount('{path}')"
         try:
-            await self.exec_code(code, session_name, timeout=600, auth_method=auth_method, on_output=on_output)
+            await self.exec_code(
+                code,
+                session_name,
+                timeout=600,
+                auth_method=auth_method,
+                on_output=on_output,
+            )
             return True
         except Exception as e:
             logger.error("mount_drive failed: %s", e)
@@ -635,7 +755,7 @@ class ColabService:
         on_output: Optional[Callable] = None,
     ) -> bool:
         """Install Python packages on the VM."""
-        pkg_str = " ".join(packages)
+        " ".join(packages)
         code = f"""
 import subprocess, sys
 try:
@@ -646,7 +766,13 @@ except:
     print('Installation Complete (via pip)!')
 """
         try:
-            await self.exec_code(code, session_name, timeout=300, auth_method=auth_method, on_output=on_output)
+            await self.exec_code(
+                code,
+                session_name,
+                timeout=300,
+                auth_method=auth_method,
+                on_output=on_output,
+            )
             return True
         except Exception as e:
             logger.error("install_packages failed: %s", e)
@@ -661,7 +787,13 @@ except:
         """Authenticate with Google on the VM."""
         code = "import os\nos.environ['USE_AUTH_EPHEM'] = '0'\nfrom google.colab import auth\nauth.authenticate_user()"
         try:
-            await self.exec_code(code, session_name, timeout=600, auth_method=auth_method, on_output=on_output)
+            await self.exec_code(
+                code,
+                session_name,
+                timeout=600,
+                auth_method=auth_method,
+                on_output=on_output,
+            )
             return True
         except Exception as e:
             logger.error("auth_gcp failed: %s", e)
@@ -669,8 +801,11 @@ except:
 
     # ── Utility ───────────────────────────────────────────────────────────────
 
-    async def get_session_url(self, session_name: str, auth_method: str = "oauth2") -> str:
+    async def get_session_url(
+        self, session_name: str, auth_method: str = "oauth2"
+    ) -> str:
         """Get the browser URL for a session."""
+
         def _url():
             from urllib.parse import quote
             from colab_cli.auth import AuthProvider
@@ -698,8 +833,10 @@ except:
         event_type: str = None,
     ) -> list:
         """Get session history logs."""
+
         def _log():
             from colab_cli.history import HistoryLogger
+
             h = HistoryLogger()
             events = h.get_history(session_name)
             if event_type:
@@ -712,29 +849,41 @@ except:
 
     async def list_log_sessions(self) -> list:
         """List session names that have history logs."""
+
         def _list():
             from colab_cli.history import HistoryLogger
+
             h = HistoryLogger()
             return h.list_sessions()
+
         return await asyncio.to_thread(_list)
 
     async def export_log(self, session_name: str, output_path: str) -> bool:
         """Export session history to a file."""
+
         def _export():
             from colab_cli.history import HistoryLogger
             from colab_cli.converter import export_history
+
             h = HistoryLogger()
             events = h.get_history(session_name)
             if not events:
                 return False
             export_history(events, session_name, output_path)
             return True
+
         return await asyncio.to_thread(_export)
 
     async def check_for_updates(self) -> Optional[str]:
         """Check for CLI updates. Returns new version string or None."""
+
         def _check():
-            from colab_cli.auto_update import get_app_version, _fetch_pypi, _parse_version, _is_newer
+            from colab_cli.auto_update import (
+                get_app_version,
+                _fetch_pypi,
+                _parse_version,
+                _is_newer,
+            )
             from colab_cli.common import state as cli_state
 
             settings = cli_state.settings_store.load()
@@ -765,4 +914,6 @@ except:
         elif len(names) == 0:
             raise ValueError("No active sessions. Create one first.")
         else:
-            raise ValueError(f"Multiple sessions active. Specify one: {', '.join(names)}")
+            raise ValueError(
+                f"Multiple sessions active. Specify one: {', '.join(names)}"
+            )

@@ -1,9 +1,17 @@
 """Settings view — every CLI option exposed, following Sherlock's pattern exactly."""
 
+from __future__ import annotations
+
 import flet as ft
 
 from core import tokens, constants
-from core.styles import section_header, setting_tile, glass_card, build_banner_ad, tip_text
+from core.styles import (
+    section_header,
+    setting_tile,
+    glass_card,
+    build_banner_ad,
+    tip_text,
+)
 from core.theme import AppColors
 
 
@@ -13,8 +21,13 @@ def build_settings_view(
     state,
     storage,
     on_theme_change=None,
-):
+) -> ft.View:
     """Build the settings view with every CLI flag exposed."""
+
+    def _snack(msg: str):
+        page.snack_bar = ft.SnackBar(content=ft.Text(msg))
+        page.snack_bar.open = True
+        page.update()
 
     # ── PREFERENCES ───────────────────────────────────────────────────────────
     def _on_theme_change_handler(e):
@@ -45,11 +58,23 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.PALETTE_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.PALETTE_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Theme", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        ft.Text("Appearance mode", size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE_VARIANT),
+                                        ft.Text(
+                                            "Theme",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        ft.Text(
+                                            "Appearance mode",
+                                            size=tokens.FONT_XS,
+                                            color=ft.Colors.ON_SURFACE_VARIANT,
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
@@ -72,7 +97,9 @@ def build_settings_view(
                         ),
                     ],
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -86,17 +113,14 @@ def build_settings_view(
         page.update()
 
     async def _on_reauth(e):
-        page.open(ft.SnackBar(content=ft.Text("Clearing token...")))
-        page.update()
+        _snack("Clearing token...")
         await colab_service.clear_token()
         state.is_authenticated = False
         state.auth_email = ""
-        page.open(ft.SnackBar(content=ft.Text("Token cleared. Use onboarding to sign in again.")))
-        page.update()
+        _snack("Token cleared. Use onboarding to sign in again.")
 
     async def _on_whoami(e):
-        page.open(ft.SnackBar(content=ft.Text("Checking credentials...")))
-        page.update()
+        _snack("Checking credentials...")
         result = await colab_service.check_auth()
         if result["authenticated"]:
             msg = f"Email: {result['email']}\nExpires: {result['expires_in']}\nMethod: {result['auth_method']}"
@@ -106,14 +130,21 @@ def build_settings_view(
         info_dialog = ft.AlertDialog(
             title=ft.Text("Who Am I"),
             content=ft.Text(msg),
-            actions=[ft.TextButton("OK", on_click=lambda e: page.close(info_dialog))],
+            actions=[ft.TextButton("OK", on_click=lambda e: page.pop_dialog())],
         )
-        page.open(info_dialog)
-        page.update()
+        page.show_dialog(info_dialog)
 
     auth_status_color = AppColors.SUCCESS if state.is_authenticated else AppColors.ERROR
-    auth_status_icon = ft.Icons.CHECK_CIRCLE_ROUNDED if state.is_authenticated else ft.Icons.ERROR_ROUNDED
-    auth_status_text = f"Signed in as {state.auth_email}" if state.is_authenticated else "Not signed in"
+    auth_status_icon = (
+        ft.Icons.CHECK_CIRCLE_ROUNDED
+        if state.is_authenticated
+        else ft.Icons.ERROR_ROUNDED
+    )
+    auth_status_text = (
+        f"Signed in as {state.auth_email}"
+        if state.is_authenticated
+        else "Not signed in"
+    )
 
     auth_section = ft.Column(
         controls=[
@@ -124,8 +155,17 @@ def build_settings_view(
                         # Auth status
                         ft.Row(
                             controls=[
-                                ft.Icon(auth_status_icon, size=tokens.ICON_LG, color=auth_status_color),
-                                ft.Text(auth_status_text, size=tokens.FONT_MD, weight=ft.FontWeight.W_500, expand=True),
+                                ft.Icon(
+                                    auth_status_icon,
+                                    size=tokens.ICON_LG,
+                                    color=auth_status_color,
+                                ),
+                                ft.Text(
+                                    auth_status_text,
+                                    size=tokens.FONT_MD,
+                                    weight=ft.FontWeight.W_500,
+                                    expand=True,
+                                ),
                             ],
                             spacing=tokens.SPACE_MD,
                         ),
@@ -133,12 +173,21 @@ def build_settings_view(
                         # Auth method
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.VPN_KEY_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.VPN_KEY_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Auth Method", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
+                                        ft.Text(
+                                            "Auth Method",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
                                         tip_text(
-                                            constants.TIP_AUTH_OAUTH2 if state.auth_method == "oauth2"
+                                            constants.TIP_AUTH_OAUTH2
+                                            if state.auth_method == "oauth2"
                                             else constants.TIP_AUTH_ADC
                                         ),
                                     ],
@@ -154,7 +203,9 @@ def build_settings_view(
                                     width=110,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(_on_auth_method_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_auth_method_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -165,13 +216,13 @@ def build_settings_view(
                         ft.Row(
                             controls=[
                                 ft.OutlinedButton(
-                                    text=constants.LBL_RE_AUTH,
+                                    constants.LBL_RE_AUTH,
                                     icon=ft.Icons.REFRESH_ROUNDED,
                                     on_click=lambda e: page.run_task(_on_reauth, e),
                                     expand=True,
                                 ),
                                 ft.OutlinedButton(
-                                    text="Who Am I",
+                                    "Who Am I",
                                     icon=ft.Icons.PERSON_SEARCH_ROUNDED,
                                     on_click=lambda e: page.run_task(_on_whoami, e),
                                     expand=True,
@@ -182,7 +233,9 @@ def build_settings_view(
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -205,11 +258,21 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.DEVELOPER_BOARD_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Default GPU", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        tip_text("Pre-selected GPU when creating new sessions"),
+                                        ft.Text(
+                                            "Default GPU",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Pre-selected GPU when creating new sessions"
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
@@ -227,7 +290,9 @@ def build_settings_view(
                                     width=130,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(_on_gpu_default, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_gpu_default, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -236,11 +301,21 @@ def build_settings_view(
                         ft.Divider(height=tokens.SPACE_SM),
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.BOLT_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.BOLT_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Default TPU", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        tip_text("Pre-selected TPU when creating new sessions"),
+                                        ft.Text(
+                                            "Default TPU",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Pre-selected TPU when creating new sessions"
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
@@ -255,7 +330,9 @@ def build_settings_view(
                                     width=130,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(_on_tpu_default, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_tpu_default, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -263,7 +340,9 @@ def build_settings_view(
                         ),
                     ],
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -286,10 +365,18 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.TIMER_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.TIMER_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Default Timeout", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
+                                        ft.Text(
+                                            "Default Timeout",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
                                         tip_text(constants.TIP_TIMEOUT),
                                     ],
                                     spacing=tokens.SPACE_XXS,
@@ -297,11 +384,16 @@ def build_settings_view(
                                 ),
                                 ft.Dropdown(
                                     value=str(state.default_timeout),
-                                    options=[ft.dropdown.Option(str(t), f"{t}s") for t in constants.TIMEOUT_OPTIONS],
+                                    options=[
+                                        ft.dropdown.Option(str(t), f"{t}s")
+                                        for t in constants.TIMEOUT_OPTIONS
+                                    ],
                                     width=100,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(_on_timeout_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_timeout_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -310,11 +402,21 @@ def build_settings_view(
                         ft.Divider(height=tokens.SPACE_SM),
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.SAVE_ALT_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.SAVE_ALT_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Log Export Format", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        tip_text("Default format when exporting session logs"),
+                                        ft.Text(
+                                            "Log Export Format",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Default format when exporting session logs"
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
@@ -330,7 +432,9 @@ def build_settings_view(
                                     width=100,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
-                                    on_change=lambda e: page.run_task(_on_log_format_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_log_format_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -338,7 +442,9 @@ def build_settings_view(
                         ),
                     ],
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -367,7 +473,11 @@ def build_settings_view(
                             controls=[
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Keep-Alive", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
+                                        ft.Text(
+                                            "Keep-Alive",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
                                         tip_text(constants.TIP_KEEP_ALIVE),
                                     ],
                                     spacing=tokens.SPACE_XXS,
@@ -375,7 +485,9 @@ def build_settings_view(
                                 ),
                                 ft.Switch(
                                     value=state.keep_alive_enabled,
-                                    on_change=lambda e: page.run_task(_on_keep_alive_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_keep_alive_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -385,15 +497,23 @@ def build_settings_view(
                             controls=[
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Auto-Stop on Close", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        tip_text("Stop all sessions when the app closes"),
+                                        ft.Text(
+                                            "Auto-Stop on Close",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Stop all sessions when the app closes"
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Switch(
                                     value=state.auto_stop_on_close,
-                                    on_change=lambda e: page.run_task(_on_auto_stop_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_auto_stop_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -411,7 +531,9 @@ def build_settings_view(
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -432,22 +554,32 @@ def build_settings_view(
                             controls=[
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Log to Stderr", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                                        tip_text("Debug: route all CLI output to stderr"),
+                                        ft.Text(
+                                            "Log to Stderr",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Debug: route all CLI output to stderr"
+                                        ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Switch(
                                     value=state.logtostderr,
-                                    on_change=lambda e: page.run_task(_on_logtostderr_change, e),
+                                    on_change=lambda e: page.run_task(
+                                        _on_logtostderr_change, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                     ],
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -455,15 +587,13 @@ def build_settings_view(
 
     # ── UPDATES ───────────────────────────────────────────────────────────────
     async def _on_check_updates(e):
-        page.open(ft.SnackBar(content=ft.Text("Checking for updates...")))
-        page.update()
+        _snack("Checking for updates...")
         new_version = await colab_service.check_for_updates()
         if new_version:
             state.update_available_version = new_version
-            page.open(ft.SnackBar(content=ft.Text(f"Update available: v{new_version}")))
+            _snack(f"Update available: v{new_version}")
         else:
-            page.open(ft.SnackBar(content=ft.Text("You're up to date!")))
-        page.update()
+            _snack("You're up to date!")
 
     updates_section = ft.Column(
         controls=[
@@ -473,12 +603,22 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.INFO_ROUNDED, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Icon(
+                                    ft.Icons.INFO_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("CLI Version", size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
                                         ft.Text(
-                                            f"v{state.cli_version}" if state.cli_version else "Unknown",
+                                            "CLI Version",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        ft.Text(
+                                            f"v{state.cli_version}"
+                                            if state.cli_version
+                                            else "Unknown",
                                             size=tokens.FONT_XS,
                                             color=ft.Colors.ON_SURFACE_VARIANT,
                                         ),
@@ -493,16 +633,19 @@ def build_settings_view(
                         ft.Row(
                             controls=[
                                 ft.OutlinedButton(
-                                    text=constants.LBL_CHECK_UPDATES,
+                                    constants.LBL_CHECK_UPDATES,
                                     icon=ft.Icons.SYSTEM_UPDATE_ROUNDED,
-                                    on_click=lambda e: page.run_task(_on_check_updates, e),
+                                    on_click=lambda e: page.run_task(
+                                        _on_check_updates, e
+                                    ),
                                     expand=True,
                                 ),
                                 ft.OutlinedButton(
-                                    text=constants.LBL_MANAGE_COMPUTE,
+                                    constants.LBL_MANAGE_COMPUTE,
                                     icon=ft.Icons.CREDIT_CARD_ROUNDED,
                                     on_click=lambda e: page.run_task(
-                                        page.launch_url_async, "https://colab.research.google.com/signup"
+                                        ft.UrlLauncher().launch_url,
+                                        "https://colab.research.google.com/signup",
                                     ),
                                     expand=True,
                                 ),
@@ -512,7 +655,9 @@ def build_settings_view(
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
@@ -527,7 +672,11 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.CLOUD_ROUNDED, size=tokens.ICON_XL, color=ft.Colors.PRIMARY),
+                                ft.Icon(
+                                    ft.Icons.CLOUD_ROUNDED,
+                                    size=tokens.ICON_XL,
+                                    color=ft.Colors.PRIMARY,
+                                ),
                                 ft.Column(
                                     controls=[
                                         ft.Text(
@@ -555,14 +704,16 @@ def build_settings_view(
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
-                margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
             ),
         ],
         spacing=0,
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────
-    content = ft.Column(
+    view_content = ft.Column(
         controls=[
             preferences_section,
             auth_section,
@@ -581,4 +732,8 @@ def build_settings_view(
         expand=True,
     )
 
-    return content
+    return ft.View(
+        "/settings",
+        [view_content],
+        padding=0,
+    )

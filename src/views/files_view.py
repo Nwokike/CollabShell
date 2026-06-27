@@ -1,10 +1,12 @@
 """Files view — remote file browser with upload, download, delete."""
 
+from __future__ import annotations
+
 import flet as ft
 import os
 
-from core import tokens, constants
-from core.styles import section_header, build_banner_ad
+from core import tokens
+from core.styles import build_banner_ad
 from core.theme import AppColors
 from components.file_item import build_file_item
 
@@ -15,7 +17,8 @@ def build_files_view(
     state,
     session_name: str,
     on_back=None,
-):
+    snack=None,
+) -> ft.View:
     """Build the file browser view for a session."""
 
     current_path = state.current_path or "content"
@@ -40,7 +43,8 @@ def build_files_view(
             )
             state.file_listing = files
         except Exception as ex:
-            page.open(ft.SnackBar(content=ft.Text(f"Error: {ex}")))
+            if snack:
+                snack(f"Error: {ex}")
             files = []
         is_loading = False
         page.update()
@@ -57,32 +61,34 @@ def build_files_view(
         remote_path = f"{current_path}/{name}"
 
         async def _do_download(e):
-            page.close(action_sheet)
-            page.open(ft.SnackBar(content=ft.Text(f"Downloading {name}...")))
-            page.update()
+            page.pop_dialog()
+            if snack:
+                snack(f"Downloading {name}...")
             try:
                 # Save to a temp directory accessible on Android
                 local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
                 os.makedirs(local_dir, exist_ok=True)
                 local_path = os.path.join(local_dir, name)
                 await colab_service.download(
-                    remote_path, local_path,
+                    remote_path,
+                    local_path,
                     session_name=session_name,
                     auth_method=state.auth_method,
                 )
-                page.open(ft.SnackBar(content=ft.Text(f"✅ Saved to {local_path}")))
+                if snack:
+                    snack(f"✅ Saved to {local_path}")
             except Exception as ex:
-                page.open(ft.SnackBar(content=ft.Text(f"❌ {ex}")))
-            page.update()
+                if snack:
+                    snack(f"❌ {ex}")
 
         async def _do_delete(e):
-            page.close(action_sheet)
+            page.pop_dialog()
 
             confirm = ft.AlertDialog(
                 title=ft.Text(f"Delete {name}?"),
                 content=ft.Text("This cannot be undone."),
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.close(confirm)),
+                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
                     ft.FilledButton(
                         "Delete",
                         on_click=lambda e: page.run_task(_confirm_delete, e),
@@ -91,23 +97,23 @@ def build_files_view(
             )
 
             async def _confirm_delete(e):
-                page.close(confirm)
-                page.open(ft.SnackBar(content=ft.Text(f"Deleting {name}...")))
-                page.update()
+                page.pop_dialog()
+                if snack:
+                    snack(f"Deleting {name}...")
                 try:
                     await colab_service.rm(
                         remote_path,
                         session_name=session_name,
                         auth_method=state.auth_method,
                     )
-                    page.open(ft.SnackBar(content=ft.Text(f"✅ Deleted {name}")))
+                    if snack:
+                        snack(f"✅ Deleted {name}")
                     await _load_files()
                 except Exception as ex:
-                    page.open(ft.SnackBar(content=ft.Text(f"❌ {ex}")))
-                page.update()
+                    if snack:
+                        snack(f"❌ {ex}")
 
-            page.open(confirm)
-            page.update()
+            page.show_dialog(confirm)
 
         action_sheet = ft.BottomSheet(
             content=ft.Container(
@@ -126,7 +132,9 @@ def build_files_view(
                             on_click=lambda e: page.run_task(_do_download, e),
                         ),
                         ft.ListTile(
-                            leading=ft.Icon(ft.Icons.DELETE_ROUNDED, color=AppColors.ERROR),
+                            leading=ft.Icon(
+                                ft.Icons.DELETE_ROUNDED, color=AppColors.ERROR
+                            ),
                             title=ft.Text("Delete", color=AppColors.ERROR),
                             on_click=lambda e: page.run_task(_do_delete, e),
                         ),
@@ -134,11 +142,12 @@ def build_files_view(
                     tight=True,
                     spacing=tokens.SPACE_SM,
                 ),
-                padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XXL),
+                padding=ft.Padding(
+                    tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XXL
+                ),
             ),
         )
-        page.open(action_sheet)
-        page.update()
+        page.show_dialog(action_sheet)
 
     # ── Upload ────────────────────────────────────────────────────────────────
     def _on_upload_picked(e: ft.FilePickerResultEvent):
@@ -152,18 +161,21 @@ def build_files_view(
 
     async def _do_upload(local_path, remote_path):
         state.is_uploading = True
-        page.open(ft.SnackBar(content=ft.Text(f"Uploading {os.path.basename(local_path)}...")))
-        page.update()
+        if snack:
+            snack(f"Uploading {os.path.basename(local_path)}...")
         try:
             await colab_service.upload(
-                local_path, remote_path,
+                local_path,
+                remote_path,
                 session_name=session_name,
                 auth_method=state.auth_method,
             )
-            page.open(ft.SnackBar(content=ft.Text(f"✅ Uploaded to {remote_path}")))
+            if snack:
+                snack(f"✅ Uploaded to {remote_path}")
             await _load_files()
         except Exception as ex:
-            page.open(ft.SnackBar(content=ft.Text(f"❌ {ex}")))
+            if snack:
+                snack(f"❌ {ex}")
         state.is_uploading = False
         page.update()
 
@@ -176,17 +188,23 @@ def build_files_view(
             is_last = i == len(parts) - 1
             controls.append(
                 ft.TextButton(
-                    text=part,
+                    part,
                     style=ft.ButtonStyle(
-                        color=ft.Colors.PRIMARY if not is_last else ft.Colors.ON_SURFACE,
+                        color=ft.Colors.PRIMARY
+                        if not is_last
+                        else ft.Colors.ON_SURFACE,
                         padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
                     ),
-                    on_click=(lambda e, p=path_so_far: page.run_task(_load_files, p)) if not is_last else None,
+                    on_click=(lambda e, p=path_so_far: page.run_task(_load_files, p))
+                    if not is_last
+                    else None,
                 )
             )
             if not is_last:
                 controls.append(
-                    ft.Text("/", size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE_VARIANT)
+                    ft.Text(
+                        "/", size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE_VARIANT
+                    )
                 )
         return ft.Row(controls=controls, spacing=0, wrap=True)
 
@@ -209,8 +227,16 @@ def build_files_view(
             return ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.FOLDER_OFF_ROUNDED, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ft.Text("Empty directory", size=tokens.FONT_MD, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Icon(
+                            ft.Icons.FOLDER_OFF_ROUNDED,
+                            size=48,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            "Empty directory",
+                            size=tokens.FONT_MD,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=tokens.SPACE_SM,
@@ -246,15 +272,15 @@ def build_files_view(
 
     # ── FAB ───────────────────────────────────────────────────────────────────
     upload_fab = ft.FloatingActionButton(
+        "Upload",
         icon=ft.Icons.UPLOAD_FILE_ROUNDED,
-        text="Upload",
         on_click=lambda e: file_picker.pick_files(dialog_title="Select file to upload"),
     )
 
     # Load files on view creation
     page.run_task(_load_files)
 
-    return ft.Stack(
+    view_content = ft.Stack(
         controls=[
             ft.Column(
                 controls=[
@@ -279,13 +305,17 @@ def build_files_view(
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                     spacing=tokens.SPACE_XS,
                                 ),
-                                padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
+                                padding=ft.Padding(
+                                    tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
+                                ),
                             ),
                             ft.Divider(height=1),
                             # File list
                             ft.Container(
                                 content=_build_file_list(),
-                                padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
+                                padding=ft.Padding(
+                                    tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
+                                ),
                                 expand=True,
                             ),
                             build_banner_ad(page),
@@ -305,4 +335,10 @@ def build_files_view(
             ),
         ],
         expand=True,
+    )
+
+    return ft.View(
+        f"/files?session={session_name}",
+        [view_content],
+        padding=0,
     )

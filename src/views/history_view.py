@@ -1,10 +1,12 @@
 """History view — session logs with filters and export."""
 
+from __future__ import annotations
+
 import flet as ft
 import os
 
-from core import tokens, constants
-from core.styles import section_header, glass_card, build_banner_ad
+from core import tokens
+from core.styles import section_header, build_banner_ad
 from core.theme import AppColors
 
 
@@ -13,7 +15,8 @@ def build_history_view(
     colab_service,
     state,
     preselected_session: str = None,
-):
+    snack=None,
+) -> ft.View:
     """Build the history view with session selector, event list, and export."""
 
     selected_session = preselected_session or ""
@@ -42,7 +45,8 @@ def build_history_view(
                 elif sessions:
                     session_dropdown_ref.current.value = sessions[0]
         except Exception as ex:
-            page.open(ft.SnackBar(content=ft.Text(f"Error loading sessions: {ex}")))
+            if snack:
+                snack(f"Error loading sessions: {ex}")
         is_loading = False
         page.update()
 
@@ -52,7 +56,9 @@ def build_history_view(
 
     async def _load_events():
         nonlocal events, is_loading
-        sess = session_dropdown_ref.current.value if session_dropdown_ref.current else ""
+        sess = (
+            session_dropdown_ref.current.value if session_dropdown_ref.current else ""
+        )
         if not sess:
             return
         is_loading = True
@@ -62,7 +68,8 @@ def build_history_view(
             events = await colab_service.get_log(sess, lines=lines_limit, event_type=et)
             state.session_history = events
         except Exception as ex:
-            page.open(ft.SnackBar(content=ft.Text(f"Error: {ex}")))
+            if snack:
+                snack(f"Error: {ex}")
             events = []
         is_loading = False
         page.update()
@@ -84,10 +91,12 @@ def build_history_view(
         page.run_task(_load_events)
 
     async def _on_export(e):
-        sess = session_dropdown_ref.current.value if session_dropdown_ref.current else ""
+        sess = (
+            session_dropdown_ref.current.value if session_dropdown_ref.current else ""
+        )
         if not sess:
-            page.open(ft.SnackBar(content=ft.Text("Select a session first")))
-            page.update()
+            if snack:
+                snack("Select a session first")
             return
 
         fmt = state.default_log_format or "ipynb"
@@ -95,14 +104,15 @@ def build_history_view(
         os.makedirs(export_dir, exist_ok=True)
         output_path = os.path.join(export_dir, f"{sess}_log.{fmt}")
 
-        page.open(ft.SnackBar(content=ft.Text(f"Exporting to {fmt}...")))
-        page.update()
+        if snack:
+            snack(f"Exporting to {fmt}...")
         try:
             await colab_service.export_log(sess, output_path)
-            page.open(ft.SnackBar(content=ft.Text(f"✅ Exported to {output_path}")))
+            if snack:
+                snack(f"✅ Exported to {output_path}")
         except Exception as ex:
-            page.open(ft.SnackBar(content=ft.Text(f"❌ {ex}")))
-        page.update()
+            if snack:
+                snack(f"❌ {ex}")
 
     # ── Event type badge ──────────────────────────────────────────────────────
     def _event_badge(event_type):
@@ -146,7 +156,9 @@ def build_history_view(
             code = event.get("code", "")
             subtitle = code[:80].replace("\n", " ") + ("..." if len(code) > 80 else "")
         elif etype == "file_operation":
-            subtitle = f"{event.get('op', '')} → {event.get('path', event.get('remote', ''))}"
+            subtitle = (
+                f"{event.get('op', '')} → {event.get('path', event.get('remote', ''))}"
+            )
         elif etype == "automation":
             subtitle = event.get("op", "")
         elif etype == "session_created":
@@ -181,7 +193,9 @@ def build_history_view(
                                 color=ft.Colors.ON_SURFACE_VARIANT,
                                 max_lines=2,
                                 overflow=ft.TextOverflow.ELLIPSIS,
-                            ) if subtitle else ft.Container(height=0),
+                            )
+                            if subtitle
+                            else ft.Container(height=0),
                         ],
                         spacing=tokens.SPACE_XXS,
                         expand=True,
@@ -190,7 +204,9 @@ def build_history_view(
                 spacing=tokens.SPACE_MD,
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
-            padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+            padding=ft.Padding(
+                tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
+            ),
         )
 
     def _build_event_list():
@@ -205,8 +221,16 @@ def build_history_view(
             return ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.HISTORY_ROUNDED, size=48, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ft.Text("No history events", size=tokens.FONT_MD, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Icon(
+                            ft.Icons.HISTORY_ROUNDED,
+                            size=48,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            "No history events",
+                            size=tokens.FONT_MD,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                         ft.Text(
                             "Execute code or manage files to create history",
                             size=tokens.FONT_XS,
@@ -229,7 +253,7 @@ def build_history_view(
     # Load sessions on creation
     page.run_task(_load_sessions)
 
-    content = ft.Column(
+    view_content = ft.Column(
         controls=[
             # Filters
             ft.Container(
@@ -255,10 +279,18 @@ def build_history_view(
                                         label="Event Type",
                                         options=[
                                             ft.dropdown.Option("all", "All Events"),
-                                            ft.dropdown.Option("execution", "Executions"),
-                                            ft.dropdown.Option("file_operation", "File Ops"),
-                                            ft.dropdown.Option("automation", "Automation"),
-                                            ft.dropdown.Option("session_created", "Session Created"),
+                                            ft.dropdown.Option(
+                                                "execution", "Executions"
+                                            ),
+                                            ft.dropdown.Option(
+                                                "file_operation", "File Ops"
+                                            ),
+                                            ft.dropdown.Option(
+                                                "automation", "Automation"
+                                            ),
+                                            ft.dropdown.Option(
+                                                "session_created", "Session Created"
+                                            ),
                                         ],
                                         value="all",
                                         border_radius=tokens.RADIUS_MD,
@@ -282,17 +314,21 @@ def build_history_view(
                                 ],
                                 spacing=tokens.SPACE_SM,
                             ),
-                            padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0),
+                            padding=ft.Padding(
+                                tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
+                            ),
                         ),
                         # Export button
                         ft.Container(
                             content=ft.OutlinedButton(
-                                text=f"Export as .{state.default_log_format or 'ipynb'}",
+                                f"Export as .{state.default_log_format or 'ipynb'}",
                                 icon=ft.Icons.DOWNLOAD_ROUNDED,
                                 on_click=lambda e: page.run_task(_on_export, e),
                                 width=float("inf"),
                             ),
-                            padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
+                            padding=ft.Padding(
+                                tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0
+                            ),
                         ),
                     ],
                     spacing=0,
@@ -312,4 +348,8 @@ def build_history_view(
         expand=True,
     )
 
-    return content
+    return ft.View(
+        "/history",
+        [view_content],
+        padding=0,
+    )

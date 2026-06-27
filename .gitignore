@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+
+# Caching & Linters
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User data & credentials (important to prevent leaking OAuth tokens)
+.colab-cli/
+.config/
+credentials.json
+token.json
+oauth_code.txt

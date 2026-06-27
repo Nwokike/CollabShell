@@ -31,7 +31,9 @@ def build_onboarding_view(
             content=ft.Row(
                 controls=[
                     ft.Container(
-                        content=ft.Icon(icon, size=tokens.ICON_XL, color=ft.Colors.PRIMARY),
+                        content=ft.Icon(
+                            icon, size=tokens.ICON_XL, color=ft.Colors.PRIMARY
+                        ),
                         width=56,
                         height=56,
                         border_radius=tokens.RADIUS_MD,
@@ -40,8 +42,14 @@ def build_onboarding_view(
                     ),
                     ft.Column(
                         controls=[
-                            ft.Text(title, size=tokens.FONT_LG, weight=ft.FontWeight.W_600),
-                            ft.Text(subtitle, size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ft.Text(
+                                title, size=tokens.FONT_LG, weight=ft.FontWeight.W_600
+                            ),
+                            ft.Text(
+                                subtitle,
+                                size=tokens.FONT_SM,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
                         ],
                         spacing=tokens.SPACE_XXS,
                         expand=True,
@@ -99,7 +107,9 @@ def build_onboarding_view(
         content=ft.Column(
             controls=[
                 ft.Container(height=tokens.SPACE_XXXL),
-                ft.Icon(ft.Icons.ROCKET_LAUNCH_ROUNDED, size=80, color=ft.Colors.PRIMARY),
+                ft.Icon(
+                    ft.Icons.ROCKET_LAUNCH_ROUNDED, size=80, color=ft.Colors.PRIMARY
+                ),
                 ft.Text(
                     "How it works",
                     size=tokens.FONT_XXL,
@@ -135,7 +145,12 @@ def build_onboarding_view(
                         color=ft.Colors.ON_SURFACE_VARIANT,
                         text_align=ft.TextAlign.CENTER,
                     ),
-                    padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+                    padding=ft.Padding(
+                        tokens.SPACE_LG,
+                        tokens.SPACE_MD,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_MD,
+                    ),
                     bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
                     border_radius=tokens.RADIUS_MD,
                 ),
@@ -168,15 +183,26 @@ def build_onboarding_view(
                 ft.Container(
                     content=ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=tokens.ICON_MD, color=AppColors.SUCCESS),
+                            ft.Icon(
+                                ft.Icons.CHECK_CIRCLE_ROUNDED,
+                                size=tokens.ICON_MD,
+                                color=AppColors.SUCCESS,
+                            ),
                             ft.Text(
-                                f"Colab CLI v{state.cli_version}" if state.cli_version else "Colab CLI ready",
+                                f"Colab CLI v{state.cli_version}"
+                                if state.cli_version
+                                else "Colab CLI ready",
                                 size=tokens.FONT_SM,
                             ),
                         ],
                         spacing=tokens.SPACE_SM,
                     ),
-                    padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+                    padding=ft.Padding(
+                        tokens.SPACE_LG,
+                        tokens.SPACE_MD,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_MD,
+                    ),
                     bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
                     border_radius=tokens.RADIUS_MD,
                 ),
@@ -188,7 +214,12 @@ def build_onboarding_view(
                     icon=ft.Icons.LOGIN_ROUNDED,
                     width=float("inf"),
                     style=ft.ButtonStyle(
-                        padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_MD, tokens.SPACE_XL, tokens.SPACE_MD),
+                        padding=ft.Padding(
+                            tokens.SPACE_XL,
+                            tokens.SPACE_MD,
+                            tokens.SPACE_XL,
+                            tokens.SPACE_MD,
+                        ),
                     ),
                     on_click=lambda e: page.run_task(_start_auth),
                 ),
@@ -245,9 +276,7 @@ def build_onboarding_view(
             await ft.UrlLauncher().launch_url(url)
 
             if auth_url_text.current:
-                auth_url_text.current.value = (
-                    "A browser window opened. Sign in, then paste the authorization code below."
-                )
+                auth_url_text.current.value = "A browser window opened. Sign in, then paste the authorization code below."
                 auth_url_text.current.visible = True
             if auth_code_field.current:
                 auth_code_field.current.visible = True
@@ -337,7 +366,9 @@ def build_onboarding_view(
         if get_started_btn.current:
             if idx == 2:
                 get_started_btn.current.content = ft.Text("Get Started")
-                get_started_btn.current.on_click = lambda e: page.run_task(_on_get_started, e)
+                get_started_btn.current.on_click = lambda e: page.run_task(
+                    _on_get_started, e
+                )
                 get_started_btn.current.disabled = not state.is_authenticated
             else:
                 get_started_btn.current.content = ft.Text("Next")
@@ -353,7 +384,12 @@ def build_onboarding_view(
                 ft.TextButton("Back", on_click=_on_back),
                 ft.Row(
                     controls=[
-                        ft.Container(width=8, height=8, border_radius=4, bgcolor=ft.Colors.PRIMARY),
+                        ft.Container(
+                            width=8,
+                            height=8,
+                            border_radius=4,
+                            bgcolor=ft.Colors.PRIMARY,
+                        ),
                         ft.Container(
                             width=8,
                             height=8,
@@ -379,7 +415,9 @@ def build_onboarding_view(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_XL),
+        padding=ft.Padding(
+            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_XL
+        ),
     )
 
     return ft.View(
