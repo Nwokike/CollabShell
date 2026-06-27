@@ -60,7 +60,7 @@ def build_hardware_picker(
             ft.dropdown.Option(key="H100", text="H100  ·  Pro / Pay As You Go"),
         ],
         value="T4",
-        prefix_icon=ft.Icons.DEVELOPER_BOARD_ROUNDED,
+        leading_icon=ft.Icons.DEVELOPER_BOARD_ROUNDED,
         border_radius=tokens.RADIUS_MD,
         text_size=tokens.FONT_MD,
     )
@@ -74,7 +74,7 @@ def build_hardware_picker(
             ft.dropdown.Option(key="v6e1", text="v6e1  ·  Free tier"),
         ],
         value="v5e1",
-        prefix_icon=ft.Icons.BOLT_ROUNDED,
+        leading_icon=ft.Icons.BOLT_ROUNDED,
         border_radius=tokens.RADIUS_MD,
         text_size=tokens.FONT_MD,
     )

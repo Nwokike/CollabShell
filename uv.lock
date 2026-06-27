@@ -194,7 +194,7 @@ wheels = [
 ]
 
 [[package]]
-name = "colab"
+name = "collabshell"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
