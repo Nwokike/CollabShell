@@ -399,7 +399,7 @@ async def main(page: ft.Page):
                 "/history": "History",
                 "/settings": "Settings",
             }
-            tag_text = page_tags.get(route, "Colab")
+            tag_text = page_tags.get(route, "CollabShell")
 
             brand_leading = ft.Container(
                 content=ft.Row(
@@ -413,7 +413,7 @@ async def main(page: ft.Page):
                         ft.Column(
                             controls=[
                                 ft.Text(
-                                    "Colab",
+                                    "CollabShell",
                                     size=13,
                                     weight=ft.FontWeight.BOLD,
                                     color=ft.Colors.ON_SURFACE,

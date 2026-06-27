@@ -216,7 +216,8 @@ def build_run_view(
                     section_header("HARDWARE"),
                     ft.Container(
                         content=ft.SegmentedButton(
-                            selected={"CPU"},
+                            allow_multiple_selection=False,
+                            selected=["CPU"],
                             on_change=_on_hardware_change,
                             segments=[
                                 ft.Segment(

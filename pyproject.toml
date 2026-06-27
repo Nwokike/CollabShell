@@ -1,7 +1,7 @@
 [project]
-name = "colab"
+name = "collabshell"
 version = "1.0.0"
-description = "Colab — Cloud GPUs from your phone"
+description = "CollabShell: Client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 
 [tool.flet]
 org = "ng.kiri"
-product = "Colab"
+product = "CollabShell"
 build_number = 1
 
 [tool.flet.app]
@@ -20,10 +20,10 @@ path = "src"
 
 [tool.flet.app.boot_screen]
 show = true
-message = "Initializing Colab..."
+message = "Initializing CollabShell..."
 
 [tool.flet.android]
-bundle_id = "ng.kiri.colab"
+bundle_id = "ng.kiri.collabshell"
 
 [tool.flet.android.meta_data]
 "com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~1261089274"

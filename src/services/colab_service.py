@@ -143,16 +143,21 @@ class ColabService:
             verifier_path = os.path.join(
                 os.path.dirname(TOKEN_CONFIG_PATH), "code_verifier.txt"
             )
+            fetch_kwargs = {"code": code}
             if os.path.exists(verifier_path):
                 try:
                     with open(verifier_path, "r") as f:
                         verifier = f.read().strip()
                     if verifier:
                         flow.code_verifier = verifier
+                        # Pass explicitly to fetch_token and session
+                        fetch_kwargs["code_verifier"] = verifier
+                        if hasattr(flow, "oauth2session"):
+                            flow.oauth2session.code_verifier = verifier
                 except Exception as e:
                     logger.error("Failed to load OAuth2 code verifier: %s", e)
 
-            flow.fetch_token(code=code)
+            flow.fetch_token(**fetch_kwargs)
             creds = flow.credentials
 
             # Clean up the code_verifier file since authorization is complete

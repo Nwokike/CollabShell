@@ -32,7 +32,7 @@ def build_hardware_picker(
     # Hardware type selector
     hardware_selector = ft.SegmentedButton(
         ref=hardware_type_ref,
-        selected={"CPU"},
+        selected=["CPU"],
         segments=[
             ft.Segment(
                 value="CPU", label=ft.Text("CPU"), icon=ft.Icon(ft.Icons.MEMORY_ROUNDED)

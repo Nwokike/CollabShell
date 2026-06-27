@@ -13,18 +13,18 @@ class AppColors:
     LIGHT_SURFACE = "#F3F4F6"
     LIGHT_TEXT = "#1E293B"
     LIGHT_TEXT_DIM = "#64748B"
-    LIGHT_HIGHLIGHT = "#F9AB00"  # Colab amber (brand primary)
-    LIGHT_PRIMARY_VARIANT = "#E09600"  # Darker amber
-    LIGHT_PRIMARY = "#F9AB00"  # Colab amber
+    LIGHT_HIGHLIGHT = "#D87607"  # Brand orange from icon
+    LIGHT_PRIMARY_VARIANT = "#BA6200"  # Darker orange
+    LIGHT_PRIMARY = "#D87607"  # Brand orange from icon
 
     # ─── DARK PALETTE ─────────────────────────────────────────────────────────
     DARK_BG = "#1E1E2E"  # Deep charcoal
     DARK_SURFACE = "#16161F"  # Deeper card background
     DARK_TEXT = "#F8F8F2"  # Chalk white
-    DARK_PRIMARY = "#FFB74D"  # Warm amber (lighter for dark bg)
-    DARK_PRIMARY_VARIANT = "#FFA726"  # Slightly deeper amber
+    DARK_PRIMARY = "#E58514"  # Warm orange (lighter for dark bg)
+    DARK_PRIMARY_VARIANT = "#D87607"  # Slightly deeper orange
     DARK_TEXT_DIM = "#8B8FA3"  # Muted gray
-    DARK_HIGHLIGHT = "#FFB74D"  # Warm amber
+    DARK_HIGHLIGHT = "#E58514"  # Warm orange
 
     # ─── Semantic colors ──────────────────────────────────────────────────────
     SUCCESS = "#4CAF50"  # Green — session running, auth OK
@@ -36,7 +36,7 @@ class AppColors:
 
     # ─── Hardware badge colors ────────────────────────────────────────────────
     BADGE_CPU = "#78909C"  # Blue-gray for CPU
-    BADGE_GPU = "#FFB74D"  # Amber for GPU
+    BADGE_GPU = "#E58514"  # Orange for GPU
     BADGE_TPU = "#42A5F5"  # Blue for TPU
     BADGE_FREE = "#4CAF50"  # Green — free tier
     BADGE_PAID = "#AB47BC"  # Purple — paid tier

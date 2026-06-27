@@ -7,7 +7,6 @@ import flet as ft
 from core import tokens, constants
 from core.styles import (
     section_header,
-    setting_tile,
     glass_card,
     build_banner_ad,
     tip_text,
@@ -767,10 +766,42 @@ def build_settings_view(
                             spacing=tokens.SPACE_LG,
                         ),
                         ft.Divider(height=tokens.SPACE_SM),
-                        setting_tile(
-                            icon=ft.Icons.CODE_ROUNDED,
-                            title="Powered by google-colab-cli",
-                            subtitle="github.com/googlecolab/google-colab-cli",
+                        ft.Row(
+                            controls=[
+                                ft.Text(
+                                    "Core Engine",
+                                    size=tokens.FONT_SM,
+                                ),
+                                ft.Text(
+                                    "google-colab-cli",
+                                    size=tokens.FONT_SM,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.Text(
+                                    "CLI Version",
+                                    size=tokens.FONT_SM,
+                                ),
+                                ft.Text(
+                                    f"v{state.cli_version}"
+                                    if state.cli_version
+                                    else "Unknown",
+                                    size=tokens.FONT_SM,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        ft.Text(
+                            "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
+                            size=tokens.FONT_XXS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            italic=True,
                         ),
                     ],
                     spacing=tokens.SPACE_SM,

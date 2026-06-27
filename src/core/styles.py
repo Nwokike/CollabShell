@@ -228,7 +228,7 @@ def standard_brand_appbar(
         ft.Column(
             controls=[
                 ft.Text(
-                    "Colab",
+                    "CollabShell",
                     size=13,
                     weight=ft.FontWeight.BOLD,
                     color=ft.Colors.ON_SURFACE,

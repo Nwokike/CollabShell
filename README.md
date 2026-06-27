@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="src/assets/icon.png" alt="Colab" width="320" />
+  <img src="src/assets/icon.png" alt="CollabShell" width="320" />
 </p>
 
 <p align="center">
-  Colab — Manage and run Google Colab sessions directly from your phone with native TPU and GPU control
+  CollabShell — Manage and run Google Colab sessions directly from your phone with native TPU and GPU control
 </p>
 
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=ng.kiri.colab"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
-  <a href="https://github.com/Nwokike/Colab/releases/latest"><img src="https://img.shields.io/badge/Download-APK-orange?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" /></a>
+  <a href="https://play.google.com/store/apps/details?id=ng.kiri.collabshell"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
+  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download-APK-orange?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" /></a>
   <img src="https://img.shields.io/badge/Built%20with-Flet%200.85-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
@@ -47,7 +47,7 @@
 
 ## Features
 
-- **Colab-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
+- **CollabShell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
 - **Dynamic Onboarding Guide** — 3-step walk-through onboarding introducing features with gesture-swipe controls.
 - **Preloaded Interstitial Ads** — Intelligent Google AdMob integration displaying ads seamlessly on mobile platforms.
 - **Non-Blocking Execution** — Asynchronous connection wrappers ensuring the Flet UI stays fully responsive during long remote computations.
@@ -68,7 +68,7 @@
 
 ```mermaid
 graph TB
-    subgraph COLAB_CLIENT ["📱 COLAB CLIENT (Android App)"]
+    subgraph COLLABSHELL_CLIENT ["📱 COLLABSHELL CLIENT (Android App)"]
         UI["🎨 Flet Reactive UI (Home | Session | Terminal | Settings)"]
         Service["⚙️ Colab Service wrapper"]
         Storage["💾 Local Storage (settings & credentials)"]
@@ -89,7 +89,7 @@ graph TB
 
 ## Privacy & Security
 
-Colab is designed with a strict **Privacy-First** philosophy:
+CollabShell is designed with a strict **Privacy-First** philosophy:
 
 1. **Direct VM Connections**: All commands, file accesses, and script executions are sent directly to Google Colab. No intermediate proxy.
 2. **Zero Metadata Tracking**: We do not trace, log, or collect your code, file lists, or Google account credentials.
@@ -100,4 +100,6 @@ Colab is designed with a strict **Privacy-First** philosophy:
 
 ## Legal Disclaimer
 
-Colab is an independent Flet wrapper for the Google Colab CLI and is not affiliated with, authorized, or endorsed by Google LLC. Users are responsible for complying with Google Colab's Terms of Use, resource usage policies, and local data protection regulations. The authors are not responsible for any issues resulting from Google account suspensions or resource limits.
+CollabShell is an independent Flet-based client application wrapping the Google Colab CLI and is not affiliated with, authorized, maintained, sponsored, or endorsed by Google LLC, Google Colaboratory, or any of its affiliates. 
+
+Users are responsible for complying with Google Colab's Terms of Use, resource usage policies, and local data protection regulations. The authors are not responsible for any issues resulting from Google account suspensions or resource limits.

@@ -1,39 +1,118 @@
-"""Persistent storage service — same pattern as Sherlock's StorageService."""
+"""Platform-resilient key-value storage service.
+
+Uses a single local JSON file approach for desktop (storage/storage.json beside src),
+and the mobile sandbox directory for Android.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import time
+from pathlib import Path
 
 import flet as ft
 
+logger = logging.getLogger(__name__)
+
+# Use Flet sandbox data storage path on Android/iOS mobile to avoid permission issues
+storage_env = os.getenv("FLET_APP_STORAGE_DATA")
+if storage_env:
+    _STORAGE_DIR = Path(storage_env) / "colab-cli"
+else:
+    # On desktop, the user wants the storage folder beside src.
+    _STORAGE_DIR = Path.cwd() / "storage"
+
+_STORAGE_FILE = _STORAGE_DIR / "storage.json"
+_WRITE_DEBOUNCE_SEC = 1.0
+
 
 class StorageService:
-    """Wraps flet's client_storage for persistent key-value storage."""
+    """Wraps persistent key-value storage mimicking Sherlock/DDGS."""
 
     def __init__(self, page: ft.Page):
-        self.page = page
+        self._page = page
+        self._data: dict[str, str] = {}
+        self._lock = asyncio.Lock()
+        self._dirty = False
+        self._last_write: float = 0.0
+        self._pending_write_task: asyncio.Task | None = None
 
-    async def get(self, key: str, default=None):
-        """Get a value from client storage."""
-        try:
-            val = await self.page.client_storage.get_async(key)
-            return val if val is not None else default
-        except Exception:
-            return default
+        logger.info("StorageService: using local storage.json")
+        self._load()
 
-    async def set(self, key: str, value):
-        """Set a value in client storage."""
-        try:
-            await self.page.client_storage.set_async(key, value)
-        except Exception:
-            pass
+    def _load(self) -> None:
+        _STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        if _STORAGE_FILE.exists():
+            try:
+                raw = _STORAGE_FILE.read_bytes()
+                if raw:
+                    self._data = json.loads(raw.decode("utf-8"))
+                else:
+                    self._data = {}
+            except Exception as e:
+                logger.warning("StorageService._load failed: %s", e)
+                self._data = {}
+        else:
+            self._data = {}
 
-    async def remove(self, key: str):
-        """Remove a value from client storage."""
+    def _save_now(self) -> None:
         try:
-            await self.page.client_storage.remove_async(key)
-        except Exception:
-            pass
+            _STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+            _STORAGE_FILE.write_bytes(
+                json.dumps(self._data, ensure_ascii=False, indent=2).encode("utf-8")
+            )
+            self._dirty = False
+            self._last_write = time.monotonic()
+        except Exception as e:
+            logger.warning("StorageService._save_now failed: %s", e)
+
+    def _schedule_write(self) -> None:
+        if self._pending_write_task:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            self._pending_write_task = loop.call_later(
+                _WRITE_DEBOUNCE_SEC,
+                lambda: loop.create_task(self._flush_task()),
+            )
+        except RuntimeError:
+            self._save_now()
+
+    async def _flush_task(self) -> None:
+        try:
+            await self.flush()
+        finally:
+            self._pending_write_task = None
+
+    async def get(self, key: str, default=None) -> str | None:
+        async with self._lock:
+            return self._data.get(key, default)
+
+    async def set(self, key: str, value) -> None:
+        if not isinstance(value, str):
+            value = str(value)
+        async with self._lock:
+            self._data[key] = value
+            self._dirty = True
+        self._schedule_write()
+
+    async def remove(self, key: str) -> None:
+        async with self._lock:
+            self._data.pop(key, None)
+            self._dirty = True
+        self._schedule_write()
 
     async def contains(self, key: str) -> bool:
-        """Check if a key exists in storage."""
-        try:
-            return await self.page.client_storage.contains_key_async(key)
-        except Exception:
-            return False
+        async with self._lock:
+            return key in self._data
+
+    async def delete(self, key: str) -> None:
+        await self.remove(key)
+
+    async def flush(self) -> None:
+        async with self._lock:
+            if self._dirty:
+                self._save_now()

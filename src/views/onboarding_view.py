@@ -230,7 +230,7 @@ def build_onboarding_view(
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
-                    "Required to create and manage Colab sessions",
+                    "Required to create and manage CollabShell sessions",
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     text_align=ft.TextAlign.CENTER,
@@ -314,6 +314,14 @@ def build_onboarding_view(
                     color=AppColors.SUCCESS,
                     text_align=ft.TextAlign.CENTER,
                     visible=False,
+                ),
+                ft.Divider(height=tokens.SPACE_SM),
+                ft.Text(
+                    "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
+                    size=tokens.FONT_XXS,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    text_align=ft.TextAlign.CENTER,
+                    italic=True,
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
