@@ -67,7 +67,11 @@ class ColabService:
         """Generate the OAuth2 authorization URL for the user to visit."""
 
         def _get_url():
-            from colab_cli.auth import PUBLIC_SCOPES, REMOTE_REDIRECT_URI
+            from colab_cli.auth import (
+                PUBLIC_SCOPES,
+                REMOTE_REDIRECT_URI,
+                TOKEN_CONFIG_PATH,
+            )
             from importlib import resources
             from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -78,6 +82,18 @@ class ColabService:
             flow = InstalledAppFlow.from_client_config(client_config, PUBLIC_SCOPES)
             flow.redirect_uri = REMOTE_REDIRECT_URI
             auth_url, _ = flow.authorization_url(prompt="consent", token_usage="remote")
+
+            # Persist code_verifier to file for retrieval during verification phase
+            try:
+                verifier_path = os.path.join(
+                    os.path.dirname(TOKEN_CONFIG_PATH), "code_verifier.txt"
+                )
+                os.makedirs(os.path.dirname(verifier_path), exist_ok=True)
+                with open(verifier_path, "w") as f:
+                    f.write(flow.code_verifier)
+            except Exception as e:
+                logger.error("Failed to save OAuth2 code verifier: %s", e)
+
             return auth_url
 
         return await asyncio.to_thread(_get_url)
@@ -103,8 +119,29 @@ class ColabService:
 
             flow = InstalledAppFlow.from_client_config(client_config, PUBLIC_SCOPES)
             flow.redirect_uri = REMOTE_REDIRECT_URI
+
+            # Restore the code_verifier generated during authorization URL creation
+            verifier_path = os.path.join(
+                os.path.dirname(TOKEN_CONFIG_PATH), "code_verifier.txt"
+            )
+            if os.path.exists(verifier_path):
+                try:
+                    with open(verifier_path, "r") as f:
+                        verifier = f.read().strip()
+                    if verifier:
+                        flow.code_verifier = verifier
+                except Exception as e:
+                    logger.error("Failed to load OAuth2 code verifier: %s", e)
+
             flow.fetch_token(code=code)
             creds = flow.credentials
+
+            # Clean up the code_verifier file since authorization is complete
+            if os.path.exists(verifier_path):
+                try:
+                    os.remove(verifier_path)
+                except Exception:
+                    pass
 
             # Save the token
             os.makedirs(os.path.dirname(TOKEN_CONFIG_PATH), exist_ok=True)
