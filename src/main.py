@@ -28,6 +28,7 @@ colab_service = ColabService()
 async def main(page: ft.Page):
     """Main Flet application entry point."""
     page.title = constants.APP_NAME
+    page.favicon = "icon.png"
     page.theme = AppTheme.get_light_theme()
     page.dark_theme = AppTheme.get_dark_theme()
     page.theme_mode = ft.ThemeMode.SYSTEM
@@ -409,7 +410,7 @@ async def main(page: ft.Page):
             top_view.appbar.leading_width = 100
             top_view.appbar.title = ft.Row(
                 [
-                    ft.Icon(ft.Icons.CLOUD_ROUNDED, color=ft.Colors.PRIMARY),
+                    ft.Image(src="icon.png", width=28, height=28),
                     ft.Text(constants.APP_NAME, weight=ft.FontWeight.W_700),
                 ],
                 spacing=tokens.SPACE_SM,
@@ -457,4 +458,7 @@ async def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    import os
+
+    assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    ft.run(main, assets_dir=assets_path)

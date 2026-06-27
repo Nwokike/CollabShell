@@ -28,8 +28,11 @@ def build_home_view(
                 ft.Row(
                     controls=[
                         ft.Container(
-                            content=ft.Icon(
-                                ft.Icons.CLOUD_ROUNDED, size=40, color=ft.Colors.PRIMARY
+                            content=ft.Image(
+                                src="icon.png",
+                                width=40,
+                                height=40,
+                                fit=ft.BoxFit.CONTAIN,
                             ),
                             width=60,
                             height=60,

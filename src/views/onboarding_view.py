@@ -71,7 +71,7 @@ def build_onboarding_view(
         return ft.Column(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
-                ft.Icon(ft.Icons.CLOUD_ROUNDED, size=80, color=ft.Colors.PRIMARY),
+                ft.Image(src="icon.png", width=80, height=80, fit=ft.BoxFit.CONTAIN),
                 ft.Text(
                     constants.APP_NAME,
                     size=tokens.FONT_HERO,

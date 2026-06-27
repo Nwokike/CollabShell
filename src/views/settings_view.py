@@ -672,10 +672,11 @@ def build_settings_view(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(
-                                    ft.Icons.CLOUD_ROUNDED,
-                                    size=tokens.ICON_XL,
-                                    color=ft.Colors.PRIMARY,
+                                ft.Image(
+                                    src="icon.png",
+                                    width=48,
+                                    height=48,
+                                    fit=ft.BoxFit.CONTAIN,
                                 ),
                                 ft.Column(
                                     controls=[
