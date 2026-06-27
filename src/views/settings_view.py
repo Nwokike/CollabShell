@@ -30,25 +30,95 @@ def build_settings_view(
         page.update()
 
     # ── PREFERENCES ───────────────────────────────────────────────────────────
-    def _on_theme_change_handler(e):
-        val = e.control.value
-        if val == "System":
+    theme_mode_state = ["system"]
+    if state.theme_mode == ft.ThemeMode.LIGHT:
+        theme_mode_state[0] = "light"
+    elif state.theme_mode == ft.ThemeMode.DARK:
+        theme_mode_state[0] = "dark"
+
+    def create_theme_card(mode: str, label: str, icon: str):
+        is_sel = theme_mode_state[0] == mode
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(
+                        icon,
+                        color=ft.Colors.PRIMARY
+                        if is_sel
+                        else ft.Colors.ON_SURFACE_VARIANT,
+                        size=16,
+                    ),
+                    ft.Text(
+                        label,
+                        size=tokens.FONT_XS,
+                        weight=ft.FontWeight.W_600 if is_sel else ft.FontWeight.NORMAL,
+                        color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=6,
+            ),
+            padding=ft.Padding(8, 10, 8, 10),
+            border_radius=tokens.RADIUS_MD,
+            border=ft.Border.all(2, ft.Colors.PRIMARY)
+            if is_sel
+            else ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY)
+            if is_sel
+            else ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
+            expand=True,
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_click=lambda e: page.run_task(change_theme_and_update, mode),
+        )
+
+    light_btn = create_theme_card("light", "Light", ft.Icons.LIGHT_MODE_ROUNDED)
+    dark_btn = create_theme_card("dark", "Dark", ft.Icons.DARK_MODE_ROUNDED)
+    system_btn = create_theme_card(
+        "system", "System", ft.Icons.SETTINGS_SYSTEM_DAYDREAM_ROUNDED
+    )
+
+    async def change_theme_and_update(mode_str):
+        theme_mode_state[0] = mode_str
+        if mode_str == "system":
             state.theme_mode = ft.ThemeMode.SYSTEM
-        elif val == "Light":
+        elif mode_str == "light":
             state.theme_mode = ft.ThemeMode.LIGHT
         else:
             state.theme_mode = ft.ThemeMode.DARK
+
         page.theme_mode = state.theme_mode
-        page.run_task(storage.set, constants.STORAGE_THEME, val)
+        await storage.set(constants.STORAGE_THEME, mode_str)
         if on_theme_change:
             on_theme_change()
-        page.update()
 
-    theme_val = "System"
-    if state.theme_mode == ft.ThemeMode.LIGHT:
-        theme_val = "Light"
-    elif state.theme_mode == ft.ThemeMode.DARK:
-        theme_val = "Dark"
+        # Update button borders/colors
+        for m, btn in [
+            ("light", light_btn),
+            ("dark", dark_btn),
+            ("system", system_btn),
+        ]:
+            is_sel = m == mode_str
+            btn.border = (
+                ft.Border.all(2, ft.Colors.PRIMARY)
+                if is_sel
+                else ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE))
+            )
+            btn.bgcolor = (
+                ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY)
+                if is_sel
+                else ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE)
+            )
+            btn.content.controls[0].color = (
+                ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE_VARIANT
+            )
+            btn.content.controls[1].color = (
+                ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE
+            )
+            btn.content.controls[1].weight = (
+                ft.FontWeight.W_600 if is_sel else ft.FontWeight.NORMAL
+            )
+
+        page.update()
 
     preferences_section = ft.Column(
         controls=[
@@ -56,6 +126,7 @@ def build_settings_view(
             glass_card(
                 ft.Column(
                     controls=[
+                        # Label Row
                         ft.Row(
                             controls=[
                                 ft.Icon(
@@ -66,7 +137,7 @@ def build_settings_view(
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Theme",
+                                            "Display Theme",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
@@ -79,21 +150,16 @@ def build_settings_view(
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
-                                ft.Dropdown(
-                                    value=theme_val,
-                                    options=[
-                                        ft.dropdown.Option("System"),
-                                        ft.dropdown.Option("Light"),
-                                        ft.dropdown.Option("Dark"),
-                                    ],
-                                    width=120,
-                                    border_radius=tokens.RADIUS_MD,
-                                    text_size=tokens.FONT_SM,
-                                    on_change=_on_theme_change_handler,
-                                ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=tokens.SPACE_LG,
+                        ),
+                        ft.Container(height=tokens.SPACE_SM),
+                        # Selector Row
+                        ft.Row(
+                            [light_btn, dark_btn, system_btn],
+                            spacing=8,
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                     ],
                 ),
