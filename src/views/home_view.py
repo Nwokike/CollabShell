@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from core import tokens, constants
+from core import tokens
 from core.styles import section_header, build_banner_ad
 from core.theme import AppColors
 from components.session_card import build_session_card
@@ -40,20 +40,10 @@ def build_home_view(
                             bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY),
                             alignment=ft.Alignment.CENTER,
                         ),
-                        ft.Column(
-                            controls=[
-                                ft.Text(
-                                    constants.APP_NAME,
-                                    size=tokens.FONT_XXL,
-                                    weight=ft.FontWeight.W_800,
-                                ),
-                                ft.Text(
-                                    "Cloud GPUs from your phone",
-                                    size=tokens.FONT_SM,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_XXS,
+                        ft.Text(
+                            "Cloud GPUs from your phone",
+                            size=tokens.FONT_LG,
+                            weight=ft.FontWeight.W_700,
                             expand=True,
                         ),
                     ],

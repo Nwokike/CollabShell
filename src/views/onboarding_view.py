@@ -71,20 +71,16 @@ def build_onboarding_view(
         return ft.Column(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
-                ft.Image(src="icon.png", width=80, height=80, fit=ft.BoxFit.CONTAIN),
-                ft.Text(
-                    constants.APP_NAME,
-                    size=tokens.FONT_HERO,
-                    weight=ft.FontWeight.W_800,
-                    text_align=ft.TextAlign.CENTER,
-                ),
+                ft.Image(src="icon.png", width=110, height=110, fit=ft.BoxFit.CONTAIN),
+                ft.Container(height=tokens.SPACE_SM),
                 ft.Text(
                     "Cloud GPUs from your phone",
-                    size=tokens.FONT_LG,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    size=tokens.FONT_XL,
+                    weight=ft.FontWeight.W_700,
+                    color=ft.Colors.PRIMARY,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                ft.Container(height=tokens.SPACE_LG),
+                ft.Container(height=tokens.SPACE_MD),
                 _feature_row(
                     ft.Icons.PLAY_ARROW_ROUNDED,
                     "Execute Python",

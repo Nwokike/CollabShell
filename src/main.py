@@ -9,7 +9,7 @@ import logging
 
 import flet as ft
 
-from core import constants, tokens
+from core import constants
 from core.state import state
 from core.theme import AppTheme
 from services.colab_service import ColabService
@@ -413,12 +413,8 @@ async def main(page: ft.Page):
                 top_view.appbar = ft.AppBar()
             top_view.appbar.leading = page_tag
             top_view.appbar.leading_width = 100
-            top_view.appbar.title = ft.Row(
-                [
-                    ft.Image(src="icon.png", width=28, height=28),
-                    ft.Text(constants.APP_NAME, weight=ft.FontWeight.W_700),
-                ],
-                spacing=tokens.SPACE_SM,
+            top_view.appbar.title = ft.Image(
+                src="icon.png", width=32, height=32, fit=ft.BoxFit.CONTAIN
             )
             top_view.appbar.center_title = True
             top_view.appbar.actions = [theme_btn]
