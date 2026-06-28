@@ -29,10 +29,21 @@ def build_hardware_picker(
         text_size=tokens.FONT_MD,
     )
 
+    def _on_hardware_change(e):
+        selected = e.control.selected
+        is_gpu = "GPU" in selected
+        is_tpu = "TPU" in selected
+        
+        gpu_dropdown.visible = is_gpu
+        tpu_dropdown.visible = is_tpu
+        
+        e.control.page.update()
+
     # Hardware type selector
     hardware_selector = ft.SegmentedButton(
         ref=hardware_type_ref,
         selected=["CPU"],
+        on_change=_on_hardware_change,
         segments=[
             ft.Segment(
                 value="CPU", label=ft.Text("CPU"), icon=ft.Icon(ft.Icons.MEMORY_ROUNDED)
@@ -63,6 +74,7 @@ def build_hardware_picker(
         leading_icon=ft.Icons.DEVELOPER_BOARD_ROUNDED,
         border_radius=tokens.RADIUS_MD,
         text_size=tokens.FONT_MD,
+        visible=False,
     )
 
     # TPU model dropdown
@@ -77,6 +89,7 @@ def build_hardware_picker(
         leading_icon=ft.Icons.BOLT_ROUNDED,
         border_radius=tokens.RADIUS_MD,
         text_size=tokens.FONT_MD,
+        visible=False,
     )
 
     # Create button
