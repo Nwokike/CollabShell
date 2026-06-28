@@ -11,13 +11,13 @@ def build_hardware_picker(
     name_ref=None,
     gpu_ref=None,
     tpu_ref=None,
+    hardware_type_ref=None,
 ) -> ft.Container:
     """Build the hardware selection UI for new sessions.
 
     Shows CPU/GPU/TPU selector with conditional model dropdowns.
     Highlights free tier options and marks paid ones clearly.
     """
-    hardware_type_ref = ft.Ref[ft.SegmentedButton]()
 
     # Session name field
     name_field = ft.TextField(
@@ -33,10 +33,10 @@ def build_hardware_picker(
         selected = e.control.selected
         is_gpu = "GPU" in selected
         is_tpu = "TPU" in selected
-        
+
         gpu_dropdown.visible = is_gpu
         tpu_dropdown.visible = is_tpu
-        
+
         e.control.page.update()
 
     # Hardware type selector

@@ -122,55 +122,68 @@ def build_home_view(
     # ── Sessions List ─────────────────────────────────────────────────────────
     sessions_section_header = section_header("ACTIVE SESSIONS")
 
-    if state.active_sessions:
-        session_cards = [
-            build_session_card(
-                session=s,
-                on_click=lambda e, sn=s["name"]: (
-                    on_session_tap(sn) if on_session_tap else None
-                ),
-            )
-            for s in state.active_sessions
-        ]
-    else:
-        session_cards = [
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Icon(
-                            ft.Icons.CLOUD_OFF_ROUNDED,
-                            size=48,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        ft.Text(
-                            "No active sessions",
-                            size=tokens.FONT_MD,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                            weight=ft.FontWeight.W_500,
-                        ),
-                        ft.Text(
-                            "Tap 'New Session' to create a cloud runtime",
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=tokens.SPACE_SM,
-                ),
-                padding=ft.Padding(
-                    tokens.SPACE_XL, tokens.SPACE_XXL, tokens.SPACE_XL, tokens.SPACE_XXL
-                ),
-                alignment=ft.Alignment.CENTER,
-            )
-        ]
-
     sessions_list = ft.Container(
-        content=ft.Column(
-            controls=session_cards,
-            spacing=tokens.SPACE_SM,
-        ),
+        content=ft.Column(spacing=tokens.SPACE_SM),
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
     )
+
+    def _update_sessions_ui():
+        sessions_list.content.controls.clear()
+        if state.active_sessions:
+            for s in state.active_sessions:
+                sessions_list.content.controls.append(
+                    build_session_card(
+                        session=s,
+                        on_click=lambda e, sn=s["name"]: (
+                            on_session_tap(sn) if on_session_tap else None
+                        ),
+                    )
+                )
+        else:
+            sessions_list.content.controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Icon(
+                                ft.Icons.CLOUD_OFF_ROUNDED,
+                                size=48,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                            ft.Text(
+                                "No active sessions",
+                                size=tokens.FONT_MD,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                            ft.Text(
+                                "Tap 'New Session' to create a cloud runtime",
+                                size=tokens.FONT_XS,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=tokens.SPACE_SM,
+                    ),
+                    padding=ft.Padding(
+                        tokens.SPACE_XL, tokens.SPACE_XXL, tokens.SPACE_XL, tokens.SPACE_XXL
+                    ),
+                    alignment=ft.Alignment.CENTER,
+                )
+            )
+        try:
+            sessions_list.update()
+        except Exception:
+            pass
+
+    async def _load_sessions():
+        try:
+            sessions = await colab_service.list_sessions(auth_method=state.auth_method)
+            state.active_sessions = sessions
+            _update_sessions_ui()
+        except Exception:
+            pass
+
+    page.run_task(_load_sessions)
 
     # ── Full view ─────────────────────────────────────────────────────────────
     content = ft.Column(

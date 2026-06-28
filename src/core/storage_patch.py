@@ -27,10 +27,15 @@ def apply_storage_patches():
     # Override token path
     colab_cli.auth.TOKEN_CONFIG_PATH = os.path.join(storage_dir, "token.json")
 
-    # Override client oauth config path
-    colab_cli.common.State.client_oauth_config = os.path.join(
-        storage_dir, "oauth_config.json"
-    )
+    # Patch State.__init__ so every new State instance gets the correct paths
+    original_state_init = colab_cli.common.State.__init__
+
+    def patched_state_init(self, *args, **kwargs):
+        original_state_init(self, *args, **kwargs)
+        self.config_path = os.path.join(storage_dir, "sessions.json")
+        self.client_oauth_config = os.path.join(storage_dir, "oauth_config.json")
+
+    colab_cli.common.State.__init__ = patched_state_init
 
     # Override HistoryLogger default path
     colab_cli.history.HistoryLogger.__init__.__defaults__ = (

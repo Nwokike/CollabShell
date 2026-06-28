@@ -116,3 +116,26 @@ class StorageService:
         async with self._lock:
             if self._dirty:
                 self._save_now()
+
+    def _get_notebook_file(self, session_name: str) -> Path:
+        return _STORAGE_DIR / f"notebook_{session_name}.json"
+
+    async def save_notebook(self, session_name: str, cells: list[dict]) -> None:
+        try:
+            nb_file = self._get_notebook_file(session_name)
+            nb_file.write_bytes(
+                json.dumps(cells, ensure_ascii=False, indent=2).encode("utf-8")
+            )
+        except Exception as e:
+            logger.warning("StorageService.save_notebook failed: %s", e)
+
+    async def load_notebook(self, session_name: str) -> list[dict]:
+        try:
+            nb_file = self._get_notebook_file(session_name)
+            if nb_file.exists():
+                raw = nb_file.read_bytes()
+                if raw:
+                    return json.loads(raw.decode("utf-8"))
+        except Exception as e:
+            logger.warning("StorageService.load_notebook failed: %s", e)
+        return []

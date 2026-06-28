@@ -539,6 +539,8 @@ class ColabService:
         timeout: float = 30.0,
         auth_method: str = "oauth2",
         on_output: Optional[Callable] = None,
+        intercept_oauth: bool = False,
+        stdin_hook: Optional[Callable] = None,
     ) -> list:
         """Execute Python code in a session. Returns list of outputs."""
 
@@ -615,11 +617,94 @@ class ColabService:
                     if text:
                         on_output(text)
 
+            if intercept_oauth:
+                import json
+                from colab_cli.auth import get_credentials
+                from colab_cli.utils import get_status_code
+
+                def drivefs_hook(deserialize_msg, wsclient):
+                    content = deserialize_msg.get("content", {})
+                    if content.get("request", {}).get("authType") == "dfs_ephemeral":
+                        msg_id = deserialize_msg.get("metadata", {}).get("colab_msg_id")
+                        if on_output:
+                            on_output("Intercepted Drive Auth Request. Authorizing...")
+
+                        url = f"{st.client.colab_domain}/tun/m/credentials-propagation/{s.endpoint}"
+                        params = {
+                            "authuser": "0",
+                            "authtype": "dfs_ephemeral",
+                            "version": "2",
+                            "dryrun": "true",
+                            "propagate": "true",
+                            "record": "false",
+                        }
+                        creds = get_credentials(
+                            st.client_oauth_config, provider=st.auth_provider
+                        )
+                        resp = creds.request("GET", url, params=params)
+                        token = (
+                            json.loads(resp.text.split("\n", 1)[-1]).get("token")
+                            if get_status_code(resp) == 200
+                            else None
+                        )
+                        headers = {"x-goog-colab-token": token}
+                        resp = creds.request(
+                            "POST",
+                            url,
+                            params=params,
+                            headers=headers,
+                            files={"file_id": (None, "empty.ipynb")},
+                        )
+                        data = json.loads(resp.text.split("\n", 1)[-1])
+
+                        if not data.get("success"):
+                            uri = data.get("unauthorized_redirect_uri")
+                            if on_output:
+                                on_output(
+                                    f"\nERROR: Google Authorization needed.\nPlease visit: {uri}\nGrant access, then try again."
+                                )
+                            raise ValueError(f"Authorization needed: {uri}")
+
+                        params["dryrun"] = "false"
+                        resp = creds.request(
+                            "POST",
+                            url,
+                            params=params,
+                            headers=headers,
+                            files={"file_id": (None, "empty.ipynb")},
+                        )
+                        if get_status_code(resp) == 200:
+                            if on_output:
+                                on_output("Credentials propagated successfully.")
+                            reply = wsclient.session.msg(
+                                "input_reply",
+                                {
+                                    "value": {
+                                        "type": "colab_reply",
+                                        "colab_msg_id": msg_id,
+                                    }
+                                },
+                            )
+                            if "header" in deserialize_msg:
+                                reply["parent_header"] = deserialize_msg["header"]
+                            wsclient.stdin_channel.send(reply)
+                        else:
+                            if on_output:
+                                on_output(
+                                    f"Error propagating: {get_status_code(resp)} {resp.text}"
+                                )
+                        return True
+                    return False
+
+                runtime.colab_request_hook = drivefs_hook
+
             try:
                 outputs = runtime.execute_code(
                     code,
                     output_hook=output_hook if on_output else None,
                     timeout=timeout,
+                    allow_stdin=intercept_oauth or (stdin_hook is not None),
+                    stdin_hook=stdin_hook,
                 )
                 st.history.log_event(
                     session_name,
@@ -806,6 +891,7 @@ class ColabService:
                 timeout=600,
                 auth_method=auth_method,
                 on_output=on_output,
+                intercept_oauth=True,
             )
             return True
         except Exception as e:
@@ -849,7 +935,7 @@ except:
         auth_method: str = "oauth2",
         on_output: Optional[Callable] = None,
     ) -> bool:
-        """Authenticate with Google on the VM."""
+        """Authenticate GCP on the VM."""
         await self._ensure_online()
         code = "import os\nos.environ['USE_AUTH_EPHEM'] = '0'\nfrom google.colab import auth\nauth.authenticate_user()"
         try:
@@ -859,10 +945,11 @@ except:
                 timeout=600,
                 auth_method=auth_method,
                 on_output=on_output,
+                intercept_oauth=True,
             )
             return True
         except Exception as e:
-            logger.error("auth_gcp failed: %s", e)
+            logger.error("auth_gcp_on_vm failed: %s", e)
             return False
 
     # ── Utility ───────────────────────────────────────────────────────────────

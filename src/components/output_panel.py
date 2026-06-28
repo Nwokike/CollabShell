@@ -7,6 +7,7 @@ from core.theme import AppColors
 
 
 def build_output_panel(
+    list_ref: ft.Ref[ft.ListView] = None,
     lines: list = None,
     is_visible: bool = True,
     on_clear=None,
@@ -83,6 +84,7 @@ def build_output_panel(
     )
 
     output_list = ft.ListView(
+        ref=list_ref,
         controls=output_controls,
         spacing=tokens.SPACE_XXS,
         padding=ft.Padding(

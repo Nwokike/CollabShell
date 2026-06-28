@@ -18,6 +18,7 @@ class AppState:
     # ── Execution ─────────────────────────────────────────────────────────────
     exec_output_lines: list = []
     current_exec_file: str = ""
+    notebook_cells: list = []
 
     # ── File browser ──────────────────────────────────────────────────────────
     current_path: str = "content"
@@ -64,6 +65,7 @@ class AppState:
         self.update_available_version = None
         self.onboarding_done = False
         self.ad_service = None
+        self.notebook_cells = []
 
 
 state = AppState()

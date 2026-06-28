@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import flet as ft
+import threading
+import uuid
 
 from core import tokens, constants
 from core.styles import (
     glass_card,
-    section_header,
     hardware_badge,
     status_dot,
     build_banner_ad,
-    tip_text,
 )
 from core.theme import AppColors
-from components.terminal import build_terminal
-from components.output_panel import build_output_panel
+from components.notebook_cell import build_notebook_cell
+from components.notebook_toolbar import build_notebook_toolbar
+from services.storage_service import StorageService
 
 
 def build_session_view(
@@ -27,17 +28,16 @@ def build_session_view(
     navigate=None,
     snack=None,
 ) -> ft.View:
-    """Build the session detail view with actions, terminal, and output."""
+    storage = StorageService(page)
 
-    code_field_ref = ft.Ref[ft.TextField]()
-    output_lines = []
+    # Ensure cells list exists
+    if not hasattr(state, "notebook_cells"):
+        state.notebook_cells = []
 
     # Find session data
-    session = None
-    for s in state.active_sessions:
-        if s.get("name") == session_name:
-            session = s
-            break
+    session = next(
+        (s for s in state.active_sessions if s.get("name") == session_name), None
+    )
 
     if not session:
         content_err = ft.Column(
@@ -58,11 +58,7 @@ def build_session_view(
             ],
             expand=True,
         )
-        return ft.View(
-            f"/session?session={session_name}",
-            [content_err],
-            padding=0,
-        )
+        return ft.View(f"/session?session={session_name}", [content_err], padding=0)
 
     accel = session.get("accelerator", "NONE")
     variant = session.get("variant", "DEFAULT")
@@ -93,11 +89,6 @@ def build_session_view(
                     if is_running
                     else ft.Colors.ON_SURFACE_VARIANT,
                 ),
-                ft.Text(
-                    f"Endpoint: {session.get('endpoint', '')[:20]}...",
-                    size=tokens.FONT_XS,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                ),
             ],
             spacing=tokens.SPACE_SM,
         ),
@@ -106,38 +97,7 @@ def build_session_view(
         ),
     )
 
-    # ── Action grid ───────────────────────────────────────────────────────────
-    def _action_card(icon, label, on_click, color=None):
-        return ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(
-                        icon, size=tokens.ICON_LG, color=color or ft.Colors.PRIMARY
-                    ),
-                    ft.Text(
-                        label,
-                        size=tokens.FONT_XS,
-                        text_align=ft.TextAlign.CENTER,
-                        weight=ft.FontWeight.W_500,
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=tokens.SPACE_SM,
-                alignment=ft.MainAxisAlignment.CENTER,
-            ),
-            on_click=on_click,
-            padding=ft.Padding(
-                tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD
-            ),
-            border_radius=tokens.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
-            ink=True,
-            expand=True,
-            height=80,
-            alignment=ft.Alignment.CENTER,
-        )
-
+    # ── Action Row (Compact) ─────────────────────────────────────────────────
     async def _on_files(e):
         if navigate:
             await navigate(f"/files?session={session_name}")
@@ -157,21 +117,18 @@ def build_session_view(
             page.pop_dialog()
             page.run_task(_do_restart)
 
-        confirm_dialog = ft.AlertDialog(
-            title=ft.Text("Restart Kernel?"),
-            content=ft.Text(
-                "This will restart the Python kernel. All variables will be lost."
-            ),
-            actions=[
-                ft.TextButton(
-                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Restart Kernel?"),
+                content=ft.Text(
+                    "This will restart the Python kernel. All variables will be lost."
                 ),
-                ft.FilledButton(
-                    content=ft.Text("Restart"), on_click=_close_and_restart
-                ),
-            ],
+                actions=[
+                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.FilledButton("Restart", on_click=_close_and_restart),
+                ],
+            )
         )
-        page.show_dialog(confirm_dialog)
 
     async def _do_restart():
         if snack:
@@ -191,19 +148,18 @@ def build_session_view(
             page.pop_dialog()
             page.run_task(_do_stop)
 
-        confirm_dialog = ft.AlertDialog(
-            title=ft.Text("Stop Session?"),
-            content=ft.Text(
-                "This will terminate the session and release all resources."
-            ),
-            actions=[
-                ft.TextButton(
-                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Stop Session?"),
+                content=ft.Text(
+                    "This will terminate the session and release all resources."
                 ),
-                ft.FilledButton(content=ft.Text("Stop"), on_click=_close_and_stop),
-            ],
+                actions=[
+                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.FilledButton("Stop", on_click=_close_and_stop),
+                ],
+            )
         )
-        page.show_dialog(confirm_dialog)
 
     async def _do_stop():
         if snack:
@@ -214,263 +170,287 @@ def build_session_view(
             )
             if snack:
                 snack("✅ Session terminated")
-            # Refresh sessions and go back
-            sessions = await colab_service.list_sessions(auth_method=state.auth_method)
-            state.active_sessions = sessions
+            state.active_sessions = await colab_service.list_sessions(
+                auth_method=state.auth_method
+            )
             if on_back:
                 on_back(None)
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
 
-    async def _on_install(e):
-        pkg_field = ft.Ref[ft.TextField]()
-
-        async def _do_install(ev):
-            pkgs = pkg_field.current.value.strip() if pkg_field.current else ""
-            if not pkgs:
-                return
-            page.pop_dialog()
-            packages = [p.strip() for p in pkgs.split() if p.strip()]
-            output_lines.clear()
-            state.is_installing = True
-            page.update()
-            try:
-                await colab_service.install_packages(
-                    packages,
-                    session_name,
-                    auth_method=state.auth_method,
-                    on_output=lambda t: _append_output(t),
-                )
-                if snack:
-                    snack("✅ Packages installed")
-            except Exception as ex:
-                if snack:
-                    snack(f"❌ {ex}")
-            state.is_installing = False
-            page.update()
-
-        install_dialog = ft.AlertDialog(
-            title=ft.Text("Install Packages"),
-            content=ft.Column(
-                controls=[
-                    ft.TextField(
-                        ref=pkg_field,
-                        label="Package names",
-                        hint_text="numpy pandas matplotlib",
-                        prefix_icon=ft.Icons.DOWNLOAD_ROUNDED,
-                        border_radius=tokens.RADIUS_MD,
-                    ),
-                    tip_text(
-                        "Separate multiple packages with spaces. Uses uv if available, else pip."
-                    ),
-                ],
-                tight=True,
-                spacing=tokens.SPACE_SM,
-            ),
-            actions=[
-                ft.TextButton(
-                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
-                ),
-                ft.FilledButton(
-                    "Install", on_click=lambda e: page.run_task(_do_install, e)
-                ),
-            ],
-        )
-        page.show_dialog(install_dialog)
-
     async def _on_mount_drive(e):
-        output_lines.clear()
-        state.is_mounting = True
         if snack:
             snack("Mounting Google Drive...")
         try:
             await colab_service.mount_drive(
-                session_name,
-                path=state.drive_mount_path,
-                auth_method=state.auth_method,
-                on_output=lambda t: _append_output(t),
+                session_name, path=state.drive_mount_path, auth_method=state.auth_method
             )
             if snack:
                 snack("✅ Drive mounted")
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
-        state.is_mounting = False
-        page.update()
 
     async def _on_auth_gcp(e):
-        output_lines.clear()
         if snack:
             snack("Authenticating with GCP on VM...")
         try:
             await colab_service.auth_gcp_on_vm(
-                session_name,
-                auth_method=state.auth_method,
-                on_output=lambda t: _append_output(t),
+                session_name, auth_method=state.auth_method
             )
             if snack:
                 snack("✅ GCP auth complete")
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
-        page.update()
 
     async def _on_view_logs(e):
         if navigate:
             await navigate(f"/history?session={session_name}")
 
-    action_grid = ft.Container(
-        content=ft.Column(
+    def _action_chip(icon, label, on_click, color=None):
+        return ft.FilledButton(
+            content=ft.Row(
+                [
+                    ft.Icon(icon, size=16, color=color or ft.Colors.PRIMARY),
+                    ft.Text(label, size=tokens.FONT_XS),
+                ],
+                spacing=4,
+            ),
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+                elevation=0,
+            ),
+            on_click=on_click,
+            height=32,
+        )
+
+    action_row = ft.Container(
+        content=ft.Row(
             controls=[
-                ft.Row(
-                    controls=[
-                        _action_card(
-                            ft.Icons.FOLDER_ROUNDED,
-                            "Files",
-                            lambda e: page.run_task(_on_files, e),
-                        ),
-                        _action_card(
-                            ft.Icons.DOWNLOAD_ROUNDED,
-                            "Install\nPackages",
-                            lambda e: page.run_task(_on_install, e),
-                        ),
-                        _action_card(
-                            ft.Icons.ADD_TO_DRIVE_ROUNDED,
-                            "Mount\nDrive",
-                            lambda e: page.run_task(_on_mount_drive, e),
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
+                _action_chip(
+                    ft.Icons.FOLDER_ROUNDED,
+                    "Files",
+                    lambda e: page.run_task(_on_files, e),
                 ),
-                ft.Row(
-                    controls=[
-                        _action_card(
-                            ft.Icons.SECURITY_ROUNDED,
-                            "Auth\nGCP",
-                            lambda e: page.run_task(_on_auth_gcp, e),
-                        ),
-                        _action_card(
-                            ft.Icons.OPEN_IN_BROWSER_ROUNDED,
-                            "Open in\nBrowser",
-                            lambda e: page.run_task(_on_open_browser, e),
-                            AppColors.BADGE_TPU,
-                        ),
-                        _action_card(
-                            ft.Icons.HISTORY_ROUNDED,
-                            "View\nLogs",
-                            lambda e: page.run_task(_on_view_logs, e),
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
+                _action_chip(
+                    ft.Icons.ADD_TO_DRIVE_ROUNDED,
+                    "Mount Drive",
+                    lambda e: page.run_task(_on_mount_drive, e),
                 ),
-                ft.Row(
-                    controls=[
-                        _action_card(
-                            ft.Icons.REFRESH_ROUNDED,
-                            "Restart\nKernel",
-                            lambda e: page.run_task(_on_restart, e),
-                            AppColors.WARNING,
-                        ),
-                        _action_card(
-                            ft.Icons.STOP_CIRCLE_ROUNDED,
-                            "Stop\nSession",
-                            lambda e: page.run_task(_on_stop, e),
-                            AppColors.ERROR,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
+                _action_chip(
+                    ft.Icons.SECURITY_ROUNDED,
+                    "Auth GCP",
+                    lambda e: page.run_task(_on_auth_gcp, e),
+                ),
+                _action_chip(
+                    ft.Icons.OPEN_IN_BROWSER_ROUNDED,
+                    "Browser",
+                    lambda e: page.run_task(_on_open_browser, e),
+                    AppColors.BADGE_TPU,
+                ),
+                _action_chip(
+                    ft.Icons.HISTORY_ROUNDED,
+                    "Logs",
+                    lambda e: page.run_task(_on_view_logs, e),
+                ),
+                _action_chip(
+                    ft.Icons.REFRESH_ROUNDED,
+                    "Restart",
+                    lambda e: page.run_task(_on_restart, e),
+                    AppColors.WARNING,
+                ),
+                _action_chip(
+                    ft.Icons.STOP_CIRCLE_ROUNDED,
+                    "Stop",
+                    lambda e: page.run_task(_on_stop, e),
+                    AppColors.ERROR,
                 ),
             ],
+            scroll=ft.ScrollMode.HIDDEN,
             spacing=tokens.SPACE_SM,
         ),
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
     )
 
-    # ── Terminal + Output ─────────────────────────────────────────────────────
-    def _append_output(text):
-        output_lines.append(text)
-        page.update()
+    # ── Notebook Cells ────────────────────────────────────────────────────────
+    cells_list = ft.Column(spacing=0)
 
-    async def _on_run_code(e):
-        code = code_field_ref.current.value.strip() if code_field_ref.current else ""
-        if not code:
+    def _save_notebook():
+        page.run_task(storage.save_notebook, session_name, state.notebook_cells)
+
+    def _update_cells_ui():
+        cells_list.controls.clear()
+        for i, cell in enumerate(state.notebook_cells):
+
+            def make_callbacks(idx=i, c=cell):
+                def _clear():
+                    state.notebook_cells[idx]["outputs"] = []
+                    _update_cells_ui()
+                    _save_notebook()
+
+                return {
+                    "on_run": lambda: page.run_task(_run_cell, c, idx),
+                    "on_delete": lambda: _delete_cell(idx),
+                    "on_move_up": lambda: _move_cell(idx, -1),
+                    "on_move_down": lambda: _move_cell(idx, 1),
+                    "on_change": _save_notebook,
+                    "on_clear_output": _clear,
+                }
+
+            cells_list.controls.append(
+                build_notebook_cell(page, cell, **make_callbacks())
+            )
+        cells_list.update()
+
+    def _add_cell(cell_type):
+        state.notebook_cells.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": cell_type,
+                "source": "",
+                "outputs": [],
+                "is_running": False,
+            }
+        )
+        _update_cells_ui()
+        _save_notebook()
+
+    def _delete_cell(index):
+        if 0 <= index < len(state.notebook_cells):
+            state.notebook_cells.pop(index)
+            _update_cells_ui()
+            _save_notebook()
+
+    def _move_cell(index, direction):
+        new_index = index + direction
+        if 0 <= new_index < len(state.notebook_cells):
+            state.notebook_cells[index], state.notebook_cells[new_index] = (
+                state.notebook_cells[new_index],
+                state.notebook_cells[index],
+            )
+            _update_cells_ui()
+            _save_notebook()
+
+    def _clear_all_outputs(e):
+        for cell in state.notebook_cells:
+            cell["outputs"] = []
+        _update_cells_ui()
+        _save_notebook()
+
+    # ── Interactive Stdin Hook ──
+    def _interactive_stdin_hook(prompt):
+        input_event = threading.Event()
+        user_input = {"value": ""}
+
+        dialog_field = ft.TextField(label=prompt, autofocus=True)
+
+        def _submit_input(e):
+            user_input["value"] = dialog_field.value
+            page.pop_dialog()
+            input_event.set()
+
+        dialog_field.on_submit = _submit_input
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Kernel Input Required"),
+            content=dialog_field,
+            actions=[ft.TextButton("Submit", on_click=_submit_input)],
+        )
+        async def _show():
+            page.show_dialog(dialog)
+        page.run_task(_show)
+        input_event.wait()
+        return user_input["value"]
+
+    # ── Execution Logic ──
+    async def _run_cell(cell, index):
+        if cell["is_running"]:
             return
+        cell["is_running"] = True
+        cell["outputs"] = []
+        _update_cells_ui()
 
-        output_lines.clear()
-        state.is_executing = True
-        page.update()
+        def _on_output(text_or_dict):
+            if isinstance(text_or_dict, str):
+                cell["outputs"].append({"type": "stream", "text": text_or_dict})
+            elif isinstance(text_or_dict, dict):
+                cell["outputs"].append(text_or_dict)
+            _update_cells_ui()
 
         try:
             await colab_service.exec_code(
-                code,
+                cell["source"],
                 session_name,
                 timeout=float(state.default_timeout),
                 auth_method=state.auth_method,
-                on_output=lambda t: _append_output(t),
+                on_output=_on_output,
+                intercept_oauth=True,
+                stdin_hook=_interactive_stdin_hook,
             )
         except Exception as ex:
-            _append_output(f"Error: {ex}")
+            cell["outputs"].append({"type": "error", "traceback": [str(ex)]})
 
-        state.is_executing = False
-        page.update()
+        cell["is_running"] = False
+        _update_cells_ui()
+        _save_notebook()
 
-    def _on_clear_output(e):
-        output_lines.clear()
-        page.update()
+    # Initial Load
+    async def _load_notebook():
+        loaded_cells = await storage.load_notebook(session_name)
+        if loaded_cells:
+            state.notebook_cells = loaded_cells
+            for c in state.notebook_cells:
+                c["is_running"] = False
+        else:
+            state.notebook_cells = [{"type": "code", "source": "", "outputs": [], "is_running": False}]
+        _update_cells_ui()
 
-    terminal_section = ft.Container(
-        content=ft.Column(
-            controls=[
-                section_header("EXECUTE CODE"),
-                ft.Container(
-                    content=build_terminal(
-                        on_run=lambda e: page.run_task(_on_run_code, e),
-                        on_clear=_on_clear_output,
-                        filename=f"{session_name}.py",
-                        is_running=state.is_executing,
-                        field_ref=code_field_ref,
-                    ),
-                    padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
-                ),
-                ft.Container(
-                    content=build_output_panel(
-                        lines=output_lines,
-                        is_visible=True,
-                        on_clear=_on_clear_output,
-                    ),
-                    padding=ft.Padding(
-                        tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
-                    ),
-                ),
-            ],
-            spacing=0,
-        ),
+    page.run_task(_load_notebook)
+
+    notebook_section = ft.Container(
+        content=cells_list,
+        padding=ft.Padding(tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL),
+    )
+
+    toolbar = build_notebook_toolbar(
+        on_add_code=lambda e: _add_cell("code"),
+        on_add_markdown=lambda e: _add_cell("markdown"),
+        on_clear_all=_clear_all_outputs,
     )
 
     # ── AppBar ────────────────────────────────────────────────────────────────
     from core.styles import standard_brand_appbar
 
-    app_bar = standard_brand_appbar(
-        title_text=session_name,
-        on_back=on_back,
-    )
+    app_bar = standard_brand_appbar(title_text=session_name, on_back=on_back)
 
     # ── Full view ─────────────────────────────────────────────────────────────
     view_content = ft.Column(
         controls=[
             app_bar,
-            ft.Column(
+            ft.Stack(
                 controls=[
-                    status_header,
-                    action_grid,
-                    terminal_section,
-                    ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
-                    build_banner_ad(page),
-                    ft.Container(height=tokens.SPACE_XL),
+                    ft.Column(
+                        controls=[
+                            status_header,
+                            action_row,
+                            notebook_section,
+                            build_banner_ad(page),
+                            ft.Container(height=100),  # Space for toolbar
+                        ],
+                        spacing=tokens.SPACE_SM,
+                        scroll=ft.ScrollMode.AUTO,
+                        expand=True,
+                    ),
+                    ft.Container(
+                        content=toolbar,
+                        bottom=0,
+                        left=0,
+                        right=0,
+                    ),
                 ],
-                spacing=tokens.SPACE_SM,
-                scroll=ft.ScrollMode.AUTO,
                 expand=True,
             ),
         ],

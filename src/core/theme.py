@@ -71,6 +71,7 @@ class AppTheme:
                 surface_container_highest=AppColors.DARK_SURFACE,
                 outline=AppColors.DARK_DIVIDER,
             ),
+            font_family="Outfit",
         )
 
     @staticmethod
@@ -93,4 +94,5 @@ class AppTheme:
                 surface_container_highest=AppColors.LIGHT_SURFACE,
                 outline=AppColors.DIVIDER,
             ),
+            font_family="Outfit",
         )

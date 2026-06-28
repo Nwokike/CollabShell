@@ -33,6 +33,7 @@ colab_service = ColabService()
 
 async def main(page: ft.Page):
     """Main Flet application entry point."""
+    page.fonts = {"Outfit": "assets/outfit.css"}
     page.title = constants.APP_NAME
     page.favicon = "icon.png"
     page.theme = AppTheme.get_light_theme()
@@ -184,11 +185,16 @@ async def main(page: ft.Page):
         name_ref = ft.Ref[ft.TextField]()
         gpu_ref = ft.Ref[ft.Dropdown]()
         tpu_ref = ft.Ref[ft.Dropdown]()
+        hardware_type_ref = ft.Ref[ft.SegmentedButton]()
 
         async def _on_create(e):
             name = name_ref.current.value.strip() if name_ref.current else ""
-            gpu = gpu_ref.current.value if gpu_ref.current else None
-            tpu = tpu_ref.current.value if tpu_ref.current else None
+            
+            # Read hardware selection
+            selected_hw = list(hardware_type_ref.current.selected)[0] if hardware_type_ref.current and hardware_type_ref.current.selected else "CPU"
+            
+            gpu = gpu_ref.current.value if (gpu_ref.current and selected_hw == "GPU") else None
+            tpu = tpu_ref.current.value if (tpu_ref.current and selected_hw == "TPU") else None
 
             page.pop_dialog()
             await ad_service.show_interstitial()
@@ -219,13 +225,18 @@ async def main(page: ft.Page):
             state.is_provisioning = True
 
             try:
+                logger.info(
+                    f"Attempting to create session: {name} (GPU={gpu}, TPU={tpu})"
+                )
                 result = await colab_service.new_session(
                     name=name or None,
                     gpu=gpu if gpu else None,
                     tpu=tpu if tpu else None,
                     auth_method=state.auth_method,
                 )
+                logger.info(f"Session created successfully: {result}")
                 page.pop_dialog()  # Dismiss spinner
+
                 _snack(f"✅ Session '{result['name']}' created!")
 
                 sessions = await colab_service.list_sessions(
@@ -234,6 +245,7 @@ async def main(page: ft.Page):
                 state.active_sessions = sessions
                 await route_change()
             except Exception as ex:
+                logger.error(f"Failed to create session: {ex}", exc_info=True)
                 page.pop_dialog()  # Dismiss spinner
                 _snack(f"❌ {ex}")
             state.is_provisioning = False
@@ -244,6 +256,7 @@ async def main(page: ft.Page):
             name_ref=name_ref,
             gpu_ref=gpu_ref,
             tpu_ref=tpu_ref,
+            hardware_type_ref=hardware_type_ref,
         )
 
         dialog = ft.AlertDialog(
@@ -291,18 +304,6 @@ async def main(page: ft.Page):
 
         elif route == "/home" or route == "/":
             from views.home_view import build_home_view
-
-            async def _refresh():
-                try:
-                    sessions = await colab_service.list_sessions(
-                        auth_method=state.auth_method,
-                    )
-                    state.active_sessions = sessions
-                    page.update()
-                except Exception as ex:
-                    logger.warning("Session refresh failed: %s", ex)
-
-            page.run_task(_refresh)
 
             view = build_home_view(
                 page=page,
