@@ -19,6 +19,33 @@ def apply_storage_patches():
     os.makedirs(storage_dir, exist_ok=True)
 
     # 2. Patch colab_cli modules
+    import sys
+    import types
+    
+    # Flet's Android engine strips 'wsgiref' which google_auth_oauthlib depends on.
+    # Since we don't run local servers on Android, we can safely mock it.
+    if 'wsgiref' not in sys.modules:
+        wsgiref = types.ModuleType('wsgiref')
+        sys.modules['wsgiref'] = wsgiref
+        
+        wsgiref_util = types.ModuleType('wsgiref.util')
+        sys.modules['wsgiref.util'] = wsgiref_util
+        wsgiref_util.request_uri = lambda *a, **k: ""
+        wsgiref.util = wsgiref_util
+        
+        wsgiref_simple_server = types.ModuleType('wsgiref.simple_server')
+        sys.modules['wsgiref.simple_server'] = wsgiref_simple_server
+        
+        class MockWSGIRequestHandler:
+            pass
+        class MockWSGIServer:
+            allow_reuse_address = False
+            
+        wsgiref_simple_server.WSGIRequestHandler = MockWSGIRequestHandler
+        wsgiref_simple_server.WSGIServer = MockWSGIServer
+        wsgiref_simple_server.make_server = lambda *a, **k: None
+        wsgiref.simple_server = wsgiref_simple_server
+
     import colab_cli.auth
     import colab_cli.history
     import colab_cli.state
