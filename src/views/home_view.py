@@ -174,7 +174,6 @@ def build_home_view(
                     alignment=ft.Alignment.CENTER,
                 )
             )
-            return
         for s in state.active_sessions:
             sessions_list.content.controls.append(
                 build_session_card(
@@ -191,15 +190,18 @@ def build_home_view(
 
     async def _load_sessions():
         try:
-            state.is_loading = True
-            page.update()
-            sessions = await colab_service.list_sessions(auth_method=state.auth_method)
-            state.active_sessions = sessions
-            state.is_loading = False
+            if not state.active_sessions:
+                state.is_loading = True
+                page.update()
+                sessions = await colab_service.list_sessions(
+                    auth_method=state.auth_method
+                )
+                state.active_sessions = sessions
+                state.is_loading = False
 
             # Cleanup orphaned history files automatically
             if storage:
-                active_names = [s["name"] for s in sessions]
+                active_names = [s["name"] for s in state.active_sessions]
                 page.run_task(storage.cleanup_orphaned_notebooks, active_names)
 
             _update_sessions_ui()

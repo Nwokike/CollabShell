@@ -624,8 +624,6 @@ def build_session_view(
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────
-    from components.brand_header import build_brand_header
-
     def _keep_alive_toggle(label, tooltip, value, on_change):
         return ft.Row(
             controls=[
@@ -698,7 +696,6 @@ def build_session_view(
 
     view_content = ft.Column(
         controls=[
-            build_brand_header(),
             ft.Stack(
                 controls=[
                     ft.Column(

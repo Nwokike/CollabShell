@@ -47,21 +47,35 @@ def apply_storage_patches():
         wsgiref_simple_server.make_server = lambda *a, **k: None
         wsgiref.simple_server = wsgiref_simple_server
 
-    # Android Jupyter client might be missing JupyterSubprotocol
-    try:
-        import jupyter_kernel_client.wsclient
+    # Android Jupyter client might be missing JupyterSubprotocol;
+    # ensure it always exists so any downstream import succeeds.
+    if "jupyter_kernel_client" not in sys.modules:
+        try:
+            import jupyter_kernel_client
+        except ImportError:
+            jupyter_kernel_client = types.ModuleType("jupyter_kernel_client")
+            sys.modules["jupyter_kernel_client"] = jupyter_kernel_client
 
-        if not hasattr(jupyter_kernel_client, "JupyterSubprotocol"):
-            import enum
+    ctx = sys.modules["jupyter_kernel_client"]
 
-            class MockJupyterSubprotocol(enum.Enum):
-                DEFAULT = "v1.kernel.websocket.jupyter.org"
-                V1 = "v1.kernel.websocket.jupyter.org"
+    if not hasattr(ctx, "JupyterSubprotocol"):
+        import enum
 
-            jupyter_kernel_client.JupyterSubprotocol = MockJupyterSubprotocol
-            jupyter_kernel_client.wsclient.JupyterSubprotocol = MockJupyterSubprotocol
-    except Exception:
-        pass
+        class MockJupyterSubprotocol(enum.Enum):
+            DEFAULT = "v1.kernel.websocket.jupyter.org"
+            V1 = "v1.kernel.websocket.jupyter.org"
+
+        ctx.JupyterSubprotocol = MockJupyterSubprotocol
+
+        # Also patch the wsclient submodule if available
+        try:
+            import jupyter_kernel_client.wsclient  # noqa: F811
+
+            ctx.wsclient.JupyterSubprotocol = MockJupyterSubprotocol
+        except (ImportError, AttributeError):
+            wsclient = types.ModuleType("jupyter_kernel_client.wsclient")
+            wsclient.JupyterSubprotocol = MockJupyterSubprotocol
+            sys.modules["jupyter_kernel_client.wsclient"] = wsclient
 
     import colab_cli.auth
     import colab_cli.history
