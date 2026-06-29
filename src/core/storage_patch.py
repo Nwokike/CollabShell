@@ -47,18 +47,51 @@ def apply_storage_patches():
         wsgiref_simple_server.make_server = lambda *a, **k: None
         wsgiref.simple_server = wsgiref_simple_server
 
-    # Android Jupyter client might be missing JupyterSubprotocol;
-    # ensure it always exists so any downstream import succeeds.
+    # Android/mobile Jupyter client may be incomplete or missing entirely;
+    # ensure all expected attributes exist so downstream imports don't fail.
     if "jupyter_kernel_client" not in sys.modules:
         try:
-            import jupyter_kernel_client
+            import jupyter_kernel_client  # noqa: F401 — ensures it's in sys.modules
         except ImportError:
-            jupyter_kernel_client = types.ModuleType("jupyter_kernel_client")
-            sys.modules["jupyter_kernel_client"] = jupyter_kernel_client
+
+            def _make_stub_module(fullname):
+                mod = types.ModuleType(fullname)
+                sys.modules[fullname] = mod
+                return mod
+
+            _make_stub_module("jupyter_kernel_client")
 
     ctx = sys.modules["jupyter_kernel_client"]
 
-    if not hasattr(ctx, "JupyterSubprotocol"):
+    # Patch every public attribute that the real module exposes
+    _jupyter_kernel_client_attrs = {
+        "JupyterSubprotocol": None,
+        "KernelClient": None,
+        "KernelHttpManager": None,
+        "KernelWebSocketClient": None,
+        "KonsoleApp": None,
+        "LanguageSnippets": None,
+        "SNIPPETS_REGISTRY": None,
+        "VariableDescription": None,
+        "client": None,
+        "constants": None,
+        "konsoleapp": None,
+        "log": None,
+        "manager": None,
+        "models": None,
+        "shell": None,
+        "snippets": None,
+        "utils": None,
+        "wsclient": None,
+    }
+
+    for name in _jupyter_kernel_client_attrs:
+        if not hasattr(ctx, name):
+            setattr(ctx, name, None)
+
+    # JupyterSubprotocol is special — create a proper enum so code that checks
+    # isinstance(value, JupyterSubprotocol) or accesses .value doesn't crash.
+    if ctx.JupyterSubprotocol is None:
         import enum
 
         class MockJupyterSubprotocol(enum.Enum):
@@ -67,15 +100,12 @@ def apply_storage_patches():
 
         ctx.JupyterSubprotocol = MockJupyterSubprotocol
 
-        # Also patch the wsclient submodule if available
-        try:
-            import jupyter_kernel_client.wsclient  # noqa: F811
-
-            ctx.wsclient.JupyterSubprotocol = MockJupyterSubprotocol
-        except (ImportError, AttributeError):
-            wsclient = types.ModuleType("jupyter_kernel_client.wsclient")
-            wsclient.JupyterSubprotocol = MockJupyterSubprotocol
-            sys.modules["jupyter_kernel_client.wsclient"] = wsclient
+    # Ensure wsclient submodule exists (some imports access it directly)
+    if "jupyter_kernel_client.wsclient" not in sys.modules:
+        wsclient_mod = types.ModuleType("jupyter_kernel_client.wsclient")
+        sys.modules["jupyter_kernel_client.wsclient"] = wsclient_mod
+        ctx.wsclient = wsclient_mod
+        wsclient_mod.JupyterSubprotocol = ctx.JupyterSubprotocol
 
     import colab_cli.auth
     import colab_cli.history
