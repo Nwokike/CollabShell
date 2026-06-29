@@ -57,7 +57,7 @@ def build_settings_view(
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=6,
             ),
-            padding=ft.Padding(8, 10, 8, 10),
+            padding=ft.Padding(tokens.SPACE_SM, 10, tokens.SPACE_SM, 10),
             border_radius=tokens.RADIUS_MD,
             border=ft.Border.all(2, ft.Colors.PRIMARY)
             if is_sel
@@ -269,7 +269,7 @@ def build_settings_view(
                                         ft.dropdown.Option("oauth2", "OAuth2"),
                                         ft.dropdown.Option("adc", "ADC"),
                                     ],
-                                    width=110,
+                                    width=tokens.INPUT_WIDTH_MD,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
@@ -356,7 +356,7 @@ def build_settings_view(
                                         ft.dropdown.Option("A100", "A100 · Pro+"),
                                         ft.dropdown.Option("H100", "H100 · Pro+"),
                                     ],
-                                    width=130,
+                                    width=tokens.INPUT_WIDTH_LG,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
@@ -396,7 +396,7 @@ def build_settings_view(
                                         ft.dropdown.Option("v5e1", "v5e1 · Free"),
                                         ft.dropdown.Option("v6e1", "v6e1 · Free"),
                                     ],
-                                    width=130,
+                                    width=tokens.INPUT_WIDTH_LG,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
@@ -457,7 +457,7 @@ def build_settings_view(
                                         ft.dropdown.Option(str(t), f"{t}s")
                                         for t in constants.TIMEOUT_OPTIONS
                                     ],
-                                    width=100,
+                                    width=tokens.INPUT_WIDTH_SM,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
@@ -498,7 +498,7 @@ def build_settings_view(
                                         ft.dropdown.Option("jsonl", ".jsonl"),
                                         ft.dropdown.Option("txt", ".txt"),
                                     ],
-                                    width=100,
+                                    width=tokens.INPUT_WIDTH_SM,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
@@ -739,31 +739,9 @@ def build_settings_view(
             glass_card(
                 ft.Column(
                     controls=[
-                        ft.Row(
-                            controls=[
-                                ft.Image(
-                                    src="icon.png",
-                                    width=48,
-                                    height=48,
-                                    fit=ft.BoxFit.CONTAIN,
-                                ),
-                                ft.Column(
-                                    controls=[
-                                        ft.Text(
-                                            f"{constants.APP_NAME} v{constants.APP_VERSION}",
-                                            size=tokens.FONT_MD,
-                                            weight=ft.FontWeight.W_600,
-                                        ),
-                                        ft.Text(
-                                            "Cloud GPUs from your phone",
-                                            size=tokens.FONT_XS,
-                                            color=ft.Colors.ON_SURFACE_VARIANT,
-                                        ),
-                                    ],
-                                    spacing=tokens.SPACE_XXS,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_LG,
+                        ft.Container(
+                            content=__import__("components.brand_header", fromlist=["build_brand_header"]).build_brand_header(show_tagline=True, spacing_below=False),
+                            opacity=0.8,
                         ),
                         ft.Divider(height=tokens.SPACE_SM),
                         ft.Row(
@@ -838,4 +816,9 @@ def build_settings_view(
         route="/settings",
         controls=[view_content],
         padding=0,
+        appbar=ft.AppBar(
+            title=ft.Text(constants.APP_NAME, weight=ft.FontWeight.BOLD),
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+        ),
     )

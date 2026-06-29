@@ -1,6 +1,8 @@
 import flet as ft
+
 from core import tokens
 from core.theme import AppColors
+from components.ansi_parser import parse_ansi_to_flet_text
 
 
 def build_notebook_cell(
@@ -74,88 +76,127 @@ def build_notebook_cell(
 
     if cell_type == "markdown":
         # ── Markdown Cell ──
-        is_editing = cell.get("is_editing", not bool(source.strip()))
+        is_editing_initial = cell.get("is_editing", not bool(source.strip()))
+        
+        edit_container = ft.Container(visible=is_editing_initial)
+        render_container = ft.Container(visible=not is_editing_initial)
+        markdown_ref = ft.Ref[ft.Markdown]()
 
-        def _toggle_edit(e):
-            cell["is_editing"] = not cell.get("is_editing", False)
-            if on_change:
-                on_change()
+        def _edit(e=None):
+            if not cell.get("is_editing"):
+                cell["is_editing"] = True
+                edit_container.visible = True
+                render_container.visible = False
+                if on_change:
+                    on_change()
+                edit_container.update()
+                render_container.update()
 
-        if is_editing:
-            content = ft.Column(
-                controls=[
-                    ft.Row(
-                        controls=[
-                            ft.Text(
-                                "Markdown (Edit Mode)",
-                                size=tokens.FONT_XS,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                                weight="bold",
-                            ),
-                            ft.Container(expand=True),
-                            ft.FilledButton(
-                                "Render",
-                                icon=ft.Icons.CHECK_ROUNDED,
-                                on_click=_toggle_edit,
-                                height=30,
-                            ),
-                            actions_row,
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        def _render(e=None):
+            if cell.get("is_editing"):
+                if editor_ref.current:
+                    cell["source"] = editor_ref.current.value
+                    if markdown_ref.current:
+                        markdown_ref.current.value = cell["source"]
+                cell["is_editing"] = False
+                edit_container.visible = False
+                render_container.visible = True
+                if on_change:
+                    on_change()
+                edit_container.update()
+                render_container.update()
+
+        edit_container.content = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.TextField(
+                            ref=editor_ref,
+                            value=source,
+                            multiline=True,
+                            min_lines=2,
+                            max_lines=15,
+                            text_size=tokens.FONT_SM,
+                            border_color=ft.Colors.TRANSPARENT,
+                            bgcolor=ft.Colors.TRANSPARENT,
+                            on_change=_handle_change,
+                            on_blur=_render,
+                            hint_text="Type markdown here...",
+                            content_padding=tokens.SPACE_SM,
+                            expand=True,
+                        ),
+                    ],
+                ),
+                ft.Row(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.MODE_EDIT_OUTLINE_ROUNDED, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
+                                ft.Text("Markdown", size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE_VARIANT, weight="bold"),
+                            ],
+                            spacing=tokens.SPACE_XS,
+                        ),
+                        ft.Container(expand=True),
+                        ft.FilledButton(
+                            "Render",
+                            icon=ft.Icons.CHECK_ROUNDED,
+                            on_click=_render,
+                            height=28,
+                            style=ft.ButtonStyle(padding=ft.Padding(12, 0, 12, 0)),
+                        ),
+                        actions_row,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            ],
+            spacing=0,
+        )
+        
+        render_container.content = ft.Column(
+            controls=[
+                ft.GestureDetector(
+                    on_double_tap=_edit,
+                    content=ft.Container(
+                        content=ft.Markdown(
+                            ref=markdown_ref,
+                            value=source,
+                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                            selectable=True,
+                            on_tap_link=lambda e: page.launch_url(e.data),
+                        ),
+                        padding=tokens.SPACE_SM,
+                        expand=True,
+                        width=float("inf"),
                     ),
-                    ft.TextField(
-                        ref=editor_ref,
-                        value=source,
-                        multiline=True,
-                        min_lines=2,
-                        max_lines=15,
-                        text_size=tokens.FONT_SM,
-                        border_color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
-                        bgcolor=ft.Colors.TRANSPARENT,
-                        on_change=_handle_change,
-                        hint_text="Type markdown here...",
-                    ),
-                ],
-                spacing=tokens.SPACE_SM,
-            )
-        else:
-            content = ft.Column(
-                controls=[
-                    ft.Row(
+                ),
+                ft.Container(
+                    content=ft.Row(
                         controls=[
                             ft.Container(expand=True),
                             ft.IconButton(
                                 ft.Icons.EDIT_ROUNDED,
                                 icon_size=16,
                                 tooltip="Edit Markdown",
-                                on_click=_toggle_edit,
+                                on_click=_edit,
                             ),
+                            actions_row,
                         ],
-                        visible=False,  # Can make it visible on hover if Flet supported it easily on containers, but we keep it simple for now
+                        alignment=ft.MainAxisAlignment.END,
                     ),
-                    ft.GestureDetector(
-                        on_double_tap=_toggle_edit,
-                        content=ft.Markdown(
-                            source,
-                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                            selectable=True,
-                            on_tap_link=lambda e: page.launch_url(e.data),
-                        ),
-                    ),
-                ],
-                spacing=0,
-            )
+                    padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, tokens.SPACE_SM),
+                ),
+            ],
+            spacing=0,
+        )
+
+        content = ft.Column([edit_container, render_container], spacing=0)
 
         return ft.Container(
             content=content,
-            padding=tokens.SPACE_MD,
             border_radius=tokens.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE)
-            if is_editing
-            else ft.Colors.TRANSPARENT,
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE))
-            if is_editing
-            else None,
+            bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )
 
@@ -166,13 +207,12 @@ def build_notebook_cell(
         for out in outputs:
             if out.get("type") == "stream":
                 is_err = out.get("name") == "stderr"
+                text = out.get("text", "")
                 output_controls.append(
-                    ft.Text(
-                        out.get("text", ""),
-                        size=tokens.FONT_SM,
-                        color=AppColors.ERROR if is_err else "#F8F8F2",
-                        font_family="RobotoMono",
-                        selectable=True,
+                    parse_ansi_to_flet_text(
+                        raw_text=text,
+                        default_size=tokens.FONT_SM,
+                        is_error=is_err
                     )
                 )
             elif out.get("type") == "error":
@@ -220,7 +260,12 @@ def build_notebook_cell(
 
         output_actions = ft.Row(
             controls=[
-                ft.Text("OUTPUT", size=10, color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE), weight=ft.FontWeight.W_600),
+                ft.Text(
+                    "OUTPUT",
+                    size=10,
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
+                    weight=ft.FontWeight.W_600,
+                ),
                 ft.Row(
                     controls=[
                         ft.IconButton(
@@ -233,17 +278,19 @@ def build_notebook_cell(
                             ft.Icons.CLEAR_ALL_ROUNDED,
                             icon_size=14,
                             tooltip="Clear Output",
-                            on_click=lambda e: on_clear_output() if on_clear_output else None,
+                            on_click=lambda e: (
+                                on_clear_output() if on_clear_output else None
+                            ),
                         ),
                     ],
                     spacing=0,
-                )
+                ),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
 
         output_panel = ft.Container(
-            content=ft.Column(controls=[output_actions] + output_controls, spacing=2),
+            content=ft.Column(controls=output_controls + [output_actions], spacing=2),
             padding=tokens.SPACE_SM,
             bgcolor="#0D0D1A",
             border_radius=tokens.RADIUS_SM,
@@ -251,63 +298,75 @@ def build_notebook_cell(
             width=float("inf"),
         )
 
-        content = ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Container(
-                            content=ft.ProgressRing(width=16, height=16, stroke_width=2)
-                            if is_running
-                            else ft.IconButton(
-                                ft.Icons.PLAY_ARROW_ROUNDED,
-                                icon_size=20,
-                                icon_color=AppColors.SUCCESS,
-                                on_click=lambda e: on_run() if on_run else None,
-                                tooltip="Run Cell",
-                            ),
-                            width=40,
-                            alignment=ft.Alignment.TOP_CENTER,
-                            padding=ft.Padding(0, tokens.SPACE_SM, 0, 0),
-                        ),
-                        ft.Container(
-                            content=ft.TextField(
+        # Unified code editor box with actions at the bottom
+        unified_editor_box = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.TextField(
                                 ref=editor_ref,
                                 value=source,
                                 multiline=True,
                                 min_lines=1,
                                 max_lines=25,
-                                text_style=ft.TextStyle(font_family="RobotoMono", size=tokens.FONT_SM),
-                                border_color=ft.Colors.TRANSPARENT,
-                                bgcolor=ft.Colors.with_opacity(
-                                    0.03, ft.Colors.ON_SURFACE
+                                text_style=ft.TextStyle(
+                                    font_family="RobotoMono", size=tokens.FONT_SM
                                 ),
+                                border_color=ft.Colors.TRANSPARENT,
+                                bgcolor=ft.Colors.TRANSPARENT,
                                 on_change=_handle_change,
                                 hint_text="Code...",
                                 content_padding=tokens.SPACE_SM,
-                                border_radius=tokens.RADIUS_SM,
+                                expand=True,
                             ),
-                            expand=True,
+                        ],
+                    ),
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Container(
+                                    content=ft.ProgressRing(width=16, height=16, stroke_width=2)
+                                    if is_running
+                                    else ft.IconButton(
+                                        ft.Icons.PLAY_ARROW_ROUNDED,
+                                        icon_size=20,
+                                        icon_color=AppColors.SUCCESS,
+                                        on_click=lambda e: on_run() if on_run else None,
+                                        tooltip="Run Cell",
+                                    ),
+                                ),
+                                ft.Container(expand=True),
+                                actions_row,
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        actions_row,
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                ),
+                        padding=ft.Padding(tokens.SPACE_XS, 0, tokens.SPACE_SM, tokens.SPACE_XS),
+                    ),
+                ],
+                spacing=0,
+            ),
+            border_radius=tokens.RADIUS_SM,
+            bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.ON_SURFACE),
+        )
+
+        content = ft.Column(
+            controls=[
+                unified_editor_box,
                 ft.Container(
                     content=output_panel,
-                    padding=ft.Padding(
-                        48, 0, 0, 0
-                    ),  # Indent outputs to align with textfield
+                    padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
                 ),
             ],
-            spacing=tokens.SPACE_XS,
+            spacing=0,
         )
 
         return ft.Container(
             content=content,
-            padding=ft.Padding(0, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM),
+            padding=tokens.SPACE_SM,
             border=ft.Border(
-                left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE))
+                left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
             ),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )

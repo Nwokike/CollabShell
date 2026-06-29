@@ -21,30 +21,47 @@ def apply_storage_patches():
     # 2. Patch colab_cli modules
     import sys
     import types
-    
+
     # Flet's Android engine strips 'wsgiref' which google_auth_oauthlib depends on.
     # Since we don't run local servers on Android, we can safely mock it.
-    if 'wsgiref' not in sys.modules:
-        wsgiref = types.ModuleType('wsgiref')
-        sys.modules['wsgiref'] = wsgiref
-        
-        wsgiref_util = types.ModuleType('wsgiref.util')
-        sys.modules['wsgiref.util'] = wsgiref_util
+    if "wsgiref" not in sys.modules:
+        wsgiref = types.ModuleType("wsgiref")
+        sys.modules["wsgiref"] = wsgiref
+
+        wsgiref_util = types.ModuleType("wsgiref.util")
+        sys.modules["wsgiref.util"] = wsgiref_util
         wsgiref_util.request_uri = lambda *a, **k: ""
         wsgiref.util = wsgiref_util
-        
-        wsgiref_simple_server = types.ModuleType('wsgiref.simple_server')
-        sys.modules['wsgiref.simple_server'] = wsgiref_simple_server
-        
+
+        wsgiref_simple_server = types.ModuleType("wsgiref.simple_server")
+        sys.modules["wsgiref.simple_server"] = wsgiref_simple_server
+
         class MockWSGIRequestHandler:
             pass
+
         class MockWSGIServer:
             allow_reuse_address = False
-            
+
         wsgiref_simple_server.WSGIRequestHandler = MockWSGIRequestHandler
         wsgiref_simple_server.WSGIServer = MockWSGIServer
         wsgiref_simple_server.make_server = lambda *a, **k: None
         wsgiref.simple_server = wsgiref_simple_server
+
+    # Android Jupyter client might be missing JupyterSubprotocol
+    try:
+        import jupyter_kernel_client.wsclient
+
+        if not hasattr(jupyter_kernel_client, "JupyterSubprotocol"):
+            import enum
+
+            class MockJupyterSubprotocol(enum.Enum):
+                DEFAULT = "v1.kernel.websocket.jupyter.org"
+                V1 = "v1.kernel.websocket.jupyter.org"
+
+            jupyter_kernel_client.JupyterSubprotocol = MockJupyterSubprotocol
+            jupyter_kernel_client.wsclient.JupyterSubprotocol = MockJupyterSubprotocol
+    except Exception:
+        pass
 
     import colab_cli.auth
     import colab_cli.history

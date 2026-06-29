@@ -5,8 +5,8 @@ from __future__ import annotations
 import flet as ft
 import os
 
-from core import tokens
-from core.styles import section_header, build_banner_ad
+from core import tokens, constants
+from core.styles import section_header, build_banner_ad, glass_card
 from core.theme import AppColors
 
 
@@ -16,6 +16,7 @@ def build_history_view(
     state,
     preselected_session: str = None,
     snack=None,
+    theme_btn=None,
 ) -> ft.View:
     """Build the history view with session selector, event list, and export."""
 
@@ -210,6 +211,10 @@ def build_history_view(
             padding=ft.Padding(
                 tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
             ),
+            bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
+            border_radius=tokens.RADIUS_MD,
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)),
+            margin=ft.Margin(0, tokens.SPACE_XXS, 0, tokens.SPACE_XXS),
         )
 
     def _build_event_list():
@@ -226,7 +231,7 @@ def build_history_view(
                     controls=[
                         ft.Icon(
                             ft.Icons.HISTORY_ROUNDED,
-                            size=48,
+                            size=tokens.ICON_XXL,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         ft.Text(
@@ -258,92 +263,78 @@ def build_history_view(
 
     view_content = ft.Column(
         controls=[
+            # Brand Header
+            __import__("components.brand_header", fromlist=["build_brand_header"]).build_brand_header(),
             # Filters
             ft.Container(
                 content=ft.Column(
                     controls=[
-                        section_header("SESSION"),
-                        ft.Container(
-                            content=ft.Dropdown(
-                                ref=session_dropdown_ref,
-                                label="Session",
-                                options=[],
-                                border_radius=tokens.RADIUS_MD,
-                                on_select=_on_session_change,
-                            ),
-                            padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
-                        ),
-                        ft.Container(
-                            content=ft.Row(
+                        section_header("FILTERS"),
+                        glass_card(
+                            ft.Column(
                                 controls=[
                                     ft.Dropdown(
-                                        ref=filter_ref,
-                                        label="Event Type",
-                                        options=[
-                                            ft.dropdown.Option("all", "All Events"),
-                                            ft.dropdown.Option(
-                                                "execution", "Executions"
-                                            ),
-                                            ft.dropdown.Option(
-                                                "file_operation", "File Ops"
-                                            ),
-                                            ft.dropdown.Option(
-                                                "automation", "Automation"
-                                            ),
-                                            ft.dropdown.Option(
-                                                "session_created", "Session Created"
-                                            ),
-                                        ],
-                                        value="all",
+                                        ref=session_dropdown_ref,
+                                        label="Session",
+                                        options=[],
                                         border_radius=tokens.RADIUS_MD,
-                                        on_select=_on_filter_change,
-                                        expand=True,
+                                        on_select=_on_session_change,
                                     ),
-                                    ft.Dropdown(
-                                        ref=lines_ref,
-                                        label="Show",
-                                        options=[
-                                            ft.dropdown.Option("10", "Last 10"),
-                                            ft.dropdown.Option("50", "Last 50"),
-                                            ft.dropdown.Option("100", "Last 100"),
-                                            ft.dropdown.Option("all", "All"),
+                                    ft.Row(
+                                        controls=[
+                                            ft.Dropdown(
+                                                ref=filter_ref,
+                                                label="Event Type",
+                                                options=[
+                                                    ft.dropdown.Option("all", "All Events"),
+                                                    ft.dropdown.Option("execution", "Executions"),
+                                                    ft.dropdown.Option("file_operation", "File Ops"),
+                                                    ft.dropdown.Option("automation", "Automation"),
+                                                    ft.dropdown.Option("session_created", "Session Created"),
+                                                ],
+                                                value="all",
+                                                border_radius=tokens.RADIUS_MD,
+                                                on_select=_on_filter_change,
+                                                expand=True,
+                                            ),
+                                            ft.Dropdown(
+                                                ref=lines_ref,
+                                                label="Show",
+                                                options=[
+                                                    ft.dropdown.Option("10", "Last 10"),
+                                                    ft.dropdown.Option("50", "Last 50"),
+                                                    ft.dropdown.Option("100", "Last 100"),
+                                                    ft.dropdown.Option("all", "All"),
+                                                ],
+                                                value="50",
+                                                border_radius=tokens.RADIUS_MD,
+                                                on_select=_on_lines_change,
+                                                width=120,
+                                            ),
                                         ],
-                                        value="50",
-                                        border_radius=tokens.RADIUS_MD,
-                                        on_select=_on_lines_change,
-                                        width=120,
+                                        spacing=tokens.SPACE_SM,
+                                    ),
+                                    ft.OutlinedButton(
+                                        content=ft.Text(f"Export as .{state.default_log_format or 'ipynb'}"),
+                                        icon=ft.Icons.DOWNLOAD_ROUNDED,
+                                        on_click=lambda e: page.run_task(_on_export, e),
+                                        width=float("inf"),
                                     ),
                                 ],
-                                spacing=tokens.SPACE_SM,
-                            ),
-                            padding=ft.Padding(
-                                tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
-                            ),
-                        ),
-                        # Export button
-                        ft.Container(
-                            content=ft.OutlinedButton(
-                                content=ft.Text(
-                                    f"Export as .{state.default_log_format or 'ipynb'}"
-                                ),
-                                icon=ft.Icons.DOWNLOAD_ROUNDED,
-                                on_click=lambda e: page.run_task(_on_export, e),
-                                width=float("inf"),
-                            ),
-                            padding=ft.Padding(
-                                tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0
-                            ),
-                        ),
+                                spacing=tokens.SPACE_MD,
+                            )
+                        )
                     ],
                     spacing=0,
                 ),
+                padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
-            ft.Divider(height=1),
             # Event list
             section_header("EVENTS"),
             ft.Container(
                 content=_build_event_list(),
                 expand=True,
+                padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
             build_banner_ad(page),
         ],
@@ -356,4 +347,10 @@ def build_history_view(
         route="/history",
         controls=[view_content],
         padding=0,
+        appbar=ft.AppBar(
+            title=ft.Text(constants.APP_NAME, weight=ft.FontWeight.BOLD),
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+            actions=[theme_btn] if theme_btn else [],
+        ),
     )

@@ -40,8 +40,8 @@ def build_onboarding_view(
                         content=ft.Icon(
                             icon, size=tokens.ICON_XL, color=ft.Colors.PRIMARY
                         ),
-                        width=56,
-                        height=56,
+                        width=tokens.CARD_ICON_CONTAINER,
+                        height=tokens.CARD_ICON_CONTAINER,
                         border_radius=tokens.RADIUS_MD,
                         bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY),
                         alignment=ft.Alignment.CENTER,
@@ -70,16 +70,9 @@ def build_onboarding_view(
     def _build_page_1():
         return ft.Column(
             controls=[
-                ft.Container(height=tokens.SPACE_XL),
-                ft.Image(src="icon.png", width=110, height=110, fit=ft.BoxFit.CONTAIN),
-                ft.Container(height=tokens.SPACE_SM),
-                ft.Text(
-                    "Cloud GPUs from your phone",
-                    size=tokens.FONT_XL,
-                    weight=ft.FontWeight.W_700,
-                    color=ft.Colors.PRIMARY,
-                    text_align=ft.TextAlign.CENTER,
-                ),
+                __import__(
+                    "components.brand_header", fromlist=["build_brand_header"]
+                ).build_brand_header(),
                 ft.Container(height=tokens.SPACE_MD),
                 _feature_row(
                     ft.Icons.PLAY_ARROW_ROUNDED,
@@ -107,7 +100,7 @@ def build_onboarding_view(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
                 ft.Icon(
-                    ft.Icons.ROCKET_LAUNCH_ROUNDED, size=80, color=ft.Colors.PRIMARY
+                    ft.Icons.ROCKET_LAUNCH_ROUNDED, size=tokens.ICON_XXXL, color=ft.Colors.PRIMARY
                 ),
                 ft.Text(
                     "How it works",
@@ -170,7 +163,7 @@ def build_onboarding_view(
             await ft.UrlLauncher().launch_url(url)
 
             if auth_url_text.current:
-                auth_url_text.current.value = "A browser window opened. Sign in, then paste the authorization code below."
+                auth_url_text.current.value = "Paste the authorization code below."
                 auth_url_text.current.visible = True
             if auth_code_field.current:
                 auth_code_field.current.visible = True
@@ -222,7 +215,7 @@ def build_onboarding_view(
         return ft.Column(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
-                ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=80, color=ft.Colors.PRIMARY),
+                ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=tokens.ICON_XXXL, color=ft.Colors.PRIMARY),
                 ft.Text(
                     "Sign in to Google",
                     size=tokens.FONT_XXL,
@@ -263,6 +256,13 @@ def build_onboarding_view(
                     border_radius=tokens.RADIUS_MD,
                 ),
                 ft.Container(height=tokens.SPACE_LG),
+                ft.Text(
+                    "💡 IMPORTANT: A browser will open over the app. After copying the code, press the 'X' button at the top left to close the browser and return here.",
+                    size=tokens.FONT_XS,
+                    color=AppColors.WARNING,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Container(height=tokens.SPACE_SM),
                 # Sign in button
                 ft.FilledButton(
                     content=ft.Text(constants.LBL_SIGN_IN),

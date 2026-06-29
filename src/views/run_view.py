@@ -5,7 +5,7 @@ from __future__ import annotations
 import flet as ft
 
 from core import tokens, constants
-from core.styles import section_header, tip_text, build_banner_ad
+from core.styles import section_header, tip_text, build_banner_ad, glass_card
 from components.output_panel import build_output_panel
 
 
@@ -15,6 +15,7 @@ def build_run_view(
     state,
     on_back=None,
     snack=None,
+    theme_btn=None,
 ) -> ft.View:
     """Build the Quick Run view for one-shot script execution."""
 
@@ -50,6 +51,10 @@ def build_run_view(
         selected = e.control.selected
         if selected:
             hardware_type = list(selected)[0]
+        if gpu_ref.current:
+            gpu_ref.current.visible = (hardware_type == "GPU")
+        if tpu_ref.current:
+            tpu_ref.current.visible = (hardware_type == "TPU")
         page.update()
 
     async def _on_run(e):
@@ -150,16 +155,11 @@ def build_run_view(
         page.update()
 
     # ── Layout ────────────────────────────────────────────────────────────────
-    from core.styles import standard_brand_appbar
-
-    app_bar = standard_brand_appbar(
-        title_text="Quick Run",
-        on_back=on_back,
-    )
+    from components.brand_header import build_brand_header
 
     view_content = ft.Column(
         controls=[
-            app_bar,
+            build_brand_header(),
             ft.Column(
                 controls=[
                     # Script picker
@@ -167,8 +167,8 @@ def build_run_view(
                         content=ft.Column(
                             controls=[
                                 section_header("SCRIPT"),
-                                ft.Container(
-                                    content=ft.Row(
+                                glass_card(
+                                    ft.Column(
                                         controls=[
                                             ft.TextField(
                                                 ref=script_path_ref,
@@ -189,151 +189,141 @@ def build_run_view(
                                             ),
                                         ],
                                         spacing=tokens.SPACE_SM,
-                                    ),
-                                    padding=ft.Padding(
-                                        tokens.SPACE_LG, 0, tokens.SPACE_LG, 0
-                                    ),
+                                    )
                                 ),
-                                ft.Container(
-                                    content=ft.TextField(
-                                        ref=args_ref,
-                                        label="Script arguments",
-                                        hint_text="--arg1 value1 --arg2 value2",
-                                        prefix_icon=ft.Icons.SETTINGS_ROUNDED,
-                                        border_radius=tokens.RADIUS_MD,
-                                        text_size=tokens.FONT_MD,
-                                    ),
-                                    padding=ft.Padding(
-                                        tokens.SPACE_LG,
-                                        tokens.SPACE_SM,
-                                        tokens.SPACE_LG,
-                                        0,
+                            ],
+                            spacing=0,
+                        ),
+                        padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
+                    ),
+                    # Hardware
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                section_header("HARDWARE"),
+                                glass_card(
+                                    ft.Column(
+                                        controls=[
+                                            ft.SegmentedButton(
+                                                allow_multiple_selection=False,
+                                                selected=["CPU"],
+                                                on_change=_on_hardware_change,
+                                                segments=[
+                                                    ft.Segment(
+                                                        value="CPU",
+                                                        label=ft.Text("CPU"),
+                                                        icon=ft.Icon(ft.Icons.MEMORY_ROUNDED),
+                                                    ),
+                                                    ft.Segment(
+                                                        value="GPU",
+                                                        label=ft.Text("GPU"),
+                                                        icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED),
+                                                    ),
+                                                    ft.Segment(
+                                                        value="TPU",
+                                                        label=ft.Text("TPU"),
+                                                        icon=ft.Icon(ft.Icons.BOLT_ROUNDED),
+                                                    ),
+                                                ],
+                                            ),
+                                            tip_text("CPU is always free. T4 GPU and TPU are free with limits."),
+                                            ft.Dropdown(
+                                                ref=gpu_ref,
+                                                label="GPU Model",
+                                                options=[
+                                                    ft.dropdown.Option(key="T4", text="T4  ·  Free tier"),
+                                                    ft.dropdown.Option(key="L4", text="L4  ·  Pro"),
+                                                    ft.dropdown.Option(key="A100", text="A100  ·  Pro+"),
+                                                    ft.dropdown.Option(key="H100", text="H100  ·  Pro+"),
+                                                ],
+                                                value="T4",
+                                                border_radius=tokens.RADIUS_MD,
+                                                visible=False,
+                                            ),
+                                            ft.Dropdown(
+                                                ref=tpu_ref,
+                                                label="TPU Model",
+                                                options=[
+                                                    ft.dropdown.Option(
+                                                        key="v5e1", text="v5e1  ·  Free tier"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        key="v6e1", text="v6e1  ·  Free tier"
+                                                    ),
+                                                ],
+                                                value="v5e1",
+                                                border_radius=tokens.RADIUS_MD,
+                                                visible=False,
+                                            ),
+                                        ],
+                                        spacing=tokens.SPACE_MD,
                                     ),
                                 ),
                             ],
                             spacing=0,
                         ),
-                    ),
-                    # Hardware
-                    section_header("HARDWARE"),
-                    ft.Container(
-                        content=ft.SegmentedButton(
-                            allow_multiple_selection=False,
-                            selected=["CPU"],
-                            on_change=_on_hardware_change,
-                            segments=[
-                                ft.Segment(
-                                    value="CPU",
-                                    label=ft.Text("CPU"),
-                                    icon=ft.Icon(ft.Icons.MEMORY_ROUNDED),
-                                ),
-                                ft.Segment(
-                                    value="GPU",
-                                    label=ft.Text("GPU"),
-                                    icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED),
-                                ),
-                                ft.Segment(
-                                    value="TPU",
-                                    label=ft.Text("TPU"),
-                                    icon=ft.Icon(ft.Icons.BOLT_ROUNDED),
-                                ),
-                            ],
-                        ),
                         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
-                    ),
-                    ft.Container(
-                        content=tip_text(
-                            "CPU is always free. T4 GPU and TPU are free with limits."
-                        ),
-                        padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
-                    ),
-                    ft.Container(
-                        content=ft.Dropdown(
-                            ref=gpu_ref,
-                            label="GPU Model",
-                            options=[
-                                ft.dropdown.Option(key="T4", text="T4  ·  Free tier"),
-                                ft.dropdown.Option(key="L4", text="L4  ·  Pro"),
-                                ft.dropdown.Option(key="A100", text="A100  ·  Pro+"),
-                                ft.dropdown.Option(key="H100", text="H100  ·  Pro+"),
-                            ],
-                            value="T4",
-                            border_radius=tokens.RADIUS_MD,
-                        ),
-                        padding=ft.Padding(
-                            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
-                        ),
-                    ),
-                    ft.Container(
-                        content=ft.Dropdown(
-                            ref=tpu_ref,
-                            label="TPU Model",
-                            options=[
-                                ft.dropdown.Option(
-                                    key="v5e1", text="v5e1  ·  Free tier"
-                                ),
-                                ft.dropdown.Option(
-                                    key="v6e1", text="v6e1  ·  Free tier"
-                                ),
-                            ],
-                            value="v5e1",
-                            border_radius=tokens.RADIUS_MD,
-                        ),
-                        padding=ft.Padding(
-                            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, 0
-                        ),
                     ),
                     # Options
-                    section_header("OPTIONS"),
                     ft.Container(
                         content=ft.Column(
                             controls=[
-                                ft.TextField(
-                                    ref=session_name_ref,
-                                    label="Session Name",
-                                    hint_text="Auto-generated if blank",
-                                    prefix_icon=ft.Icons.LABEL_OUTLINE_ROUNDED,
-                                    border_radius=tokens.RADIUS_MD,
-                                    text_size=tokens.FONT_MD,
-                                ),
-                                ft.Dropdown(
-                                    ref=timeout_ref,
-                                    label="Timeout",
-                                    options=[
-                                        ft.dropdown.Option(str(t), f"{t}s")
-                                        for t in constants.TIMEOUT_OPTIONS
-                                    ],
-                                    value=str(state.default_timeout),
-                                    border_radius=tokens.RADIUS_MD,
-                                ),
-                                ft.Row(
-                                    controls=[
-                                        ft.Switch(ref=keep_ref, value=False),
-                                        ft.Column(
-                                            controls=[
-                                                ft.Text(
-                                                    "Keep session alive",
-                                                    size=tokens.FONT_MD,
-                                                    weight=ft.FontWeight.W_500,
-                                                ),
-                                                ft.Text(
-                                                    "Session stays running after script finishes",
-                                                    size=tokens.FONT_XS,
-                                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                                ),
-                                            ],
-                                            spacing=tokens.SPACE_XXS,
-                                            expand=True,
-                                        ),
-                                    ],
-                                    spacing=tokens.SPACE_MD,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                section_header("OPTIONS"),
+                                glass_card(
+                                    ft.Column(
+                                        controls=[
+                                            ft.TextField(
+                                                ref=session_name_ref,
+                                                label="Session Name",
+                                                hint_text="Auto-generated if blank",
+                                                prefix_icon=ft.Icons.LABEL_OUTLINE_ROUNDED,
+                                                border_radius=tokens.RADIUS_MD,
+                                                text_size=tokens.FONT_MD,
+                                            ),
+                                            ft.Dropdown(
+                                                ref=timeout_ref,
+                                                label="Timeout",
+                                                options=[
+                                                    ft.dropdown.Option(str(t), f"{t}s")
+                                                    for t in constants.TIMEOUT_OPTIONS
+                                                ],
+                                                value=str(state.default_timeout),
+                                                border_radius=tokens.RADIUS_MD,
+                                            ),
+                                            ft.Row(
+                                                controls=[
+                                                    ft.Switch(ref=keep_ref, value=False),
+                                                    ft.Column(
+                                                        controls=[
+                                                            ft.Text(
+                                                                "Keep session alive",
+                                                                size=tokens.FONT_MD,
+                                                                weight=ft.FontWeight.W_500,
+                                                            ),
+                                                            ft.Text(
+                                                                "Session stays running after script finishes",
+                                                                size=tokens.FONT_XS,
+                                                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                                            ),
+                                                        ],
+                                                        spacing=tokens.SPACE_XXS,
+                                                        expand=True,
+                                                    ),
+                                                ],
+                                                spacing=tokens.SPACE_MD,
+                                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                            ),
+                                        ],
+                                        spacing=tokens.SPACE_MD,
+                                    ),
                                 ),
                             ],
-                            spacing=tokens.SPACE_MD,
+                            spacing=0,
                         ),
                         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
                     ),
+                    # Execution
+                    ft.Container(height=tokens.SPACE_MD),
                     # Run button
                     ft.Container(
                         content=ft.FilledButton(
@@ -385,4 +375,20 @@ def build_run_view(
         route="/run",
         controls=[view_content],
         padding=0,
+        appbar=ft.AppBar(
+            leading=ft.Container(
+                content=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
+                    on_click=on_back, 
+                    icon_size=tokens.ICON_MD, 
+                    tooltip="Back"
+                ),
+                padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+            ),
+            leading_width=48,
+            title=ft.Text("Quick Run", size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            center_title=True,
+            bgcolor=ft.Colors.TRANSPARENT,
+            actions=[theme_btn] if theme_btn else [],
+        ),
     )

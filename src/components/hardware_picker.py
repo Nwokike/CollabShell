@@ -110,11 +110,6 @@ def build_hardware_picker(
             controls=[
                 # Header
                 ft.Text(
-                    "New Session",
-                    size=tokens.FONT_XXL,
-                    weight=ft.FontWeight.W_700,
-                ),
-                ft.Text(
                     "Create a cloud runtime to execute Python code",
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
@@ -140,7 +135,5 @@ def build_hardware_picker(
             spacing=tokens.SPACE_SM,
             scroll=ft.ScrollMode.AUTO,
         ),
-        padding=ft.Padding(
-            tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL
-        ),
+        padding=0,
     )

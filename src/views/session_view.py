@@ -27,6 +27,7 @@ def build_session_view(
     on_back=None,
     navigate=None,
     snack=None,
+    theme_btn=None,
 ) -> ft.View:
     storage = StorageService(page)
 
@@ -359,8 +360,10 @@ def build_session_view(
             content=dialog_field,
             actions=[ft.TextButton("Submit", on_click=_submit_input)],
         )
+
         async def _show():
             page.show_dialog(dialog)
+
         page.run_task(_show)
         input_event.wait()
         return user_input["value"]
@@ -405,7 +408,9 @@ def build_session_view(
             for c in state.notebook_cells:
                 c["is_running"] = False
         else:
-            state.notebook_cells = [{"type": "code", "source": "", "outputs": [], "is_running": False}]
+            state.notebook_cells = [
+                {"type": "code", "source": "", "outputs": [], "is_running": False}
+            ]
         _update_cells_ui()
 
     page.run_task(_load_notebook)
@@ -421,15 +426,12 @@ def build_session_view(
         on_clear_all=_clear_all_outputs,
     )
 
-    # ── AppBar ────────────────────────────────────────────────────────────────
-    from core.styles import standard_brand_appbar
-
-    app_bar = standard_brand_appbar(title_text=session_name, on_back=on_back)
-
     # ── Full view ─────────────────────────────────────────────────────────────
+    from components.brand_header import build_brand_header
+
     view_content = ft.Column(
         controls=[
-            app_bar,
+            build_brand_header(),
             ft.Stack(
                 controls=[
                     ft.Column(
@@ -462,4 +464,20 @@ def build_session_view(
         route=f"/session?session={session_name}",
         controls=[view_content],
         padding=0,
+        appbar=ft.AppBar(
+            leading=ft.Container(
+                content=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
+                    on_click=on_back, 
+                    icon_size=tokens.ICON_MD, 
+                    tooltip="Back"
+                ),
+                padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+            ),
+            leading_width=48,
+            title=ft.Text(session_name, size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            center_title=True,
+            bgcolor=ft.Colors.TRANSPARENT,
+            actions=[theme_btn] if theme_btn else [],
+        ),
     )

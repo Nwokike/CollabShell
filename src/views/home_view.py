@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from core import tokens
+from core import tokens, constants
 from core.styles import section_header, build_banner_ad
 from core.theme import AppColors
 from components.session_card import build_session_card
@@ -22,7 +22,11 @@ def build_home_view(
     """Build the home dashboard view."""
 
     # ── Header ────────────────────────────────────────────────────────────────
-    header = ft.Container(
+    from components.brand_header import build_brand_header
+
+    header = build_brand_header()
+
+    auth_status_chip = ft.Container(
         content=ft.Row(
             controls=[
                 ft.Icon(
@@ -53,9 +57,7 @@ def build_home_view(
         ),
         border_radius=tokens.RADIUS_PILL,
         bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-        margin=ft.Margin(
-            tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_SM
-        ),
+        margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
     )
 
     # ── Quick Actions ─────────────────────────────────────────────────────────
@@ -67,8 +69,8 @@ def build_home_view(
                         content=ft.Icon(
                             icon, size=tokens.ICON_XL, color=color or ft.Colors.PRIMARY
                         ),
-                        width=56,
-                        height=56,
+                        width=tokens.CARD_ICON_CONTAINER,
+                        height=tokens.CARD_ICON_CONTAINER,
                         border_radius=tokens.RADIUS_MD,
                         bgcolor=ft.Colors.with_opacity(0.1, color or ft.Colors.PRIMARY),
                         alignment=ft.Alignment.CENTER,
@@ -146,7 +148,7 @@ def build_home_view(
                         controls=[
                             ft.Icon(
                                 ft.Icons.CLOUD_OFF_ROUNDED,
-                                size=48,
+                                size=tokens.ICON_XXL,
                                 color=ft.Colors.ON_SURFACE_VARIANT,
                             ),
                             ft.Text(
@@ -165,7 +167,10 @@ def build_home_view(
                         spacing=tokens.SPACE_SM,
                     ),
                     padding=ft.Padding(
-                        tokens.SPACE_XL, tokens.SPACE_XXL, tokens.SPACE_XL, tokens.SPACE_XXL
+                        tokens.SPACE_XL,
+                        tokens.SPACE_XXL,
+                        tokens.SPACE_XL,
+                        tokens.SPACE_XXL,
                     ),
                     alignment=ft.Alignment.CENTER,
                 )
@@ -179,6 +184,14 @@ def build_home_view(
         try:
             sessions = await colab_service.list_sessions(auth_method=state.auth_method)
             state.active_sessions = sessions
+
+            # Cleanup orphaned history files automatically
+            from services.storage_service import StorageService
+
+            storage = StorageService(page)
+            active_names = [s["name"] for s in sessions]
+            page.run_task(storage.cleanup_orphaned_notebooks, active_names)
+
             _update_sessions_ui()
         except Exception:
             pass
@@ -189,6 +202,7 @@ def build_home_view(
     content = ft.Column(
         controls=[
             header,
+            auth_status_chip,
             quick_actions,
             ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
             sessions_section_header,
@@ -205,4 +219,9 @@ def build_home_view(
         route="/home",
         controls=[content],
         padding=0,
+        appbar=ft.AppBar(
+            title=ft.Text(constants.APP_NAME, weight=ft.FontWeight.BOLD),
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+        ),
     )

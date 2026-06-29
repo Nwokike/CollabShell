@@ -4,6 +4,7 @@ import flet as ft
 
 from core import tokens
 from core.theme import AppColors
+from components.ansi_parser import parse_ansi_to_flet_text
 
 
 def build_output_panel(
@@ -28,14 +29,12 @@ def build_output_panel(
         is_error = (
             line.startswith("Error") or line.startswith("Traceback") or "Error:" in line
         )
+        
         output_controls.append(
-            ft.Text(
-                line,
-                size=tokens.FONT_SM,
-                color=AppColors.ERROR if is_error else "#F8F8F2",
-                font_family="RobotoMono",
-                selectable=True,
-                no_wrap=False,
+            parse_ansi_to_flet_text(
+                raw_text=line,
+                default_size=tokens.FONT_SM,
+                is_error=is_error
             )
         )
 
@@ -49,6 +48,14 @@ def build_output_panel(
                 italic=True,
             )
         )
+
+    async def _on_copy(e):
+        text_to_copy = "\n".join(output_lines)
+        if text_to_copy and e.control.page:
+            await e.control.page.clipboard.set(text_to_copy)
+            e.control.page.snack_bar = ft.SnackBar(ft.Text("Output copied to clipboard!"))
+            e.control.page.snack_bar.open = True
+            e.control.page.update()
 
     header = ft.Container(
         content=ft.Row(
@@ -65,6 +72,13 @@ def build_output_panel(
                     color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
                     style=ft.TextStyle(letter_spacing=1),
                     expand=True,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.CONTENT_COPY_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    icon_color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
+                    on_click=_on_copy,
+                    tooltip="Copy output",
                 ),
                 ft.IconButton(
                     icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
@@ -96,7 +110,7 @@ def build_output_panel(
 
     return ft.Container(
         content=ft.Column(
-            controls=[header, output_list],
+            controls=[output_list, header],
             spacing=0,
         ),
         bgcolor=AppColors.TERMINAL_BG,

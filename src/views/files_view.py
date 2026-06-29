@@ -18,6 +18,7 @@ def build_files_view(
     session_name: str,
     on_back=None,
     snack=None,
+    theme_btn=None,
 ) -> ft.View:
     """Build the file browser view for a session."""
 
@@ -233,7 +234,7 @@ def build_files_view(
                     controls=[
                         ft.Icon(
                             ft.Icons.FOLDER_OFF_ROUNDED,
-                            size=48,
+                            size=tokens.ICON_XXL,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         ft.Text(
@@ -260,21 +261,17 @@ def build_files_view(
             spacing=tokens.SPACE_XXS,
         )
 
-    # ── AppBar ────────────────────────────────────────────────────────────────
-    from core.styles import standard_brand_appbar
-
-    app_bar = standard_brand_appbar(
-        title_text="Files",
-        on_back=on_back,
-        actions=[
-            ft.IconButton(
-                icon=ft.Icons.REFRESH_ROUNDED,
-                on_click=lambda e: page.run_task(_load_files),
-                tooltip="Refresh",
-                icon_size=20,
-            ),
-        ],
-    )
+    # ── AppBar Actions ────────────────────────────────────────────────────────
+    appbar_actions = [
+        ft.IconButton(
+            icon=ft.Icons.REFRESH_ROUNDED,
+            on_click=lambda e: page.run_task(_load_files),
+            tooltip="Refresh",
+            icon_size=20,
+        ),
+    ]
+    if theme_btn:
+        appbar_actions.append(theme_btn)
 
     # ── FAB ───────────────────────────────────────────────────────────────────
     upload_fab = ft.FloatingActionButton(
@@ -286,11 +283,13 @@ def build_files_view(
     # Load files on view creation
     page.run_task(_load_files)
 
+    from components.brand_header import build_brand_header
+
     view_content = ft.Stack(
         controls=[
             ft.Column(
                 controls=[
-                    app_bar,
+                    build_brand_header(),
                     ft.Column(
                         controls=[
                             # Breadcrumb + Up button
@@ -347,4 +346,20 @@ def build_files_view(
         route=f"/files?session={session_name}",
         controls=[view_content],
         padding=0,
+        appbar=ft.AppBar(
+            leading=ft.Container(
+                content=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
+                    on_click=on_back, 
+                    icon_size=tokens.ICON_MD, 
+                    tooltip="Back"
+                ),
+                padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+            ),
+            leading_width=48,
+            title=ft.Text("Files", size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            center_title=True,
+            bgcolor=ft.Colors.TRANSPARENT,
+            actions=appbar_actions,
+        ),
     )

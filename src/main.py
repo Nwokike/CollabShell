@@ -14,7 +14,7 @@ apply_storage_patches()
 
 import flet as ft
 
-from core import constants
+from core import constants, tokens
 from core.state import state
 from core.theme import AppTheme
 from services.colab_service import ColabService
@@ -189,12 +189,24 @@ async def main(page: ft.Page):
 
         async def _on_create(e):
             name = name_ref.current.value.strip() if name_ref.current else ""
-            
+
             # Read hardware selection
-            selected_hw = list(hardware_type_ref.current.selected)[0] if hardware_type_ref.current and hardware_type_ref.current.selected else "CPU"
-            
-            gpu = gpu_ref.current.value if (gpu_ref.current and selected_hw == "GPU") else None
-            tpu = tpu_ref.current.value if (tpu_ref.current and selected_hw == "TPU") else None
+            selected_hw = (
+                list(hardware_type_ref.current.selected)[0]
+                if hardware_type_ref.current and hardware_type_ref.current.selected
+                else "CPU"
+            )
+
+            gpu = (
+                gpu_ref.current.value
+                if (gpu_ref.current and selected_hw == "GPU")
+                else None
+            )
+            tpu = (
+                tpu_ref.current.value
+                if (tpu_ref.current and selected_hw == "TPU")
+                else None
+            )
 
             page.pop_dialog()
             await ad_service.show_interstitial()
@@ -218,7 +230,7 @@ async def main(page: ft.Page):
                         spacing=12,
                         alignment=ft.MainAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding(24, 20, 24, 20),
+                    padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_LG, tokens.SPACE_XL, tokens.SPACE_LG),
                 ),
             )
             page.show_dialog(loading_dialog)
@@ -267,19 +279,41 @@ async def main(page: ft.Page):
         page.show_dialog(dialog)
 
     # ── Route change handler ──────────────────────────────────────────────────
+    import urllib.parse
     async def route_change(e=None):
+        page.views.clear()
         route = page.route
+        parsed = urllib.parse.urlparse(route)
+        route = parsed.path
+        query_params = dict(urllib.parse.parse_qsl(parsed.query))
+
+        async def _global_toggle_theme(e=None):
+            is_dark = page.theme_mode == ft.ThemeMode.DARK or (
+                page.theme_mode == ft.ThemeMode.SYSTEM
+                and page.platform_brightness == ft.Brightness.DARK
+            )
+            page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
+            state.theme_mode = page.theme_mode
+            await storage.set(
+                constants.STORAGE_THEME,
+                "light" if page.theme_mode == ft.ThemeMode.LIGHT else "dark",
+            )
+            theme_btn.icon = (
+                ft.Icons.LIGHT_MODE_ROUNDED
+                if page.theme_mode == ft.ThemeMode.DARK
+                else ft.Icons.DARK_MODE_ROUNDED
+            )
+            page.update()
+
+        theme_btn = ft.IconButton(
+            icon=ft.Icons.LIGHT_MODE_ROUNDED
+            if page.theme_mode == ft.ThemeMode.DARK
+            else ft.Icons.DARK_MODE_ROUNDED,
+            tooltip="Toggle Theme",
+            on_click=lambda e: page.run_task(_global_toggle_theme),
+        )
         logger.info("Route: %s", route)
 
-        # Parse query params
-        query_params = {}
-        if "?" in route:
-            route_base, query_str = route.split("?", 1)
-            for param in query_str.split("&"):
-                if "=" in param:
-                    k, v = param.split("=", 1)
-                    query_params[k] = v
-            route = route_base
 
         page.views.clear()
 
@@ -329,6 +363,7 @@ async def main(page: ft.Page):
                 on_back=lambda e: page.run_task(navigate, "/home"),
                 navigate=navigate,
                 snack=_snack,
+                theme_btn=theme_btn,
             )
             page.views.append(view)
 
@@ -341,6 +376,7 @@ async def main(page: ft.Page):
                 state=state,
                 on_back=lambda e: page.run_task(navigate, "/home"),
                 snack=_snack,
+                theme_btn=theme_btn,
             )
             page.views.append(view)
 
@@ -357,6 +393,7 @@ async def main(page: ft.Page):
                     navigate, f"/session?session={session_name}"
                 ),
                 snack=_snack,
+                theme_btn=theme_btn,
             )
             page.views.append(view)
 
@@ -370,6 +407,7 @@ async def main(page: ft.Page):
                 state=state,
                 preselected_session=preselected,
                 snack=_snack,
+                theme_btn=theme_btn,
             )
             page.views.append(view)
 
@@ -397,86 +435,40 @@ async def main(page: ft.Page):
         if page.views and route in ("/home", "/", "/history", "/settings"):
             top_view = page.views[-1]
 
-            async def _global_toggle_theme(e=None):
-                is_dark = page.theme_mode == ft.ThemeMode.DARK or (
-                    page.theme_mode == ft.ThemeMode.SYSTEM
-                    and page.platform_brightness == ft.Brightness.DARK
+            # Define root routes that get the custom Page Tag leading widget
+            root_routes = {"/home", "/", "/history", "/settings"}
+            
+            if route in root_routes:
+                page_tags = {
+                    "/home": "Home",
+                    "/": "Home",
+                    "/history": "History",
+                    "/settings": "Settings",
+                }
+                tag_text = page_tags.get(route, "CollabShell")
+    
+                page_tag = ft.Container(
+                    content=ft.Text(
+                        tag_text,
+                        size=tokens.FONT_LG,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
+                    padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
+                    alignment=ft.Alignment.CENTER_LEFT,
                 )
-                page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
-                state.theme_mode = page.theme_mode
-                await storage.set(
-                    constants.STORAGE_THEME,
-                    "light" if page.theme_mode == ft.ThemeMode.LIGHT else "dark",
-                )
-                theme_btn.icon = (
-                    ft.Icons.LIGHT_MODE_ROUNDED
-                    if page.theme_mode == ft.ThemeMode.DARK
-                    else ft.Icons.DARK_MODE_ROUNDED
-                )
-                page.update()
-
-            theme_btn = ft.IconButton(
-                icon=ft.Icons.LIGHT_MODE_ROUNDED
-                if page.theme_mode == ft.ThemeMode.DARK
-                else ft.Icons.DARK_MODE_ROUNDED,
-                tooltip="Toggle Theme",
-                on_click=lambda e: page.run_task(_global_toggle_theme),
-            )
-
-            page_tags = {
-                "/home": "Home",
-                "/": "Home",
-                "/history": "History",
-                "/settings": "Settings",
-            }
-            tag_text = page_tags.get(route, "CollabShell")
-
-            brand_leading = ft.Container(
-                content=ft.Row(
-                    controls=[
-                        ft.Image(
-                            src="icon.png",
-                            width=24,
-                            height=24,
-                            fit=ft.BoxFit.CONTAIN,
-                        ),
-                        ft.Column(
-                            controls=[
-                                ft.Text(
-                                    "CollabShell",
-                                    size=13,
-                                    weight=ft.FontWeight.BOLD,
-                                    color=ft.Colors.ON_SURFACE,
-                                ),
-                                ft.Text(
-                                    "Cloud GPUs",
-                                    size=8,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
-                            ],
-                            spacing=0,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                    ],
-                    spacing=6,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                padding=ft.Padding(12, 0, 0, 0),
-            )
-
-            if not top_view.appbar:
-                top_view.appbar = ft.AppBar()
-            top_view.appbar.leading = brand_leading
-            top_view.appbar.leading_width = 150
-            top_view.appbar.title = ft.Text(
-                tag_text,
-                size=16,
-                weight=ft.FontWeight.W_700,
-                color=ft.Colors.ON_SURFACE,
-            )
-            top_view.appbar.center_title = True
-            top_view.appbar.actions = [theme_btn]
-            top_view.appbar.bgcolor = ft.Colors.TRANSPARENT
+    
+                if not top_view.appbar:
+                    top_view.appbar = ft.AppBar()
+                top_view.appbar.leading = page_tag
+                top_view.appbar.leading_width = 100
+                top_view.appbar.title = ft.Container()
+                top_view.appbar.center_title = True
+                top_view.appbar.actions = [theme_btn]
+                top_view.appbar.bgcolor = ft.Colors.TRANSPARENT
+            else:
+                # Sub-views handle their own appbars natively
+                pass
 
         page.update()
 

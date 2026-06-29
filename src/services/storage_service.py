@@ -139,3 +139,18 @@ class StorageService:
         except Exception as e:
             logger.warning("StorageService.load_notebook failed: %s", e)
         return []
+
+    async def cleanup_orphaned_notebooks(self, active_session_names: list[str]) -> None:
+        """Deletes notebook history for sessions that no longer exist."""
+        try:
+            if not _STORAGE_DIR.exists():
+                return
+
+            active_files = [f"notebook_{name}.json" for name in active_session_names]
+
+            for f in _STORAGE_DIR.glob("notebook_*.json"):
+                if f.name not in active_files:
+                    logger.info("Cleaning up orphaned notebook: %s", f.name)
+                    f.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning("StorageService.cleanup_orphaned_notebooks failed: %s", e)
