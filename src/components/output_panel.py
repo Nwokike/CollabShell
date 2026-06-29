@@ -29,12 +29,10 @@ def build_output_panel(
         is_error = (
             line.startswith("Error") or line.startswith("Traceback") or "Error:" in line
         )
-        
+
         output_controls.append(
             parse_ansi_to_flet_text(
-                raw_text=line,
-                default_size=tokens.FONT_SM,
-                is_error=is_error
+                raw_text=line, default_size=tokens.FONT_SM, is_error=is_error
             )
         )
 
@@ -43,7 +41,7 @@ def build_output_panel(
             ft.Text(
                 "Output will appear here...",
                 size=tokens.FONT_SM,
-                color=ft.Colors.with_opacity(0.3, "#FFFFFF"),
+                color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
                 font_family="RobotoMono",
                 italic=True,
             )
@@ -53,7 +51,9 @@ def build_output_panel(
         text_to_copy = "\n".join(output_lines)
         if text_to_copy and e.control.page:
             await e.control.page.clipboard.set(text_to_copy)
-            e.control.page.snack_bar = ft.SnackBar(ft.Text("Output copied to clipboard!"))
+            e.control.page.snack_bar = ft.SnackBar(
+                ft.Text("Output copied to clipboard!")
+            )
             e.control.page.snack_bar.open = True
             e.control.page.update()
 
@@ -63,27 +63,26 @@ def build_output_panel(
                 ft.Icon(
                     ft.Icons.TERMINAL_ROUNDED,
                     size=tokens.ICON_SM,
-                    color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                 ),
                 ft.Text(
                     "OUTPUT",
                     size=tokens.FONT_XXS,
                     weight=ft.FontWeight.W_700,
-                    color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
-                    style=ft.TextStyle(letter_spacing=1),
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     expand=True,
                 ),
                 ft.IconButton(
                     icon=ft.Icons.CONTENT_COPY_ROUNDED,
                     icon_size=tokens.ICON_SM,
-                    icon_color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
+                    icon_color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     on_click=_on_copy,
                     tooltip="Copy output",
                 ),
                 ft.IconButton(
                     icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
                     icon_size=tokens.ICON_SM,
-                    icon_color=ft.Colors.with_opacity(0.5, "#FFFFFF"),
+                    icon_color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     on_click=on_clear,
                     tooltip="Clear output",
                 )
@@ -105,16 +104,16 @@ def build_output_panel(
             tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD
         ),
         auto_scroll=True,
-        height=200,
+        expand=True,
     )
 
     return ft.Container(
         content=ft.Column(
-            controls=[output_list, header],
+            controls=[header, output_list],
             spacing=0,
         ),
         bgcolor=AppColors.TERMINAL_BG,
         border_radius=tokens.RADIUS_MD,
-        border=ft.Border.all(1, ft.Colors.with_opacity(0.15, "#FFFFFF")),
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
     )

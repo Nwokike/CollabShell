@@ -43,7 +43,7 @@ def build_notebook_cell(
                 if "text/plain" in data:
                     text_to_copy += data["text/plain"] + "\n"
         if text_to_copy:
-            await page.clipboard.set(text_to_copy.strip())
+            await ft.Clipboard().set_text(text_to_copy.strip())
             page.snack_bar = ft.SnackBar(ft.Text("Output copied to clipboard!"))
             page.snack_bar.open = True
             page.update()
@@ -53,19 +53,19 @@ def build_notebook_cell(
         controls=[
             ft.IconButton(
                 ft.Icons.ARROW_UPWARD_ROUNDED,
-                icon_size=16,
+                icon_size=tokens.ICON_SM,
                 tooltip="Move Up",
                 on_click=lambda e: on_move_up() if on_move_up else None,
             ),
             ft.IconButton(
                 ft.Icons.ARROW_DOWNWARD_ROUNDED,
-                icon_size=16,
+                icon_size=tokens.ICON_SM,
                 tooltip="Move Down",
                 on_click=lambda e: on_move_down() if on_move_down else None,
             ),
             ft.IconButton(
                 ft.Icons.DELETE_OUTLINE_ROUNDED,
-                icon_size=16,
+                icon_size=tokens.ICON_SM,
                 icon_color=AppColors.ERROR,
                 tooltip="Delete Cell",
                 on_click=lambda e: on_delete() if on_delete else None,
@@ -77,7 +77,7 @@ def build_notebook_cell(
     if cell_type == "markdown":
         # ── Markdown Cell ──
         is_editing_initial = cell.get("is_editing", not bool(source.strip()))
-        
+
         edit_container = ft.Container(visible=is_editing_initial)
         render_container = ft.Container(visible=not is_editing_initial)
         markdown_ref = ft.Ref[ft.Markdown]()
@@ -89,8 +89,7 @@ def build_notebook_cell(
                 render_container.visible = False
                 if on_change:
                     on_change()
-                edit_container.update()
-                render_container.update()
+                page.update()
 
         def _render(e=None):
             if cell.get("is_editing"):
@@ -103,8 +102,7 @@ def build_notebook_cell(
                 render_container.visible = True
                 if on_change:
                     on_change()
-                edit_container.update()
-                render_container.update()
+                page.update()
 
         edit_container.content = ft.Column(
             controls=[
@@ -131,8 +129,17 @@ def build_notebook_cell(
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.MODE_EDIT_OUTLINE_ROUNDED, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
-                                ft.Text("Markdown", size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE_VARIANT, weight="bold"),
+                                ft.Icon(
+                                    ft.Icons.MODE_EDIT_OUTLINE_ROUNDED,
+                                    size=tokens.FONT_MD,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Text(
+                                    "Markdown",
+                                    size=tokens.FONT_XS,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                    weight=ft.FontWeight.W_700,
+                                ),
                             ],
                             spacing=tokens.SPACE_XS,
                         ),
@@ -152,11 +159,11 @@ def build_notebook_cell(
             ],
             spacing=0,
         )
-        
+
         render_container.content = ft.Column(
             controls=[
                 ft.GestureDetector(
-                    on_double_tap=_edit,
+                    on_tap=_edit,
                     content=ft.Container(
                         content=ft.Markdown(
                             ref=markdown_ref,
@@ -176,7 +183,7 @@ def build_notebook_cell(
                             ft.Container(expand=True),
                             ft.IconButton(
                                 ft.Icons.EDIT_ROUNDED,
-                                icon_size=16,
+                                icon_size=tokens.ICON_SM,
                                 tooltip="Edit Markdown",
                                 on_click=_edit,
                             ),
@@ -184,7 +191,9 @@ def build_notebook_cell(
                         ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
-                    padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, tokens.SPACE_SM),
+                    padding=ft.Padding(
+                        tokens.SPACE_SM, 0, tokens.SPACE_SM, tokens.SPACE_SM
+                    ),
                 ),
             ],
             spacing=0,
@@ -210,9 +219,7 @@ def build_notebook_cell(
                 text = out.get("text", "")
                 output_controls.append(
                     parse_ansi_to_flet_text(
-                        raw_text=text,
-                        default_size=tokens.FONT_SM,
-                        is_error=is_err
+                        raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
                     )
                 )
             elif out.get("type") == "error":
@@ -252,7 +259,7 @@ def build_notebook_cell(
                         ft.Text(
                             data["text/plain"],
                             size=tokens.FONT_SM,
-                            color="#F8F8F2",
+                            color=AppColors.DARK_TEXT,
                             font_family="RobotoMono",
                             selectable=True,
                         )
@@ -262,7 +269,7 @@ def build_notebook_cell(
             controls=[
                 ft.Text(
                     "OUTPUT",
-                    size=10,
+                    size=tokens.FONT_XXS,
                     color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
                     weight=ft.FontWeight.W_600,
                 ),
@@ -270,13 +277,13 @@ def build_notebook_cell(
                     controls=[
                         ft.IconButton(
                             ft.Icons.COPY_ALL_ROUNDED,
-                            icon_size=14,
+                            icon_size=tokens.ICON_SM,
                             tooltip="Copy Output",
                             on_click=_copy_output,
                         ),
                         ft.IconButton(
                             ft.Icons.CLEAR_ALL_ROUNDED,
-                            icon_size=14,
+                            icon_size=tokens.ICON_SM,
                             tooltip="Clear Output",
                             on_click=lambda e: (
                                 on_clear_output() if on_clear_output else None
@@ -290,9 +297,11 @@ def build_notebook_cell(
         )
 
         output_panel = ft.Container(
-            content=ft.Column(controls=output_controls + [output_actions], spacing=2),
+            content=ft.Column(
+                controls=output_controls + [output_actions], spacing=tokens.SPACE_XXS
+            ),
             padding=tokens.SPACE_SM,
-            bgcolor="#0D0D1A",
+            bgcolor=AppColors.TERMINAL_BG,
             border_radius=tokens.RADIUS_SM,
             visible=len(output_controls) > 0,
             width=float("inf"),
@@ -326,11 +335,15 @@ def build_notebook_cell(
                         content=ft.Row(
                             controls=[
                                 ft.Container(
-                                    content=ft.ProgressRing(width=16, height=16, stroke_width=2)
+                                    content=ft.ProgressRing(
+                                        width=tokens.ICON_SM,
+                                        height=tokens.ICON_SM,
+                                        stroke_width=2,
+                                    )
                                     if is_running
                                     else ft.IconButton(
                                         ft.Icons.PLAY_ARROW_ROUNDED,
-                                        icon_size=20,
+                                        icon_size=tokens.ICON_MD,
                                         icon_color=AppColors.SUCCESS,
                                         on_click=lambda e: on_run() if on_run else None,
                                         tooltip="Run Cell",
@@ -342,7 +355,9 @@ def build_notebook_cell(
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        padding=ft.Padding(tokens.SPACE_XS, 0, tokens.SPACE_SM, tokens.SPACE_XS),
+                        padding=ft.Padding(
+                            tokens.SPACE_XS, 0, tokens.SPACE_SM, tokens.SPACE_XS
+                        ),
                     ),
                 ],
                 spacing=0,
@@ -366,7 +381,9 @@ def build_notebook_cell(
             content=content,
             padding=tokens.SPACE_SM,
             border=ft.Border(
-                left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+                left=ft.BorderSide(
+                    3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)
+                ),
             ),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )

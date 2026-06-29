@@ -410,7 +410,7 @@ class ColabService:
             name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
 
             for a in assignments:
-                name = name_by_ep.get(a.endpoint, "?")
+                name = name_by_ep.get(a.endpoint, "Unknown")
                 accel_label = (
                     "CPU" if a.accelerator.value == "NONE" else a.accelerator.value
                 )
@@ -1027,30 +1027,14 @@ except:
 
         return await asyncio.to_thread(_export)
 
-    async def check_for_updates(self) -> Optional[str]:
-        """Check for CLI updates. Returns new version string or None."""
-
-        def _check():
-            from colab_cli.auto_update import (
-                get_app_version,
-                _fetch_pypi,
-                _parse_version,
-                _is_newer,
-            )
-            from colab_cli.common import state as cli_state
-
-            settings = cli_state.settings_store.load()
-            current = get_app_version()
-            pypi = _fetch_pypi(settings.update_url, quiet=True)
-            pypi_v = _parse_version(pypi)
-            if _is_newer(pypi_v, current):
-                return pypi_v
-            return None
-
+    async def get_cli_version(self) -> str:
+        """Return the installed google-colab-cli version."""
         try:
-            return await asyncio.to_thread(_check)
+            from colab_cli.auto_update import get_app_version
+
+            return await asyncio.to_thread(get_app_version)
         except Exception:
-            return None
+            return "unknown"
 
     # ── Cancel ────────────────────────────────────────────────────────────────
 

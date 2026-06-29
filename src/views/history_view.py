@@ -8,6 +8,7 @@ import os
 from core import tokens, constants
 from core.styles import section_header, build_banner_ad, glass_card
 from core.theme import AppColors
+from components.brand_header import build_brand_header
 
 
 def build_history_view(
@@ -36,7 +37,7 @@ def build_history_view(
         page.update()
         try:
             sessions = await colab_service.list_log_sessions()
-            state.history_sessions = sessions
+            state.log_session_names = sessions
             if session_dropdown_ref.current:
                 session_dropdown_ref.current.options = [
                     ft.dropdown.Option(key=s, text=s) for s in sessions
@@ -67,7 +68,7 @@ def build_history_view(
         try:
             et = None if event_filter == "all" else event_filter
             events = await colab_service.get_log(sess, lines=lines_limit, event_type=et)
-            state.session_history = events
+            state.log_events = events
         except Exception as ex:
             if snack:
                 snack(f"Error: {ex}")
@@ -142,9 +143,9 @@ def build_history_view(
         icon = icons.get(event_type, ft.Icons.INFO_ROUNDED)
 
         return ft.Container(
-            content=ft.Icon(icon, size=tokens.ICON_SM, color="#FFFFFF"),
-            width=28,
-            height=28,
+            content=ft.Icon(icon, size=tokens.ICON_SM, color=ft.Colors.WHITE),
+            width=tokens.ICON_XL - 4,
+            height=tokens.ICON_XL - 4,
             border_radius=14,
             bgcolor=color,
             alignment=ft.Alignment.CENTER,
@@ -154,7 +155,6 @@ def build_history_view(
         etype = event.get("event_type", "unknown")
         ts = event.get("timestamp", "").split(".")[0].replace("T", " ")
 
-        # Build subtitle based on event type
         subtitle = ""
         if etype == "execution":
             code = event.get("code", "")
@@ -264,7 +264,7 @@ def build_history_view(
     view_content = ft.Column(
         controls=[
             # Brand Header
-            __import__("components.brand_header", fromlist=["build_brand_header"]).build_brand_header(),
+            build_brand_header(),
             # Filters
             ft.Container(
                 content=ft.Column(
@@ -286,11 +286,22 @@ def build_history_view(
                                                 ref=filter_ref,
                                                 label="Event Type",
                                                 options=[
-                                                    ft.dropdown.Option("all", "All Events"),
-                                                    ft.dropdown.Option("execution", "Executions"),
-                                                    ft.dropdown.Option("file_operation", "File Ops"),
-                                                    ft.dropdown.Option("automation", "Automation"),
-                                                    ft.dropdown.Option("session_created", "Session Created"),
+                                                    ft.dropdown.Option(
+                                                        "all", "All Events"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        "execution", "Executions"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        "file_operation", "File Ops"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        "automation", "Automation"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        "session_created",
+                                                        "Session Created",
+                                                    ),
                                                 ],
                                                 value="all",
                                                 border_radius=tokens.RADIUS_MD,
@@ -303,7 +314,9 @@ def build_history_view(
                                                 options=[
                                                     ft.dropdown.Option("10", "Last 10"),
                                                     ft.dropdown.Option("50", "Last 50"),
-                                                    ft.dropdown.Option("100", "Last 100"),
+                                                    ft.dropdown.Option(
+                                                        "100", "Last 100"
+                                                    ),
                                                     ft.dropdown.Option("all", "All"),
                                                 ],
                                                 value="50",
@@ -315,7 +328,9 @@ def build_history_view(
                                         spacing=tokens.SPACE_SM,
                                     ),
                                     ft.OutlinedButton(
-                                        content=ft.Text(f"Export as .{state.default_log_format or 'ipynb'}"),
+                                        content=ft.Text(
+                                            f"Export as .{state.default_log_format or 'ipynb'}"
+                                        ),
                                         icon=ft.Icons.DOWNLOAD_ROUNDED,
                                         on_click=lambda e: page.run_task(_on_export, e),
                                         width=float("inf"),
@@ -323,7 +338,7 @@ def build_history_view(
                                 ],
                                 spacing=tokens.SPACE_MD,
                             )
-                        )
+                        ),
                     ],
                     spacing=0,
                 ),

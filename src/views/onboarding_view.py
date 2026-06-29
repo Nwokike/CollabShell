@@ -6,6 +6,7 @@ import flet as ft
 
 from core import tokens, constants
 from core.theme import AppColors
+from components.brand_header import build_brand_header
 
 
 def build_onboarding_view(
@@ -70,9 +71,7 @@ def build_onboarding_view(
     def _build_page_1():
         return ft.Column(
             controls=[
-                __import__(
-                    "components.brand_header", fromlist=["build_brand_header"]
-                ).build_brand_header(),
+                build_brand_header(),
                 ft.Container(height=tokens.SPACE_MD),
                 _feature_row(
                     ft.Icons.PLAY_ARROW_ROUNDED,
@@ -100,7 +99,9 @@ def build_onboarding_view(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
                 ft.Icon(
-                    ft.Icons.ROCKET_LAUNCH_ROUNDED, size=tokens.ICON_XXXL, color=ft.Colors.PRIMARY
+                    ft.Icons.ROCKET_LAUNCH_ROUNDED,
+                    size=tokens.ICON_XXXL,
+                    color=ft.Colors.PRIMARY,
                 ),
                 ft.Text(
                     "How it works",
@@ -215,7 +216,11 @@ def build_onboarding_view(
         return ft.Column(
             controls=[
                 ft.Container(height=tokens.SPACE_XL),
-                ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=tokens.ICON_XXXL, color=ft.Colors.PRIMARY),
+                ft.Icon(
+                    ft.Icons.LOCK_OPEN_ROUNDED,
+                    size=tokens.ICON_XXXL,
+                    color=ft.Colors.PRIMARY,
+                ),
                 ft.Text(
                     "Sign in to Google",
                     size=tokens.FONT_XXL,

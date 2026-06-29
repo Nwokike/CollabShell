@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import time
 import flet as ft
 import threading
 import uuid
+from pathlib import Path
 
 from core import tokens, constants
 from core.styles import (
@@ -17,6 +20,7 @@ from core.theme import AppColors
 from components.notebook_cell import build_notebook_cell
 from components.notebook_toolbar import build_notebook_toolbar
 from services.storage_service import StorageService
+from services.ipynb_converter import cells_to_ipynb, ipynb_to_cells
 
 
 def build_session_view(
@@ -28,8 +32,10 @@ def build_session_view(
     navigate=None,
     snack=None,
     theme_btn=None,
+    storage: StorageService = None,
 ) -> ft.View:
-    storage = StorageService(page)
+    if storage is None:
+        storage = StorageService(page)
 
     # Ensure cells list exists
     if not hasattr(state, "notebook_cells"):
@@ -99,11 +105,27 @@ def build_session_view(
     )
 
     # ── Action Row (Compact) ─────────────────────────────────────────────────
+    async def _navigate_home(msg=None):
+        if msg and snack:
+            snack(msg)
+        if on_back:
+            on_back(None)
+
+    async def _check_session():
+        if not session:
+            await _navigate_home("Session has expired.")
+            return False
+        return True
+
     async def _on_files(e):
+        if not await _check_session():
+            return
         if navigate:
             await navigate(f"/files?session={session_name}")
 
     async def _on_open_browser(e):
+        if not await _check_session():
+            return
         try:
             url = await colab_service.get_session_url(
                 session_name, auth_method=state.auth_method
@@ -114,6 +136,9 @@ def build_session_view(
                 snack(f"Error: {ex}")
 
     async def _on_restart(e):
+        if not await _check_session():
+            return
+
         def _close_and_restart(ev):
             page.pop_dialog()
             page.run_task(_do_restart)
@@ -145,6 +170,9 @@ def build_session_view(
                 snack(f"❌ {ex}")
 
     async def _on_stop(e):
+        if not await _check_session():
+            return
+
         def _close_and_stop(ev):
             page.pop_dialog()
             page.run_task(_do_stop)
@@ -210,18 +238,84 @@ def build_session_view(
         if navigate:
             await navigate(f"/history?session={session_name}")
 
+    # ── Keep-Alive Toggles ─────────────────────────────────────────────────────
+    async def _on_keep_alive(e):
+        state.keep_alive_enabled = e.control.value
+        await storage.set(constants.STORAGE_KEEP_ALIVE, str(e.control.value).lower())
+
+    async def _on_keep_alive_disconnect(e):
+        state.keep_alive_on_disconnect = e.control.value
+        await storage.set(
+            constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT,
+            str(e.control.value).lower(),
+        )
+
+    # ── IPYNB Export/Import ────────────────────────────────────────────────────
+    _pending_file_op = None
+
+    def _on_file_result(e: ft.FilePickerResultEvent):
+        nonlocal _pending_file_op
+        op = _pending_file_op
+        _pending_file_op = None
+
+        if op == "export" and e.path:
+            try:
+                ipynb = cells_to_ipynb(state.notebook_cells)
+                Path(e.path).write_text(
+                    json.dumps(ipynb, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                if snack:
+                    snack("✅ Notebook exported")
+            except Exception as ex:
+                if snack:
+                    snack(f"❌ Export failed: {ex}")
+
+        elif op == "import" and e.files:
+            try:
+                path = e.files[0].path
+                raw = Path(path).read_bytes()
+                ipynb = json.loads(raw)
+                cells = ipynb_to_cells(ipynb)
+                state.notebook_cells = cells
+                _update_cells_ui(force=True)
+                _save_notebook()
+                if snack:
+                    snack(f"✅ Imported {len(cells)} cell(s)")
+            except Exception as ex:
+                if snack:
+                    snack(f"❌ Import failed: {ex}")
+
+    page.file_picker.on_result = _on_file_result
+    page.update()
+
+    def _on_export_ipynb(e):
+        nonlocal _pending_file_op
+        _pending_file_op = "export"
+        page.file_picker.save_file(
+            allowed_extensions=["ipynb"],
+            file_name=f"{session_name}.ipynb",
+        )
+
+    def _on_import_ipynb(e):
+        nonlocal _pending_file_op
+        _pending_file_op = "import"
+        page.file_picker.pick_files(
+            allowed_extensions=["ipynb"],
+        )
+
     def _action_chip(icon, label, on_click, color=None):
+        icon_color = color or ft.Colors.ON_SURFACE
         return ft.FilledButton(
             content=ft.Row(
                 [
-                    ft.Icon(icon, size=16, color=color or ft.Colors.PRIMARY),
-                    ft.Text(label, size=tokens.FONT_XS),
+                    ft.Icon(icon, size=tokens.ICON_SM, color=icon_color),
+                    ft.Text(label, size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE),
                 ],
-                spacing=4,
+                spacing=tokens.SPACE_XS,
             ),
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.ON_SURFACE),
                 elevation=0,
             ),
             on_click=on_click,
@@ -278,18 +372,24 @@ def build_session_view(
 
     # ── Notebook Cells ────────────────────────────────────────────────────────
     cells_list = ft.Column(spacing=0)
+    _last_cell_update = 0.0
 
     def _save_notebook():
         page.run_task(storage.save_notebook, session_name, state.notebook_cells)
 
-    def _update_cells_ui():
+    def _update_cells_ui(force=False):
+        nonlocal _last_cell_update
+        now = time.monotonic()
+        if not force and now - _last_cell_update < 0.15:
+            return
+        _last_cell_update = now
         cells_list.controls.clear()
         for i, cell in enumerate(state.notebook_cells):
 
             def make_callbacks(idx=i, c=cell):
                 def _clear():
                     state.notebook_cells[idx]["outputs"] = []
-                    _update_cells_ui()
+                    _update_cells_ui(force=True)
                     _save_notebook()
 
                 return {
@@ -365,7 +465,7 @@ def build_session_view(
             page.show_dialog(dialog)
 
         page.run_task(_show)
-        input_event.wait()
+        input_event.wait(timeout=300)
         return user_input["value"]
 
     # ── Execution Logic ──
@@ -395,10 +495,10 @@ def build_session_view(
             )
         except Exception as ex:
             cell["outputs"].append({"type": "error", "traceback": [str(ex)]})
-
-        cell["is_running"] = False
-        _update_cells_ui()
-        _save_notebook()
+        finally:
+            cell["is_running"] = False
+            _update_cells_ui()
+            _save_notebook()
 
     # Initial Load
     async def _load_notebook():
@@ -424,10 +524,82 @@ def build_session_view(
         on_add_code=lambda e: _add_cell("code"),
         on_add_markdown=lambda e: _add_cell("markdown"),
         on_clear_all=_clear_all_outputs,
+        on_export_ipynb=_on_export_ipynb,
+        on_import_ipynb=_on_import_ipynb,
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────
     from components.brand_header import build_brand_header
+
+    def _keep_alive_toggle(label, tooltip, value, on_change):
+        return ft.Row(
+            controls=[
+                ft.Column(
+                    controls=[
+                        ft.Text(
+                            label,
+                            size=tokens.FONT_SM,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            tooltip,
+                            size=tokens.FONT_XXS,
+                            color=ft.Colors.with_opacity(
+                                0.6, ft.Colors.ON_SURFACE_VARIANT
+                            ),
+                        ),
+                    ],
+                    spacing=tokens.SPACE_XXS,
+                    expand=True,
+                ),
+                ft.Switch(
+                    value=value,
+                    on_change=lambda e: page.run_task(on_change, e),
+                    scale=0.75,
+                ),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+    keep_alive_card = glass_card(
+        ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(
+                            ft.Icons.POWER_SETTINGS_NEW_ROUNDED,
+                            size=tokens.ICON_SM,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            "Keep Session Alive",
+                            size=tokens.FONT_SM,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                _keep_alive_toggle(
+                    "Active keep-alive",
+                    "Ping the session every 60s to prevent timeout",
+                    state.keep_alive_enabled,
+                    _on_keep_alive,
+                ),
+                _keep_alive_toggle(
+                    "Keep alive on disconnect",
+                    "Keep sessions running when the app closes",
+                    state.keep_alive_on_disconnect,
+                    _on_keep_alive_disconnect,
+                ),
+            ],
+            spacing=tokens.SPACE_SM,
+        ),
+        margin=ft.Margin(
+            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+        ),
+    )
 
     view_content = ft.Column(
         controls=[
@@ -437,6 +609,7 @@ def build_session_view(
                     ft.Column(
                         controls=[
                             status_header,
+                            keep_alive_card,
                             action_row,
                             notebook_section,
                             build_banner_ad(page),
@@ -467,15 +640,20 @@ def build_session_view(
         appbar=ft.AppBar(
             leading=ft.Container(
                 content=ft.IconButton(
-                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
-                    on_click=on_back, 
-                    icon_size=tokens.ICON_MD, 
-                    tooltip="Back"
+                    icon=ft.Icons.ARROW_BACK_ROUNDED,
+                    on_click=on_back,
+                    icon_size=tokens.ICON_MD,
+                    tooltip="Back",
                 ),
                 padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
             ),
             leading_width=48,
-            title=ft.Text(session_name, size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            title=ft.Text(
+                session_name,
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.W_700,
+                color=ft.Colors.ON_SURFACE,
+            ),
             center_title=True,
             bgcolor=ft.Colors.TRANSPARENT,
             actions=[theme_btn] if theme_btn else [],

@@ -6,7 +6,10 @@ Main entry point: page config, routing, service bootstrapping.
 
 from __future__ import annotations
 
+import asyncio
+import atexit
 import logging
+import time
 
 from core.storage_patch import apply_storage_patches
 
@@ -33,7 +36,10 @@ colab_service = ColabService()
 
 async def main(page: ft.Page):
     """Main Flet application entry point."""
-    page.fonts = {"Outfit": "assets/outfit.css"}
+    page.fonts = {
+        "Outfit": "assets/outfit.css",
+        "RobotoMono": "assets/roboto_mono.css",
+    }
     page.title = constants.APP_NAME
     page.favicon = "icon.png"
     page.theme = AppTheme.get_light_theme()
@@ -101,9 +107,9 @@ async def main(page: ft.Page):
         if keep_raw is not None:
             state.keep_alive_enabled = keep_raw == "true"
 
-        auto_raw = await storage.get(constants.STORAGE_AUTO_STOP)
-        if auto_raw is not None:
-            state.auto_stop_on_close = auto_raw == "true"
+        disconnect_raw = await storage.get(constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT)
+        if disconnect_raw is not None:
+            state.keep_alive_on_disconnect = disconnect_raw == "true"
 
         fmt_raw = await storage.get(constants.STORAGE_LOG_FORMAT)
         state.default_log_format = fmt_raw if fmt_raw else "ipynb"
@@ -208,7 +214,39 @@ async def main(page: ft.Page):
                 else None
             )
 
-            page.pop_dialog()
+            paid_gpus = {"L4", "G4", "A100", "H100"}
+            if gpu in paid_gpus:
+                confirm_dialog = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text("Paid Accelerator Selected"),
+                    content=ft.Text(
+                        f"{gpu} requires Colab Pro or Pay As You Go and may incur charges. Continue?"
+                    ),
+                    actions=[
+                        ft.TextButton(
+                            "Cancel",
+                            on_click=lambda e: (
+                                setattr(confirm_dialog, "data", "cancel")
+                                or page.close_dialog()
+                            ),
+                        ),
+                        ft.FilledButton(
+                            "Continue",
+                            on_click=lambda e: (
+                                setattr(confirm_dialog, "data", "continue")
+                                or page.close_dialog()
+                            ),
+                        ),
+                    ],
+                )
+                page.show_dialog(confirm_dialog)
+                # Wait for user to make a choice
+                while getattr(confirm_dialog, "data", None) is None:
+                    await asyncio.sleep(0.1)
+                if confirm_dialog.data == "cancel":
+                    return
+
+            page.pop_dialog()  # Close hardware picker
             await ad_service.show_interstitial()
 
             loading_dialog = ft.AlertDialog(
@@ -223,14 +261,19 @@ async def main(page: ft.Page):
                             ),
                             ft.Text(
                                 "Creating session...",
-                                size=13,
+                                size=tokens.FONT_SM,
                                 weight=ft.FontWeight.W_500,
                             ),
                         ],
                         spacing=12,
                         alignment=ft.MainAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_LG, tokens.SPACE_XL, tokens.SPACE_LG),
+                    padding=ft.Padding(
+                        tokens.SPACE_XL,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_XL,
+                        tokens.SPACE_LG,
+                    ),
                 ),
             )
             page.show_dialog(loading_dialog)
@@ -238,15 +281,16 @@ async def main(page: ft.Page):
 
             try:
                 logger.info(
-                    f"Attempting to create session: {name} (GPU={gpu}, TPU={tpu})"
+                    "Attempting to create session: %s (GPU=%s, TPU=%s)", name, gpu, tpu
                 )
                 result = await colab_service.new_session(
                     name=name or None,
                     gpu=gpu if gpu else None,
                     tpu=tpu if tpu else None,
                     auth_method=state.auth_method,
+                    keep_alive=state.keep_alive_enabled,
                 )
-                logger.info(f"Session created successfully: {result}")
+                logger.info("Session created successfully: %s", result)
                 page.pop_dialog()  # Dismiss spinner
 
                 _snack(f"✅ Session '{result['name']}' created!")
@@ -280,6 +324,7 @@ async def main(page: ft.Page):
 
     # ── Route change handler ──────────────────────────────────────────────────
     import urllib.parse
+
     async def route_change(e=None):
         page.views.clear()
         route = page.route
@@ -314,7 +359,6 @@ async def main(page: ft.Page):
         )
         logger.info("Route: %s", route)
 
-
         page.views.clear()
 
         # Onboarding gate
@@ -348,6 +392,7 @@ async def main(page: ft.Page):
                     navigate, f"/session?session={name}"
                 ),
                 on_quick_run=lambda e: page.run_task(navigate, "/run"),
+                storage=storage,
             )
             page.views.append(view)
 
@@ -364,6 +409,7 @@ async def main(page: ft.Page):
                 navigate=navigate,
                 snack=_snack,
                 theme_btn=theme_btn,
+                storage=storage,
             )
             page.views.append(view)
 
@@ -437,7 +483,7 @@ async def main(page: ft.Page):
 
             # Define root routes that get the custom Page Tag leading widget
             root_routes = {"/home", "/", "/history", "/settings"}
-            
+
             if route in root_routes:
                 page_tags = {
                     "/home": "Home",
@@ -446,7 +492,7 @@ async def main(page: ft.Page):
                     "/settings": "Settings",
                 }
                 tag_text = page_tags.get(route, "CollabShell")
-    
+
                 page_tag = ft.Container(
                     content=ft.Text(
                         tag_text,
@@ -457,7 +503,7 @@ async def main(page: ft.Page):
                     padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
                     alignment=ft.Alignment.CENTER_LEFT,
                 )
-    
+
                 if not top_view.appbar:
                     top_view.appbar = ft.AppBar()
                 top_view.appbar.leading = page_tag
@@ -473,15 +519,38 @@ async def main(page: ft.Page):
         page.update()
 
     # ── Disconnect handler (auto-stop) ────────────────────────────────────────
+    def _cleanup_sessions():
+        """Stop all sessions synchronously (used by atexit)."""
+        if state.keep_alive_on_disconnect or not state.active_sessions:
+            return
+        for s in state.active_sessions:
+            try:
+                name = s.get("name")
+                if not name:
+                    continue
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    colab_service.stop_session(name, auth_method=state.auth_method)
+                )
+                loop.close()
+            except Exception as exc:
+                logger.warning("Cleanup failed for session %s: %s", s.get("name"), exc)
+            time.sleep(0.5)
+
+    atexit.register(_cleanup_sessions)
+
     async def on_disconnect(e=None):
-        if state.auto_stop_on_close and state.active_sessions:
-            for s in state.active_sessions:
-                try:
-                    await colab_service.stop_session(
-                        s["name"], auth_method=state.auth_method
-                    )
-                except Exception:
-                    pass
+        if state.keep_alive_on_disconnect or not state.active_sessions:
+            return
+        for s in state.active_sessions:
+            name = s.get("name")
+            if not name:
+                continue
+            try:
+                await colab_service.stop_session(name, auth_method=state.auth_method)
+            except Exception as exc:
+                logger.warning("Disconnect cleanup failed for %s: %s", name, exc)
 
     page.on_disconnect = on_disconnect
 

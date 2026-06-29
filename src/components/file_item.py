@@ -36,15 +36,12 @@ def _format_size(size_bytes) -> str:
     """Format file size to human-readable string."""
     if size_bytes is None or size_bytes == 0:
         return ""
+    size = float(size_bytes)
     for unit in ("B", "KB", "MB", "GB"):
-        if size_bytes < 1024:
-            return (
-                f"{size_bytes:.0f} {unit}"
-                if unit == "B"
-                else f"{size_bytes:.1f} {unit}"
-            )
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} TB"
+        if size < 1024:
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
 
 
 def build_file_item(

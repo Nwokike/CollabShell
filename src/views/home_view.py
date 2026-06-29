@@ -18,6 +18,7 @@ def build_home_view(
     on_session_tap=None,
     on_quick_run=None,
     on_refresh=None,
+    storage=None,
 ) -> ft.View:
     """Build the home dashboard view."""
 
@@ -131,17 +132,15 @@ def build_home_view(
 
     def _update_sessions_ui():
         sessions_list.content.controls.clear()
-        if state.active_sessions:
-            for s in state.active_sessions:
-                sessions_list.content.controls.append(
-                    build_session_card(
-                        session=s,
-                        on_click=lambda e, sn=s["name"]: (
-                            on_session_tap(sn) if on_session_tap else None
-                        ),
-                    )
+        if state.is_loading:
+            sessions_list.content.controls.append(
+                ft.Container(
+                    content=ft.ProgressRing(width=30, height=30),
+                    alignment=ft.Alignment.CENTER,
+                    padding=ft.Padding(0, tokens.SPACE_XXL, 0, tokens.SPACE_XXL),
                 )
-        else:
+            )
+        elif not state.active_sessions:
             sessions_list.content.controls.append(
                 ft.Container(
                     content=ft.Column(
@@ -175,6 +174,16 @@ def build_home_view(
                     alignment=ft.Alignment.CENTER,
                 )
             )
+            return
+        for s in state.active_sessions:
+            sessions_list.content.controls.append(
+                build_session_card(
+                    session=s,
+                    on_click=lambda e, sn=s["name"]: (
+                        on_session_tap(sn) if on_session_tap else None
+                    ),
+                )
+            )
         try:
             sessions_list.update()
         except Exception:
@@ -182,15 +191,16 @@ def build_home_view(
 
     async def _load_sessions():
         try:
+            state.is_loading = True
+            page.update()
             sessions = await colab_service.list_sessions(auth_method=state.auth_method)
             state.active_sessions = sessions
+            state.is_loading = False
 
             # Cleanup orphaned history files automatically
-            from services.storage_service import StorageService
-
-            storage = StorageService(page)
-            active_names = [s["name"] for s in sessions]
-            page.run_task(storage.cleanup_orphaned_notebooks, active_names)
+            if storage:
+                active_names = [s["name"] for s in sessions]
+                page.run_task(storage.cleanup_orphaned_notebooks, active_names)
 
             _update_sessions_ui()
         except Exception:

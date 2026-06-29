@@ -19,15 +19,15 @@
 
 | Platform | Download | Notes |
 | :---: | :---: | :--- |
-| 🤖 **Android** | [![Play Store](https://img.shields.io/badge/Google_Play-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=ng.kiri.colab) | Recommended for Android mobile users |
+| 🤖 **Android** | [![Play Store](https://img.shields.io/badge/Google_Play-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=ng.kiri.collabshell) | Recommended for Android mobile users |
 
 ### Android Architecture Build Splits
 
 | Variant | Download | Notes |
 | :--- | :---: | :--- |
-| 📱 **ARM64** (most phones) | [**colab-arm64-v8a.apk**](https://github.com/Nwokike/Colab/releases/latest/download/colab-arm64-v8a.apk) | Modern 64-bit Android devices |
-| 📱 **ARMv7** (older phones) | [**colab-armeabi-v7a.apk**](https://github.com/Nwokike/Colab/releases/latest/download/colab-armeabi-v7a.apk) | Legacy 32-bit Android devices |
-| 💻 **x86_64** (emulators) | [**colab-x86_64.apk**](https://github.com/Nwokike/Colab/releases/latest/download/colab-x86_64.apk) | Chromebooks & Android emulators |
+| 📱 **ARM64** (most phones) | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
+| 📱 **ARMv7** (older phones) | [**collabshell-armeabi-v7a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-armeabi-v7a.apk) | Legacy 32-bit Android devices |
+| 💻 **x86_64** (emulators) | [**collabshell-x86_64.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-x86_64.apk) | Chromebooks & Android emulators |
 
 ---
 

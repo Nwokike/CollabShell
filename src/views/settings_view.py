@@ -12,6 +12,7 @@ from core.styles import (
     tip_text,
 )
 from core.theme import AppColors
+from components.brand_header import build_brand_header
 
 
 def build_settings_view(
@@ -45,7 +46,7 @@ def build_settings_view(
                         color=ft.Colors.PRIMARY
                         if is_sel
                         else ft.Colors.ON_SURFACE_VARIANT,
-                        size=16,
+                        size=tokens.FONT_LG,
                     ),
                     ft.Text(
                         label,
@@ -55,9 +56,11 @@ def build_settings_view(
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
-                spacing=6,
+                spacing=tokens.SPACE_SM,
             ),
-            padding=ft.Padding(tokens.SPACE_SM, 10, tokens.SPACE_SM, 10),
+            padding=ft.Padding(
+                tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM
+            ),
             border_radius=tokens.RADIUS_MD,
             border=ft.Border.all(2, ft.Colors.PRIMARY)
             if is_sel
@@ -157,7 +160,7 @@ def build_settings_view(
                         # Selector Row
                         ft.Row(
                             [light_btn, dark_btn, system_btn],
-                            spacing=8,
+                            spacing=tokens.SPACE_SM,
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                     ],
@@ -524,9 +527,11 @@ def build_settings_view(
         state.keep_alive_enabled = e.control.value
         await storage.set(constants.STORAGE_KEEP_ALIVE, state.keep_alive_enabled)
 
-    async def _on_auto_stop_change(e):
-        state.auto_stop_on_close = e.control.value
-        await storage.set(constants.STORAGE_AUTO_STOP, state.auto_stop_on_close)
+    async def _on_keep_alive_disconnect_change(e):
+        state.keep_alive_on_disconnect = e.control.value
+        await storage.set(
+            constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT, state.keep_alive_on_disconnect
+        )
 
     async def _on_drive_path_change(e):
         state.drive_mount_path = e.control.value
@@ -567,21 +572,21 @@ def build_settings_view(
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Auto-Stop on Close",
+                                            "Keep Alive on Disconnect",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         tip_text(
-                                            "Stop all sessions when the app closes"
+                                            "Keep sessions running when the app closes and you close all session pages"
                                         ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Switch(
-                                    value=state.auto_stop_on_close,
+                                    value=state.keep_alive_on_disconnect,
                                     on_change=lambda e: page.run_task(
-                                        _on_auto_stop_change, e
+                                        _on_keep_alive_disconnect_change, e
                                     ),
                                 ),
                             ],
@@ -656,13 +661,7 @@ def build_settings_view(
 
     # ── UPDATES ───────────────────────────────────────────────────────────────
     async def _on_check_updates(e):
-        _snack("Checking for updates...")
-        new_version = await colab_service.check_for_updates()
-        if new_version:
-            state.update_available_version = new_version
-            _snack(f"Update available: v{new_version}")
-        else:
-            _snack("You're up to date!")
+        _snack(f"CLI version: {await colab_service.get_cli_version()}")
 
     updates_section = ft.Column(
         controls=[
@@ -740,7 +739,9 @@ def build_settings_view(
                 ft.Column(
                     controls=[
                         ft.Container(
-                            content=__import__("components.brand_header", fromlist=["build_brand_header"]).build_brand_header(show_tagline=True, spacing_below=False),
+                            content=build_brand_header(
+                                show_tagline=True, spacing_below=False
+                            ),
                             opacity=0.8,
                         ),
                         ft.Divider(height=tokens.SPACE_SM),

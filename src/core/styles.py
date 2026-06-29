@@ -141,10 +141,10 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
                 ad,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=4,
+            spacing=tokens.SPACE_XS,
         ),
         alignment=ft.Alignment.CENTER,
-        padding=8,
+        padding=tokens.SPACE_SM,
         border_radius=tokens.RADIUS_LG,
         bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
@@ -159,7 +159,7 @@ def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
     from core.theme import AppColors
 
     label = "CPU" if accelerator == "NONE" else accelerator
-    if variant == "TPU" or accelerator in ("V5E1", "V6E1"):
+    if variant == "TPU" or accelerator.upper() in ("V5E1", "V6E1"):
         color = AppColors.BADGE_TPU
     elif variant == "GPU" or accelerator not in ("NONE",):
         color = AppColors.BADGE_GPU
@@ -168,7 +168,10 @@ def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
 
     return ft.Container(
         content=ft.Text(
-            label, size=tokens.FONT_XXS, weight=ft.FontWeight.W_700, color="#FFFFFF"
+            label,
+            size=tokens.FONT_XXS,
+            weight=ft.FontWeight.W_700,
+            color=ft.Colors.WHITE,
         ),
         bgcolor=color,
         border_radius=tokens.RADIUS_XS,
@@ -183,8 +186,8 @@ def status_dot(is_running: bool = False) -> ft.Container:
     from core.theme import AppColors
 
     return ft.Container(
-        width=10,
-        height=10,
+        width=tokens.ICON_SM - 6,
+        height=tokens.ICON_SM - 6,
         border_radius=5,
         bgcolor=AppColors.SUCCESS if is_running else AppColors.BADGE_CPU,
     )
@@ -198,5 +201,3 @@ def tip_text(text: str) -> ft.Text:
         color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
         italic=True,
     )
-
-

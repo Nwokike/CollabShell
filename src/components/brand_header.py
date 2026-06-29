@@ -10,8 +10,8 @@ def build_brand_header(
         ft.Container(height=tokens.SPACE_LG),
         ft.Image(
             src="icon.png",
-            width=72,
-            height=72,
+            width=tokens.ICON_XXXL,
+            height=tokens.ICON_XXXL,
             fit=ft.BoxFit.CONTAIN,
         ),
     ]

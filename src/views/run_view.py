@@ -28,21 +28,26 @@ def build_run_view(
     keep_ref = ft.Ref[ft.Switch]()
     output_lines = []
     is_running = False
+    run_btn_ref = ft.Ref[ft.FilledButton]()
 
-    file_picker = page.file_picker
+    file_picker = getattr(page, "file_picker", None)
 
     def _on_file_picked(e: ft.FilePickerResultEvent):
+        if page.route != "/run":
+            return
         if e.files and script_path_ref.current:
             script_path_ref.current.value = e.files[0].path
             page.update()
 
-    file_picker.on_result = _on_file_picked
+    if file_picker:
+        file_picker.on_result = _on_file_picked
 
     async def _on_browse_click(e):
-        await file_picker.pick_files(
-            allowed_extensions=["py"],
-            dialog_title="Select Python Script",
-        )
+        if file_picker:
+            await file_picker.pick_files(
+                allowed_extensions=["py"],
+                dialog_title="Select Python Script",
+            )
 
     hardware_type = "CPU"
 
@@ -52,9 +57,9 @@ def build_run_view(
         if selected:
             hardware_type = list(selected)[0]
         if gpu_ref.current:
-            gpu_ref.current.visible = (hardware_type == "GPU")
+            gpu_ref.current.visible = hardware_type == "GPU"
         if tpu_ref.current:
-            tpu_ref.current.visible = (hardware_type == "TPU")
+            tpu_ref.current.visible = hardware_type == "TPU"
         page.update()
 
     async def _on_run(e):
@@ -87,6 +92,8 @@ def build_run_view(
 
         output_lines.clear()
         is_running = True
+        if run_btn_ref.current:
+            run_btn_ref.current.disabled = True
         if state.ad_service:
             await state.ad_service.show_interstitial()
         state.is_executing = True
@@ -109,7 +116,7 @@ def build_run_view(
             page.update()
 
             # Read and execute the script
-            with open(script, "r") as f:
+            with open(script, "r", encoding="utf-8") as f:
                 code = f.read()
 
             # Inject sys.argv if args provided
@@ -144,6 +151,8 @@ def build_run_view(
 
         is_running = False
         state.is_executing = False
+        if run_btn_ref.current:
+            run_btn_ref.current.disabled = False
         page.update()
 
     def _append_output(text):
@@ -212,29 +221,49 @@ def build_run_view(
                                                     ft.Segment(
                                                         value="CPU",
                                                         label=ft.Text("CPU"),
-                                                        icon=ft.Icon(ft.Icons.MEMORY_ROUNDED),
+                                                        icon=ft.Icon(
+                                                            ft.Icons.MEMORY_ROUNDED
+                                                        ),
                                                     ),
                                                     ft.Segment(
                                                         value="GPU",
                                                         label=ft.Text("GPU"),
-                                                        icon=ft.Icon(ft.Icons.DEVELOPER_BOARD_ROUNDED),
+                                                        icon=ft.Icon(
+                                                            ft.Icons.DEVELOPER_BOARD_ROUNDED
+                                                        ),
                                                     ),
                                                     ft.Segment(
                                                         value="TPU",
                                                         label=ft.Text("TPU"),
-                                                        icon=ft.Icon(ft.Icons.BOLT_ROUNDED),
+                                                        icon=ft.Icon(
+                                                            ft.Icons.BOLT_ROUNDED
+                                                        ),
                                                     ),
                                                 ],
                                             ),
-                                            tip_text("CPU is always free. T4 GPU and TPU are free with limits."),
+                                            tip_text(
+                                                "CPU is always free. T4 GPU and TPU are free with limits."
+                                            ),
                                             ft.Dropdown(
                                                 ref=gpu_ref,
                                                 label="GPU Model",
                                                 options=[
-                                                    ft.dropdown.Option(key="T4", text="T4  ·  Free tier"),
-                                                    ft.dropdown.Option(key="L4", text="L4  ·  Pro"),
-                                                    ft.dropdown.Option(key="A100", text="A100  ·  Pro+"),
-                                                    ft.dropdown.Option(key="H100", text="H100  ·  Pro+"),
+                                                    ft.dropdown.Option(
+                                                        key="T4",
+                                                        text="T4  ·  Free tier",
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        key="L4", text="L4  ·  Pro"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        key="G4", text="G4  ·  Pro"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        key="A100", text="A100  ·  Pro+"
+                                                    ),
+                                                    ft.dropdown.Option(
+                                                        key="H100", text="H100  ·  Pro+"
+                                                    ),
                                                 ],
                                                 value="T4",
                                                 border_radius=tokens.RADIUS_MD,
@@ -245,10 +274,12 @@ def build_run_view(
                                                 label="TPU Model",
                                                 options=[
                                                     ft.dropdown.Option(
-                                                        key="v5e1", text="v5e1  ·  Free tier"
+                                                        key="v5e1",
+                                                        text="v5e1  ·  Free tier",
                                                     ),
                                                     ft.dropdown.Option(
-                                                        key="v6e1", text="v6e1  ·  Free tier"
+                                                        key="v6e1",
+                                                        text="v6e1  ·  Free tier",
                                                     ),
                                                 ],
                                                 value="v5e1",
@@ -292,7 +323,9 @@ def build_run_view(
                                             ),
                                             ft.Row(
                                                 controls=[
-                                                    ft.Switch(ref=keep_ref, value=False),
+                                                    ft.Switch(
+                                                        ref=keep_ref, value=False
+                                                    ),
                                                     ft.Column(
                                                         controls=[
                                                             ft.Text(
@@ -327,12 +360,10 @@ def build_run_view(
                     # Run button
                     ft.Container(
                         content=ft.FilledButton(
-                            content=ft.Text(
-                                "Run Script" if not is_running else "Running..."
-                            ),
+                            ref=run_btn_ref,
+                            content=ft.Text("Run Script"),
                             icon=ft.Icons.ROCKET_LAUNCH_ROUNDED,
                             on_click=lambda e: page.run_task(_on_run, e),
-                            disabled=is_running,
                             width=float("inf"),
                             style=ft.ButtonStyle(
                                 padding=ft.Padding(
@@ -378,15 +409,20 @@ def build_run_view(
         appbar=ft.AppBar(
             leading=ft.Container(
                 content=ft.IconButton(
-                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
-                    on_click=on_back, 
-                    icon_size=tokens.ICON_MD, 
-                    tooltip="Back"
+                    icon=ft.Icons.ARROW_BACK_ROUNDED,
+                    on_click=on_back,
+                    icon_size=tokens.ICON_MD,
+                    tooltip="Back",
                 ),
                 padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
             ),
             leading_width=48,
-            title=ft.Text("Quick Run", size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            title=ft.Text(
+                "Quick Run",
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.W_700,
+                color=ft.Colors.ON_SURFACE,
+            ),
             center_title=True,
             bgcolor=ft.Colors.TRANSPARENT,
             actions=[theme_btn] if theme_btn else [],

@@ -31,7 +31,7 @@ class AppState:
     default_tpu: str = ""
     default_timeout: int = 30
     keep_alive_enabled: bool = True
-    auto_stop_on_close: bool = False
+    keep_alive_on_disconnect: bool = False
     default_log_format: str = "ipynb"
     drive_mount_path: str = "/content/drive"
     logtostderr: bool = False
@@ -50,8 +50,8 @@ class AppState:
     onboarding_done: bool = False
 
     # ── History ───────────────────────────────────────────────────────────────
-    history_sessions: list = []
-    session_history: list = []
+    log_session_names: list = []
+    log_events: list = []
 
     # ── Services ──────────────────────────────────────────────────────────────
     ad_service = None
@@ -60,8 +60,8 @@ class AppState:
         self.active_sessions = []
         self.exec_output_lines = []
         self.file_listing = []
-        self.history_sessions = []
-        self.session_history = []
+        self.log_session_names = []
+        self.log_events = []
         self.update_available_version = None
         self.onboarding_done = False
         self.ad_service = None

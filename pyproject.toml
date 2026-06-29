@@ -8,6 +8,7 @@ dependencies = [
     "flet>=0.85.3",
     "flet-ads>=0.85.0",
     "google-colab-cli>=0.6.0",
+    "rich>=15.0.0",
 ]
 
 [tool.flet]
@@ -24,9 +25,16 @@ message = "Initializing CollabShell..."
 
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"
+split_per_abi = true
+min_sdk_version = 24
+target_sdk_version = 35
+adaptive_icon_background = "#0D0D1A"
 
 [tool.flet.android.meta_data]
 "com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~1261089274"
+
+[tool.flet.android.manifest_application]
+allowBackup = "false"
 
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true

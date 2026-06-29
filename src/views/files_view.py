@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import flet as ft
 import os
+import posixpath
 
 from core import tokens
 from core.styles import build_banner_ad
@@ -26,7 +27,7 @@ def build_files_view(
     files = []
     is_loading = False
 
-    file_picker = page.file_picker
+    file_picker = getattr(page, "file_picker", None)
 
     async def _load_files(path=None):
         nonlocal current_path, files, is_loading
@@ -51,7 +52,11 @@ def build_files_view(
 
     def _on_file_tap(file_info):
         if file_info.get("type") == "directory":
-            new_path = f"{current_path}/{file_info['name']}"
+            raw_path = f"{current_path}/{file_info['name']}"
+            safe_path = posixpath.normpath(raw_path)
+            if not safe_path.startswith("/content"):
+                safe_path = "/content"
+            new_path = safe_path
             page.run_task(_load_files, new_path)
         else:
             _show_file_actions(file_info)
@@ -153,16 +158,20 @@ def build_files_view(
 
     # ── Upload ────────────────────────────────────────────────────────────────
     def _on_upload_picked(e: ft.FilePickerResultEvent):
+        if not page.route.startswith("/files"):
+            return
         if e.files:
             local_path = e.files[0].path
             filename = os.path.basename(local_path)
             remote_path = f"{current_path}/{filename}"
             page.run_task(_do_upload, local_path, remote_path)
 
-    file_picker.on_result = _on_upload_picked
+    if file_picker:
+        file_picker.on_result = _on_upload_picked
 
     async def _on_upload_click(e):
-        await file_picker.pick_files(dialog_title="Select file to upload")
+        if file_picker:
+            await file_picker.pick_files(dialog_title="Select file to upload")
 
     async def _do_upload(local_path, remote_path):
         state.is_uploading = True
@@ -267,7 +276,7 @@ def build_files_view(
             icon=ft.Icons.REFRESH_ROUNDED,
             on_click=lambda e: page.run_task(_load_files),
             tooltip="Refresh",
-            icon_size=20,
+            icon_size=tokens.ICON_MD,
         ),
     ]
     if theme_btn:
@@ -349,15 +358,20 @@ def build_files_view(
         appbar=ft.AppBar(
             leading=ft.Container(
                 content=ft.IconButton(
-                    icon=ft.Icons.ARROW_BACK_ROUNDED, 
-                    on_click=on_back, 
-                    icon_size=tokens.ICON_MD, 
-                    tooltip="Back"
+                    icon=ft.Icons.ARROW_BACK_ROUNDED,
+                    on_click=on_back,
+                    icon_size=tokens.ICON_MD,
+                    tooltip="Back",
                 ),
                 padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
             ),
             leading_width=48,
-            title=ft.Text("Files", size=tokens.FONT_LG, weight=ft.FontWeight.W_700, color=ft.Colors.ON_SURFACE),
+            title=ft.Text(
+                "Files",
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.W_700,
+                color=ft.Colors.ON_SURFACE,
+            ),
             center_title=True,
             bgcolor=ft.Colors.TRANSPARENT,
             actions=appbar_actions,
