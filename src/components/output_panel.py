@@ -24,28 +24,27 @@ def build_output_panel(
 
     output_lines = lines or []
 
-    output_controls = []
-    for line in output_lines:
+    def _build_line_control(text: str) -> ft.Text:
         is_error = (
-            line.startswith("Error") or line.startswith("Traceback") or "Error:" in line
+            text.startswith("Error") or text.startswith("Traceback") or "Error:" in text
+        )
+        return parse_ansi_to_flet_text(
+            raw_text=text, default_size=tokens.FONT_SM, is_error=is_error
         )
 
-        output_controls.append(
-            parse_ansi_to_flet_text(
-                raw_text=line, default_size=tokens.FONT_SM, is_error=is_error
-            )
-        )
+    output_controls = [_build_line_control(line) for line in output_lines]
 
-    if not output_controls:
-        output_controls.append(
-            ft.Text(
-                "Output will appear here...",
-                size=tokens.FONT_SM,
-                color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
-                font_family="RobotoMono",
-                italic=True,
-            )
+    placeholder = (
+        None
+        if output_controls
+        else ft.Text(
+            "Output will appear here...",
+            size=tokens.FONT_SM,
+            color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+            font_family="RobotoMono",
+            italic=True,
         )
+    )
 
     async def _on_copy(e):
         text_to_copy = "\n".join(output_lines)
@@ -98,7 +97,7 @@ def build_output_panel(
 
     output_list = ft.ListView(
         ref=list_ref,
-        controls=output_controls,
+        controls=output_controls or [placeholder],
         spacing=tokens.SPACE_XXS,
         padding=ft.Padding(
             tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD

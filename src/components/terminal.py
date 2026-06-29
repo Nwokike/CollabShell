@@ -113,7 +113,7 @@ def build_terminal(
         border_width=0,
         text_size=tokens.FONT_SM,
         text_style=ft.TextStyle(font_family="RobotoMono"),
-        hint_text="# Type your Python code here...\nprint('Hello from Colab!')",
+        hint_text="Write Python code here.\nPrefix with ! to run a terminal command\ne.g. print('hello') or !pip install requests",
         hint_style=ft.TextStyle(
             color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
             font_family="RobotoMono",

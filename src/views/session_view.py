@@ -37,11 +37,9 @@ def build_session_view(
     if storage is None:
         storage = StorageService(page)
 
-    # Ensure cells list exists
     if not hasattr(state, "notebook_cells"):
         state.notebook_cells = []
 
-    # Find session data
     session = next(
         (s for s in state.active_sessions if s.get("name") == session_name), None
     )
@@ -277,7 +275,7 @@ def build_session_view(
                 ipynb = json.loads(raw)
                 cells = ipynb_to_cells(ipynb)
                 state.notebook_cells = cells
-                _update_cells_ui(force=True)
+                _rebuild_cells()
                 _save_notebook()
                 if snack:
                     snack(f"✅ Imported {len(cells)} cell(s)")
@@ -372,39 +370,133 @@ def build_session_view(
 
     # ── Notebook Cells ────────────────────────────────────────────────────────
     cells_list = ft.Column(spacing=0)
-    _last_cell_update = 0.0
+    cell_refs = []
+    _rebuild_throttle = 0.0
+    _output_update_ts = {}
 
     def _save_notebook():
         page.run_task(storage.save_notebook, session_name, state.notebook_cells)
 
-    def _update_cells_ui(force=False):
-        nonlocal _last_cell_update
-        now = time.monotonic()
-        if not force and now - _last_cell_update < 0.15:
+    # ── Targeted per-cell helpers ─────────────────────────────────────────────
+
+    def _set_cell_running(index):
+        if index >= len(cell_refs):
             return
-        _last_cell_update = now
+        refs = cell_refs[index]
+        play = refs["play_btn"].current
+        stop = refs["stop_row"].current
+        if play:
+            play.visible = False
+        if stop:
+            stop.visible = True
+        out = refs["output"].current
+        if out:
+            out.visible = True
+        page.update()
+
+    def _set_cell_finished(index):
+        if index >= len(cell_refs):
+            return
+        refs = cell_refs[index]
+        play = refs["play_btn"].current
+        stop = refs["stop_row"].current
+        if play:
+            play.visible = True
+        if stop:
+            stop.visible = False
+        page.update()
+
+    def _append_cell_output(index, text_or_dict):
+        if index >= len(cell_refs):
+            return
+        out_col = cell_refs[index]["output"].current
+        if not out_col:
+            return
+        text = ""
+        is_err = False
+        if isinstance(text_or_dict, str):
+            text = text_or_dict
+        elif isinstance(text_or_dict, dict):
+            dtype = text_or_dict.get("type", "")
+            if dtype == "stream":
+                text = text_or_dict.get("text", "")
+                is_err = text_or_dict.get("name") == "stderr"
+            elif dtype == "error":
+                text = "\n".join(text_or_dict.get("traceback", []))
+                is_err = True
+            else:
+                return
+        if not text:
+            return
+        from components.ansi_parser import parse_ansi_to_flet_text
+
+        out_col.controls.append(
+            parse_ansi_to_flet_text(
+                raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
+            )
+        )
+        out_col.visible = True
+        now = time.monotonic()
+        last = _output_update_ts.get(index, 0.0)
+        if now - last >= 0.08:
+            _output_update_ts[index] = now
+            out_col.update()
+
+    def _clear_cell_output(index):
+        if index >= len(cell_refs):
+            return
+        out_col = cell_refs[index]["output"].current
+        if out_col:
+            out_col.controls.clear()
+            out_col.visible = False
+            out_col.update()
+
+    # ── Rebuild all cells (structural changes only) ───────────────────────────
+
+    def _rebuild_cells(force=False):
+        nonlocal _rebuild_throttle, cell_refs
+        now = time.monotonic()
+        if not force and now - _rebuild_throttle < 0.15:
+            return
+        _rebuild_throttle = now
+        cell_refs.clear()
         cells_list.controls.clear()
         for i, cell in enumerate(state.notebook_cells):
-
-            def make_callbacks(idx=i, c=cell):
-                def _clear():
-                    state.notebook_cells[idx]["outputs"] = []
-                    _update_cells_ui(force=True)
-                    _save_notebook()
-
-                return {
-                    "on_run": lambda: page.run_task(_run_cell, c, idx),
-                    "on_delete": lambda: _delete_cell(idx),
-                    "on_move_up": lambda: _move_cell(idx, -1),
-                    "on_move_down": lambda: _move_cell(idx, 1),
-                    "on_change": _save_notebook,
-                    "on_clear_output": _clear,
-                }
-
-            cells_list.controls.append(
-                build_notebook_cell(page, cell, **make_callbacks())
-            )
+            container, refs = build_notebook_cell(page, cell, **make_callbacks(i))
+            cells_list.controls.append(container)
+            cell_refs.append(refs)
         cells_list.update()
+
+    def _stop_cell(idx):
+        if 0 <= idx < len(state.notebook_cells):
+            colab_service.cancel()
+            cell = state.notebook_cells[idx]
+            cell["outputs"].append(
+                {"type": "error", "traceback": ["Execution cancelled by user"]}
+            )
+            cell["is_running"] = False
+            _append_cell_output(
+                idx, {"type": "error", "traceback": ["Execution cancelled by user"]}
+            )
+            _set_cell_finished(idx)
+            _save_notebook()
+
+    def make_callbacks(idx):
+        def _clear():
+            state.notebook_cells[idx]["outputs"] = []
+            _clear_cell_output(idx)
+            _save_notebook()
+
+        c = state.notebook_cells[idx]
+        return {
+            "on_run": lambda: page.run_task(_run_cell, c, idx),
+            "on_stop": lambda: _stop_cell(idx),
+            "on_delete": lambda: _delete_cell(idx),
+            "on_move_up": lambda: _move_cell(idx, -1),
+            "on_move_down": lambda: _move_cell(idx, 1),
+            "on_change": _save_notebook,
+            "on_clear_output": _clear,
+        }
 
     def _add_cell(cell_type):
         state.notebook_cells.append(
@@ -416,13 +508,14 @@ def build_session_view(
                 "is_running": False,
             }
         )
-        _update_cells_ui()
+        _rebuild_cells()
         _save_notebook()
 
     def _delete_cell(index):
         if 0 <= index < len(state.notebook_cells):
             state.notebook_cells.pop(index)
-            _update_cells_ui()
+            _output_update_ts.pop(index, None)
+            _rebuild_cells()
             _save_notebook()
 
     def _move_cell(index, direction):
@@ -432,13 +525,13 @@ def build_session_view(
                 state.notebook_cells[new_index],
                 state.notebook_cells[index],
             )
-            _update_cells_ui()
+            _rebuild_cells()
             _save_notebook()
 
     def _clear_all_outputs(e):
-        for cell in state.notebook_cells:
+        for i, cell in enumerate(state.notebook_cells):
             cell["outputs"] = []
-        _update_cells_ui()
+            _clear_cell_output(i)
         _save_notebook()
 
     # ── Interactive Stdin Hook ──
@@ -474,14 +567,14 @@ def build_session_view(
             return
         cell["is_running"] = True
         cell["outputs"] = []
-        _update_cells_ui()
+        _set_cell_running(index)
 
         def _on_output(text_or_dict):
             if isinstance(text_or_dict, str):
                 cell["outputs"].append({"type": "stream", "text": text_or_dict})
             elif isinstance(text_or_dict, dict):
                 cell["outputs"].append(text_or_dict)
-            _update_cells_ui()
+            page.loop.call_soon_threadsafe(_append_cell_output, index, text_or_dict)
 
         try:
             await colab_service.exec_code(
@@ -494,10 +587,12 @@ def build_session_view(
                 stdin_hook=_interactive_stdin_hook,
             )
         except Exception as ex:
-            cell["outputs"].append({"type": "error", "traceback": [str(ex)]})
+            err = {"type": "error", "traceback": [str(ex)]}
+            cell["outputs"].append(err)
+            _append_cell_output(index, err)
         finally:
             cell["is_running"] = False
-            _update_cells_ui()
+            _set_cell_finished(index)
             _save_notebook()
 
     # Initial Load
@@ -511,7 +606,7 @@ def build_session_view(
             state.notebook_cells = [
                 {"type": "code", "source": "", "outputs": [], "is_running": False}
             ]
-        _update_cells_ui()
+        _rebuild_cells()
 
     page.run_task(_load_notebook)
 
@@ -613,7 +708,7 @@ def build_session_view(
                             action_row,
                             notebook_section,
                             build_banner_ad(page),
-                            ft.Container(height=100),  # Space for toolbar
+                            ft.Container(height=100),
                         ],
                         spacing=tokens.SPACE_SM,
                         scroll=ft.ScrollMode.AUTO,

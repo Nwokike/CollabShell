@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import flet as ft
 
 from core import tokens, constants
@@ -27,6 +28,8 @@ def build_run_view(
     timeout_ref = ft.Ref[ft.Dropdown]()
     keep_ref = ft.Ref[ft.Switch]()
     output_lines = []
+    output_list_ref = ft.Ref[ft.ListView]()
+    _last_output_update = 0.0
     is_running = False
     run_btn_ref = ft.Ref[ft.FilledButton]()
 
@@ -129,7 +132,7 @@ def build_run_view(
                 sn,
                 timeout=timeout_val,
                 auth_method=state.auth_method,
-                on_output=lambda t: _append_output(t),
+                on_output=lambda t: page.loop.call_soon_threadsafe(_append_output, t),
             )
 
             output_lines.append("\n[*] Script finished.")
@@ -156,11 +159,50 @@ def build_run_view(
         page.update()
 
     def _append_output(text):
+        nonlocal _last_output_update
         output_lines.append(text)
-        page.update()
+        lst = output_list_ref.current
+        if lst:
+            if (
+                lst.controls
+                and isinstance(lst.controls[0], ft.Text)
+                and lst.controls[0].italic
+            ):
+                lst.controls.clear()
+            from components.ansi_parser import parse_ansi_to_flet_text
+
+            is_error = (
+                text.startswith("Error")
+                or text.startswith("Traceback")
+                or "Error:" in text
+            )
+            lst.controls.append(
+                parse_ansi_to_flet_text(
+                    raw_text=text, default_size=tokens.FONT_SM, is_error=is_error
+                )
+            )
+        now = time.monotonic()
+        if now - _last_output_update >= 0.1:
+            _last_output_update = now
+            if lst:
+                lst.update()
+            else:
+                page.update()
 
     def _on_clear(e):
         output_lines.clear()
+        lst = output_list_ref.current
+        if lst:
+            lst.controls.clear()
+            lst.controls.append(
+                ft.Text(
+                    "Output will appear here...",
+                    size=tokens.FONT_SM,
+                    color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE),
+                    font_family="RobotoMono",
+                    italic=True,
+                )
+            )
         page.update()
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -381,6 +423,7 @@ def build_run_view(
                     # Output
                     ft.Container(
                         content=build_output_panel(
+                            list_ref=output_list_ref,
                             lines=output_lines,
                             is_visible=True,
                             on_clear=_on_clear,

@@ -9,21 +9,36 @@ def build_notebook_cell(
     page: ft.Page,
     cell: dict,
     on_run=None,
+    on_stop=None,
     on_delete=None,
     on_move_up=None,
     on_move_down=None,
     on_change=None,
     on_clear_output=None,
-) -> ft.Container:
-    """Builds a single notebook cell (Code or Markdown)."""
+) -> tuple[ft.Container, dict]:
+    """Builds a single notebook cell (Code or Markdown).
+
+    Returns (container, refs_dict) where refs_dict holds Ref objects
+    for mutable parts of the cell (play_btn, stop_row, output).
+    """
 
     cell_type = cell.get("type", "code")
     source = cell.get("source", "")
     outputs = cell.get("outputs", [])
     is_running = cell.get("is_running", False)
 
-    # ── Editor Ref ──
     editor_ref = ft.Ref[ft.TextField]()
+
+    play_btn_ref = ft.Ref[ft.IconButton]()
+    stop_row_ref = ft.Ref[ft.Row]()
+    output_ref = ft.Ref[ft.Column]()
+
+    refs = {
+        "play_btn": play_btn_ref,
+        "stop_row": stop_row_ref,
+        "output": output_ref,
+        "code_input": editor_ref,
+    }
 
     def _handle_change(e):
         if editor_ref.current:
@@ -43,7 +58,7 @@ def build_notebook_cell(
                 if "text/plain" in data:
                     text_to_copy += data["text/plain"] + "\n"
         if text_to_copy:
-            await ft.Clipboard().set_text(text_to_copy.strip())
+            await ft.Clipboard().set(text_to_copy.strip())
             page.snack_bar = ft.SnackBar(ft.Text("Output copied to clipboard!"))
             page.snack_bar.open = True
             page.update()
@@ -75,7 +90,7 @@ def build_notebook_cell(
     )
 
     if cell_type == "markdown":
-        # ── Markdown Cell ──
+        # ── Markdown Cell (unchanged) ──
         is_editing_initial = cell.get("is_editing", not bool(source.strip()))
 
         edit_container = ft.Container(visible=is_editing_initial)
@@ -207,183 +222,196 @@ def build_notebook_cell(
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
             border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
-        )
+        ), refs
 
-    else:
-        # ── Code Cell ──
-        # Outputs rendering
-        output_controls = []
-        for out in outputs:
-            if out.get("type") == "stream":
-                is_err = out.get("name") == "stderr"
-                text = out.get("text", "")
-                output_controls.append(
-                    parse_ansi_to_flet_text(
-                        raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
-                    )
+    # ── Code Cell ──
+    output_controls = []
+    for out in outputs:
+        if out.get("type") == "stream":
+            is_err = out.get("name") == "stderr"
+            text = out.get("text", "")
+            output_controls.append(
+                parse_ansi_to_flet_text(
+                    raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
                 )
-            elif out.get("type") == "error":
-                traceback = "\n".join(out.get("traceback", []))
+            )
+        elif out.get("type") == "error":
+            traceback = "\n".join(out.get("traceback", []))
+            output_controls.append(
+                ft.Text(
+                    traceback,
+                    size=tokens.FONT_SM,
+                    color=AppColors.ERROR,
+                    font_family="RobotoMono",
+                    selectable=True,
+                )
+            )
+        elif out.get("type") in ["execute_result", "display_data"]:
+            data = out.get("data", {})
+            if "image/png" in data:
+                try:
+                    b64_img = data["image/png"]
+                    b64_img = b64_img.replace("\n", "").replace("\r", "")
+                    output_controls.append(
+                        ft.Container(
+                            content=ft.Image(
+                                src_base64=b64_img, fit=ft.ImageFit.CONTAIN
+                            ),
+                            margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
+                        )
+                    )
+                except Exception as e:
+                    output_controls.append(
+                        ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
+                    )
+            elif "text/plain" in data:
                 output_controls.append(
                     ft.Text(
-                        traceback,
+                        data["text/plain"],
                         size=tokens.FONT_SM,
-                        color=AppColors.ERROR,
+                        color=AppColors.DARK_TEXT,
                         font_family="RobotoMono",
                         selectable=True,
                     )
                 )
-            elif out.get("type") in ["execute_result", "display_data"]:
-                data = out.get("data", {})
-                if "image/png" in data:
-                    try:
-                        b64_img = data["image/png"]
-                        # Sometimes base64 strings have newlines, so we clean them
-                        b64_img = b64_img.replace("\n", "").replace("\r", "")
-                        output_controls.append(
-                            ft.Container(
-                                content=ft.Image(
-                                    src_base64=b64_img, fit=ft.ImageFit.CONTAIN
-                                ),
-                                margin=ft.Margin(
-                                    0, tokens.SPACE_SM, 0, tokens.SPACE_SM
-                                ),
-                            )
-                        )
-                    except Exception as e:
-                        output_controls.append(
-                            ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
-                        )
-                elif "text/plain" in data:
-                    output_controls.append(
-                        ft.Text(
-                            data["text/plain"],
-                            size=tokens.FONT_SM,
-                            color=AppColors.DARK_TEXT,
-                            font_family="RobotoMono",
-                            selectable=True,
-                        )
-                    )
 
-        output_actions = ft.Row(
-            controls=[
-                ft.Text(
-                    "OUTPUT",
-                    size=tokens.FONT_XXS,
-                    color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
-                    weight=ft.FontWeight.W_600,
-                ),
-                ft.Row(
-                    controls=[
-                        ft.IconButton(
-                            ft.Icons.COPY_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Copy Output",
-                            on_click=_copy_output,
-                        ),
-                        ft.IconButton(
-                            ft.Icons.CLEAR_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Clear Output",
-                            on_click=lambda e: (
-                                on_clear_output() if on_clear_output else None
-                            ),
-                        ),
-                    ],
-                    spacing=0,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        output_panel = ft.Container(
-            content=ft.Column(
-                controls=output_controls + [output_actions], spacing=tokens.SPACE_XXS
+    output_actions = ft.Row(
+        controls=[
+            ft.Text(
+                "OUTPUT",
+                size=tokens.FONT_XXS,
+                color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
+                weight=ft.FontWeight.W_600,
             ),
-            padding=tokens.SPACE_SM,
-            bgcolor=AppColors.TERMINAL_BG,
-            border_radius=tokens.RADIUS_SM,
-            visible=len(output_controls) > 0,
-            width=float("inf"),
-        )
-
-        # Unified code editor box with actions at the bottom
-        unified_editor_box = ft.Container(
-            content=ft.Column(
+            ft.Row(
                 controls=[
-                    ft.Row(
-                        controls=[
-                            ft.TextField(
-                                ref=editor_ref,
-                                value=source,
-                                multiline=True,
-                                min_lines=1,
-                                max_lines=25,
-                                text_style=ft.TextStyle(
-                                    font_family="RobotoMono", size=tokens.FONT_SM
-                                ),
-                                border_color=ft.Colors.TRANSPARENT,
-                                bgcolor=ft.Colors.TRANSPARENT,
-                                on_change=_handle_change,
-                                hint_text="Code...",
-                                content_padding=tokens.SPACE_SM,
-                                expand=True,
-                            ),
-                        ],
+                    ft.IconButton(
+                        ft.Icons.COPY_ALL_ROUNDED,
+                        icon_size=tokens.ICON_SM,
+                        tooltip="Copy Output",
+                        on_click=_copy_output,
                     ),
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Container(
-                                    content=ft.ProgressRing(
-                                        width=tokens.ICON_SM,
-                                        height=tokens.ICON_SM,
-                                        stroke_width=2,
-                                    )
-                                    if is_running
-                                    else ft.IconButton(
-                                        ft.Icons.PLAY_ARROW_ROUNDED,
-                                        icon_size=tokens.ICON_MD,
-                                        icon_color=AppColors.SUCCESS,
-                                        on_click=lambda e: on_run() if on_run else None,
-                                        tooltip="Run Cell",
-                                    ),
-                                ),
-                                ft.Container(expand=True),
-                                actions_row,
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        padding=ft.Padding(
-                            tokens.SPACE_XS, 0, tokens.SPACE_SM, tokens.SPACE_XS
+                    ft.IconButton(
+                        ft.Icons.CLEAR_ALL_ROUNDED,
+                        icon_size=tokens.ICON_SM,
+                        tooltip="Clear Output",
+                        on_click=lambda e: (
+                            on_clear_output() if on_clear_output else None
                         ),
                     ),
                 ],
                 spacing=0,
             ),
-            border_radius=tokens.RADIUS_SM,
-            bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.ON_SURFACE),
-        )
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
 
-        content = ft.Column(
+    output_panel = ft.Container(
+        content=ft.Column(
+            ref=output_ref,
+            controls=output_controls + [output_actions],
+            spacing=tokens.SPACE_XXS,
+        ),
+        padding=tokens.SPACE_SM,
+        bgcolor=AppColors.TERMINAL_BG,
+        border_radius=tokens.RADIUS_SM,
+        visible=len(output_controls) > 0 or is_running,
+        width=float("inf"),
+    )
+
+    play_button = ft.IconButton(
+        ft.Icons.PLAY_ARROW_ROUNDED,
+        ref=play_btn_ref,
+        icon_size=tokens.ICON_MD,
+        icon_color=AppColors.SUCCESS,
+        on_click=lambda e: on_run() if on_run else None,
+        tooltip="Run Cell",
+        visible=not is_running,
+    )
+
+    stop_row = ft.Row(
+        ref=stop_row_ref,
+        controls=[
+            ft.ProgressRing(
+                width=tokens.ICON_SM,
+                height=tokens.ICON_SM,
+                stroke_width=2,
+            ),
+            ft.IconButton(
+                ft.Icons.STOP_ROUNDED,
+                icon_size=tokens.ICON_SM,
+                icon_color=AppColors.ERROR,
+                on_click=lambda e: on_stop() if on_stop else None,
+                tooltip="Stop",
+            ),
+        ],
+        spacing=tokens.SPACE_XS,
+        visible=is_running,
+    )
+
+    unified_editor_box = ft.Container(
+        content=ft.Column(
             controls=[
-                unified_editor_box,
+                ft.Row(
+                    controls=[
+                        ft.TextField(
+                            ref=editor_ref,
+                            value=source,
+                            multiline=True,
+                            min_lines=1,
+                            max_lines=25,
+                            text_style=ft.TextStyle(
+                                font_family="RobotoMono", size=tokens.FONT_SM
+                            ),
+                            border_color=ft.Colors.TRANSPARENT,
+                            bgcolor=ft.Colors.TRANSPARENT,
+                            on_change=_handle_change,
+                            hint_text="Write Python code here.\nPrefix with ! to run a terminal command\ne.g. !pip install requests",
+                            content_padding=tokens.SPACE_SM,
+                            expand=True,
+                        ),
+                    ],
+                ),
                 ft.Container(
-                    content=output_panel,
-                    padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
+                    content=ft.Row(
+                        controls=[
+                            play_button,
+                            stop_row,
+                            ft.Container(expand=True),
+                            actions_row,
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(
+                        tokens.SPACE_XS, 0, tokens.SPACE_SM, tokens.SPACE_XS
+                    ),
                 ),
             ],
             spacing=0,
-        )
+        ),
+        border_radius=tokens.RADIUS_SM,
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.ON_SURFACE),
+    )
 
-        return ft.Container(
-            content=content,
-            padding=tokens.SPACE_SM,
-            border=ft.Border(
-                left=ft.BorderSide(
-                    3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)
-                ),
+    content = ft.Column(
+        controls=[
+            unified_editor_box,
+            ft.Container(
+                content=output_panel,
+                padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
             ),
-            margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
-        )
+        ],
+        spacing=0,
+    )
+
+    container = ft.Container(
+        content=content,
+        padding=tokens.SPACE_SM,
+        border=ft.Border(
+            left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+        ),
+        margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
+    )
+
+    return container, refs

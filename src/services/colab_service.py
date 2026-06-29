@@ -280,6 +280,7 @@ class ColabService:
         gpu: str = None,
         tpu: str = None,
         auth_method: str = "oauth2",
+        keep_alive: bool = True,
     ) -> dict:
         """Create a new Colab session.
 
@@ -360,19 +361,23 @@ class ColabService:
             )
 
             # Pre-flight keep-alive
-            try:
-                st.client.keep_alive_assignment(endpoint)
-            except ColabRequestError:
-                pass  # Non-blocking: daemon will retry
+            if keep_alive:
+                try:
+                    st.client.keep_alive_assignment(endpoint)
+                except ColabRequestError:
+                    pass  # Non-blocking: daemon will retry
 
-            st.store.add(s)
-            s.keep_alive_pid = spawn_keep_alive(
-                endpoint,
-                session_name,
-                auth_provider=st.auth_provider,
-                config_path=st.config_path,
-            )
-            st.store.add(s)
+                st.store.add(s)
+                s.keep_alive_pid = spawn_keep_alive(
+                    endpoint,
+                    session_name,
+                    auth_provider=st.auth_provider,
+                    config_path=st.config_path,
+                )
+                st.store.add(s)
+            else:
+                st.store.add(s)
+                s.keep_alive_pid = None
             st.history.log_event(
                 session_name,
                 "session_created",
@@ -469,7 +474,7 @@ class ColabService:
             if not s:
                 return False
 
-            if s.keep_alive_pid:
+            if getattr(s, "keep_alive_pid", None):
                 kill_process(s.keep_alive_pid)
 
             try:
@@ -543,12 +548,17 @@ class ColabService:
         stdin_hook: Optional[Callable] = None,
     ) -> list:
         """Execute Python code in a session. Returns list of outputs."""
+        self._cancel_event.clear()
 
         def _exec():
             import datetime
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
             from colab_cli.runtime import ColabRuntime
+
+            if self._cancel_event.is_set():
+                self._cancel_event.clear()
+                raise RuntimeError("Execution cancelled by user")
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
             st = State()
@@ -596,6 +606,13 @@ class ColabService:
             st.store.add(s)
 
             def output_hook(out):
+                if self._cancel_event.is_set():
+                    self._cancel_event.clear()
+                    try:
+                        runtime.kernel_client.interrupt()
+                    except Exception:
+                        pass
+                    raise RuntimeError("Execution cancelled by user")
                 if on_output:
                     text = ""
                     if out.get("output_type") == "stream":
