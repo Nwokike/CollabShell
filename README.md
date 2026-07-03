@@ -59,7 +59,7 @@
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Flet (Flutter engine) | Cross-platform UI with responsive views and smooth page transitions |
+| **Frontend** | Flet | Cross-platform UI with responsive views and smooth page transitions |
 | **Client Service** | `google-colab-cli` SDK | Wrapper for Colab session management and code execution |
 | **Local Database** | Flat JSON Storage (`storage.json`) | Key-value store for app settings, theme state, and credentials |
 | **Auth Provider** | Google OAuth2 | Secure user authentication to manage personal Google Cloud instances |
