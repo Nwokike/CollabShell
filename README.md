@@ -42,6 +42,74 @@
 | **Package Installer** | Fast pip and uv package installation directly on the remote instance. |
 | **Exportable Event Logs** | Maintain history profiles and export session logs as Jupyter Notebooks (.ipynb), Markdown (.md), or plain text. |
 | **Sandbox Security** | Secure OAuth2 credentials management sandboxed on your device storage. |
+---
+
+## Screenshots
+
+### Onboarding & Authentication
+<table>
+  <tr>
+    <td width="50%"><img src="screenshots/onboarding_google_sign_in_dark.png" width="100%" alt="Google Sign In Slide" /></td>
+    <td width="50%"><img src="screenshots/onboarding_google_verified_dark.png" width="100%" alt="Google Auth Verified" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Google Sign-In Onboarding — native auth guide for managing instances</em></td>
+    <td align="center"><em>Verification Flow — OAuth2 verification sandboxed securely on your device</em></td>
+  </tr>
+</table>
+
+### Dashboard & Navigation
+<table>
+  <tr>
+    <td width="33%"><img src="screenshots/home_light.png" width="100%" alt="Home View Light" /></td>
+    <td width="33%"><img src="screenshots/home_active_sessions_dark.png" width="100%" alt="Active Sessions Dark" /></td>
+    <td width="33%"><img src="screenshots/new_session_dialog_dark.png" width="100%" alt="New Session Dialog" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Home view (Light Theme) — one-click access to all active runtimes</em></td>
+    <td align="center"><em>Dashboard (Dark Theme) — list active instances with direct shortcut links</em></td>
+    <td align="center"><em>New Session Provisioning — select accelerators (CPU, GPU, TPU) and set run names</em></td>
+  </tr>
+</table>
+
+### Interactive Notebook & Code Editor
+<table>
+  <tr>
+    <td width="50%"><img src="screenshots/session_notebook_dark.png" width="100%" alt="Notebook Session View" /></td>
+    <td width="50%"><img src="screenshots/session_running_command_dark.png" width="100%" alt="Cell Command Execution" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Interactive Editor — mount Google Drive, toggle keep-alive, and edit code cells</em></td>
+    <td align="center"><em>Command execution — run shell scripts natively with real-time progress logging</em></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="33%"><img src="screenshots/session_markdown_cell_dark.png" width="100%" alt="Markdown Cell Editor" /></td>
+    <td width="33%"><img src="screenshots/session_typing_markdown_cell_dark.png" width="100%" alt="Typing in Notebook" /></td>
+    <td width="33%"><img src="screenshots/session_run_code_dark.png" width="100%" alt="Notebook Execution Results" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Rich Markdown editor — write documentation with live render support</em></td>
+    <td align="center"><em>Virtual Keyboard Integration — responsive input alignments for mobile screens</em></td>
+    <td align="center"><em>Result Output Console — view parsed JSON payloads and execution blocks</em></td>
+  </tr>
+</table>
+
+### History, Settings & Scripts
+<table>
+  <tr>
+    <td width="33%"><img src="screenshots/quick_run_dark.png" width="100%" alt="Quick Run View" /></td>
+    <td width="33%"><img src="screenshots/history_light.png" width="100%" alt="Event Log History" /></td>
+    <td width="33%"><img src="screenshots/settings_light.png" width="100%" alt="App Settings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Quick Run Mode — upload and execute raw scripts in one-shot runtimes</em></td>
+    <td align="center"><em>Chronological History — filter, trace, and export session logs to IPYNB</em></td>
+    <td align="center"><em>Settings Manager — toggle app themes, customize timeout defaults, and re-authenticate</em></td>
+  </tr>
+</table>
 
 ---
 
