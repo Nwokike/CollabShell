@@ -26,4 +26,4 @@ storage/
 # Signing keys
 *.jks
 *.keystore
-
+release_notes.md
