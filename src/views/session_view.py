@@ -438,9 +438,9 @@ def build_session_view(
         out_col.visible = True
         now = time.monotonic()
         last = _output_update_ts.get(index, 0.0)
-        if now - last >= 0.08:
+        if now - last >= 0.15:
             _output_update_ts[index] = now
-            out_col.update()
+            page.update()
 
     def _clear_cell_output(index):
         if index >= len(cell_refs):
@@ -449,7 +449,7 @@ def build_session_view(
         if out_col:
             out_col.controls.clear()
             out_col.visible = False
-            out_col.update()
+            page.update()
 
     # ── Rebuild all cells (structural changes only) ───────────────────────────
 
@@ -465,7 +465,10 @@ def build_session_view(
             container, refs = build_notebook_cell(page, cell, **make_callbacks(i))
             cells_list.controls.append(container)
             cell_refs.append(refs)
-        cells_list.update()
+        try:
+            cells_list.update()
+        except Exception:
+            page.update()
 
     def _stop_cell(idx):
         if 0 <= idx < len(state.notebook_cells):
@@ -594,6 +597,7 @@ def build_session_view(
             cell["is_running"] = False
             _set_cell_finished(index)
             _save_notebook()
+            page.update()
 
     # Initial Load
     async def _load_notebook():

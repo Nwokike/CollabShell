@@ -182,12 +182,9 @@ def build_run_view(
                 )
             )
         now = time.monotonic()
-        if now - _last_output_update >= 0.1:
+        if now - _last_output_update >= 0.15:
             _last_output_update = now
-            if lst:
-                lst.update()
-            else:
-                page.update()
+            page.update()
 
     def _on_clear(e):
         output_lines.clear()

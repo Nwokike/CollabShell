@@ -183,21 +183,15 @@ def build_home_view(
                     ),
                 )
             )
-        try:
-            sessions_list.update()
-        except Exception:
-            pass
+        page.update()
 
     async def _load_sessions():
         try:
-            if not state.active_sessions:
-                state.is_loading = True
-                page.update()
-                sessions = await colab_service.list_sessions(
-                    auth_method=state.auth_method
-                )
-                state.active_sessions = sessions
-                state.is_loading = False
+            state.is_loading = True
+            _update_sessions_ui()
+            sessions = await colab_service.list_sessions(auth_method=state.auth_method)
+            state.active_sessions = sessions
+            state.is_loading = False
 
             # Cleanup orphaned history files automatically
             if storage:
@@ -206,7 +200,8 @@ def build_home_view(
 
             _update_sessions_ui()
         except Exception:
-            pass
+            state.is_loading = False
+            _update_sessions_ui()
 
     page.run_task(_load_sessions)
 
