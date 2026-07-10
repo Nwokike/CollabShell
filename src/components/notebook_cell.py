@@ -238,12 +238,10 @@ def build_notebook_cell(
         elif out.get("type") == "error":
             traceback = "\n".join(out.get("traceback", []))
             output_controls.append(
-                ft.Text(
-                    traceback,
-                    size=tokens.FONT_SM,
-                    color=AppColors.ERROR,
-                    font_family="RobotoMono",
-                    selectable=True,
+                parse_ansi_to_flet_text(
+                    raw_text=traceback,
+                    default_size=tokens.FONT_SM,
+                    is_error=True,
                 )
             )
         elif out.get("type") in ["execute_result", "display_data"]:
@@ -266,12 +264,9 @@ def build_notebook_cell(
                     )
             elif "text/plain" in data:
                 output_controls.append(
-                    ft.Text(
-                        data["text/plain"],
-                        size=tokens.FONT_SM,
-                        color=AppColors.DARK_TEXT,
-                        font_family="RobotoMono",
-                        selectable=True,
+                    parse_ansi_to_flet_text(
+                        raw_text=data["text/plain"],
+                        default_size=tokens.FONT_SM,
                     )
                 )
 

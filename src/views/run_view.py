@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import flet as ft
 
@@ -32,6 +33,11 @@ def build_run_view(
     _last_output_update = 0.0
     is_running = False
     run_btn_ref = ft.Ref[ft.FilledButton]()
+
+    async def _deferred_update():
+        """Yield to the event loop then push the update — fixes mobile rendering."""
+        await asyncio.sleep(0)
+        page.update()
 
     file_picker = getattr(page, "file_picker", None)
 
@@ -184,7 +190,7 @@ def build_run_view(
         now = time.monotonic()
         if now - _last_output_update >= 0.15:
             _last_output_update = now
-            page.update()
+            page.run_task(_deferred_update)
 
     def _on_clear(e):
         output_lines.clear()
@@ -200,7 +206,7 @@ def build_run_view(
                     italic=True,
                 )
             )
-        page.update()
+        page.run_task(_deferred_update)
 
     # ── Layout ────────────────────────────────────────────────────────────────
     from components.brand_header import build_brand_header

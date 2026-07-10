@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="src/assets/icon.png" alt="CollabShell" width="320" />
+  <img src="src/assets/icon.png" alt="Collab Shell" width="320" />
 </p>
 
 <p align="center">
-  CollabShell — Manage and run Google Colab sessions directly from your phone with native TPU and GPU control
+  Collab Shell — Manage and run Google Colab sessions directly from your phone with native TPU and GPU control
 </p>
 
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=ng.kiri.collabshell"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
-  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download-APK-orange?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" /></a>
+  <a href="https://github.com/Nwokike/Collab Shell/releases/latest"><img src="https://img.shields.io/badge/Download-APK-orange?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" /></a>
   <img src="https://img.shields.io/badge/Built%20with-Flet%200.85-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
@@ -25,9 +25,9 @@
 
 | Variant | Download | Notes |
 | :--- | :---: | :--- |
-| 📱 **ARM64** (most phones) | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
-| 📱 **ARMv7** (older phones) | [**collabshell-armeabi-v7a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-armeabi-v7a.apk) | Legacy 32-bit Android devices |
-| 💻 **x86_64** (emulators) | [**collabshell-x86_64.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-x86_64.apk) | Chromebooks & Android emulators |
+| 📱 **ARM64** (most phones) | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/Collab Shell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
+| 📱 **ARMv7** (older phones) | [**collabshell-armeabi-v7a.apk**](https://github.com/Nwokike/Collab Shell/releases/latest/download/collabshell-armeabi-v7a.apk) | Legacy 32-bit Android devices |
+| 💻 **x86_64** (emulators) | [**collabshell-x86_64.apk**](https://github.com/Nwokike/Collab Shell/releases/latest/download/collabshell-x86_64.apk) | Chromebooks & Android emulators |
 
 ---
 
@@ -115,7 +115,7 @@
 
 ## Features
 
-- **CollabShell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
+- **Collab Shell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
 - **Dynamic Onboarding Guide** — 3-step walk-through onboarding introducing features with gesture-swipe controls.
 - **Preloaded Interstitial Ads** — Intelligent Google AdMob integration displaying ads seamlessly on mobile platforms.
 - **Non-Blocking Execution** — Asynchronous connection wrappers ensuring the Flet UI stays fully responsive during long remote computations.
@@ -157,7 +157,7 @@ graph TB
 
 ## Privacy & Security
 
-CollabShell is designed with a strict **Privacy-First** philosophy:
+Collab Shell is designed with a strict **Privacy-First** philosophy:
 
 1. **Direct VM Connections**: All commands, file accesses, and script executions are sent directly to Google Colab. No intermediate proxy.
 2. **Zero Metadata Tracking**: We do not trace, log, or collect your code, file lists, or Google account credentials.
@@ -168,6 +168,6 @@ CollabShell is designed with a strict **Privacy-First** philosophy:
 
 ## Legal Disclaimer
 
-CollabShell is an independent Flet-based client application wrapping the Google Colab CLI and is not affiliated with, authorized, maintained, sponsored, or endorsed by Google LLC, Google Colaboratory, or any of its affiliates. 
+Collab Shell is an independent Flet-based client application wrapping the Google Colab CLI and is not affiliated with, authorized, maintained, sponsored, or endorsed by Google LLC, Google Colaboratory, or any of its affiliates. 
 
 Users are responsible for complying with Google Colab's Terms of Use, resource usage policies, and local data protection regulations. The authors are not responsible for any issues resulting from Google account suspensions or resource limits.

@@ -491,7 +491,7 @@ async def main(page: ft.Page):
                     "/history": "History",
                     "/settings": "Settings",
                 }
-                tag_text = page_tags.get(route, "CollabShell")
+                tag_text = page_tags.get(route, "Collab Shell")
 
                 page_tag = ft.Container(
                     content=ft.Text(

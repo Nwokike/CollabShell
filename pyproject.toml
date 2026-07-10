@@ -1,7 +1,7 @@
 [project]
 name = "collabshell"
 version = "1.0.0"
-description = "CollabShell: Client for Google Colab"
+description = "Collab Shell: Client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 
 [tool.flet]
 org = "ng.kiri"
-product = "CollabShell"
+product = "Collab Shell"
 build_number = 1
 
 [tool.flet.app]
@@ -20,7 +20,7 @@ path = "src"
 
 [tool.flet.app.boot_screen]
 show = true
-message = "Initializing CollabShell..."
+message = "Initializing Collab Shell..."
 
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"

@@ -1,6 +1,6 @@
 """Application-wide constants."""
 
-APP_NAME = "CollabShell"
+APP_NAME = "Collab Shell"
 APP_VERSION = "1.0.0"
 
 # ── Storage keys ──────────────────────────────────────────────────────────────

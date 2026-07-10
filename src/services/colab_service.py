@@ -623,10 +623,8 @@ class ColabService:
                     elif out.get("output_type") == "error":
                         tb = out.get("traceback", [])
                         if tb:
-                            # Strip ANSI codes for display
-                            import re
-
-                            text = re.sub(r"\x1b\[[0-9;]*m", "", "\n".join(tb))
+                            # Preserve ANSI codes — the parser renders colored tracebacks
+                            text = "\n".join(tb)
                         else:
                             text = (
                                 f"{out.get('ename', 'Error')}: {out.get('evalue', '')}"

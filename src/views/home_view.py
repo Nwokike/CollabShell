@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import flet as ft
 
 from core import tokens, constants
@@ -130,7 +132,7 @@ def build_home_view(
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
     )
 
-    def _update_sessions_ui():
+    async def _update_sessions_ui():
         sessions_list.content.controls.clear()
         if state.is_loading:
             sessions_list.content.controls.append(
@@ -183,12 +185,14 @@ def build_home_view(
                     ),
                 )
             )
+        await asyncio.sleep(0)
         page.update()
 
     async def _load_sessions():
+        await asyncio.sleep(0.1)  # Let the view mount on mobile
         try:
             state.is_loading = True
-            _update_sessions_ui()
+            await _update_sessions_ui()
             sessions = await colab_service.list_sessions(auth_method=state.auth_method)
             state.active_sessions = sessions
             state.is_loading = False
@@ -198,10 +202,10 @@ def build_home_view(
                 active_names = [s["name"] for s in state.active_sessions]
                 page.run_task(storage.cleanup_orphaned_notebooks, active_names)
 
-            _update_sessions_ui()
+            await _update_sessions_ui()
         except Exception:
             state.is_loading = False
-            _update_sessions_ui()
+            await _update_sessions_ui()
 
     page.run_task(_load_sessions)
 

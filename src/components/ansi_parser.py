@@ -17,26 +17,43 @@ def _rich_color_to_hex(color):
         return f"#{r:02x}{g:02x}{b:02x}"
 
     if color.number is not None:
-        # A basic mapping of 16 terminal colors to pleasing hex values
-        cmap = {
-            0: "#000000",
-            1: "#cc0000",
-            2: "#4e9a06",
-            3: "#c4a000",
-            4: "#3465a4",
-            5: "#75507b",
-            6: "#06989a",
-            7: "#d3d7cf",
-            8: "#555753",
-            9: "#ef2929",
-            10: "#8ae234",
-            11: "#fce94f",
-            12: "#729fcf",
-            13: "#ad7fa8",
-            14: "#34e2e2",
-            15: "#eeeeec",
-        }
-        return cmap.get(color.number, None)
+        n = color.number
+
+        # Standard 16 terminal colors
+        if n <= 15:
+            cmap = {
+                0: "#000000",
+                1: "#cc0000",
+                2: "#4e9a06",
+                3: "#c4a000",
+                4: "#3465a4",
+                5: "#75507b",
+                6: "#06989a",
+                7: "#d3d7cf",
+                8: "#555753",
+                9: "#ef2929",
+                10: "#8ae234",
+                11: "#fce94f",
+                12: "#729fcf",
+                13: "#ad7fa8",
+                14: "#34e2e2",
+                15: "#eeeeec",
+            }
+            return cmap.get(n, None)
+
+        # 256-color palette: colors 16-231 are a 6x6x6 color cube
+        if 16 <= n <= 231:
+            n -= 16
+            b = (n % 6) * 51
+            g = ((n // 6) % 6) * 51
+            r = (n // 36) * 51
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        # 256-color palette: colors 232-255 are a grayscale ramp
+        if 232 <= n <= 255:
+            v = 8 + (n - 232) * 10
+            return f"#{v:02x}{v:02x}{v:02x}"
+
     return None
 
 
@@ -47,7 +64,7 @@ def parse_ansi_to_flet_text(
     is_error: bool = False,
 ) -> ft.Text:
     """
-    Takes a raw ANSI string containing \x1b codes, parses it with rich,
+    Takes a raw ANSI string containing \\x1b codes, parses it with rich,
     and returns a Flet ft.Text component with properly colored TextSpans.
     """
     if is_error:
@@ -107,11 +124,29 @@ def parse_ansi_to_flet_text(
             italic = span.style.italic
             bgcolor = _rich_color_to_hex(span.style.bgcolor)
 
+            # Underline and strikethrough support
+            decoration = None
+            decorations = []
+            if span.style.underline:
+                decorations.append(ft.TextDecoration.UNDERLINE)
+            if span.style.strike:
+                decorations.append(ft.TextDecoration.LINE_THROUGH)
+            if decorations:
+                decoration = (
+                    decorations[0]
+                    if len(decorations) == 1
+                    else ft.TextDecoration.combine(decorations)
+                )
+
             flet_spans.append(
                 ft.TextSpan(
                     rich_text.plain[span.start : span.end],
                     style=ft.TextStyle(
-                        color=flet_color, weight=weight, italic=italic, bgcolor=bgcolor
+                        color=flet_color,
+                        weight=weight,
+                        italic=italic,
+                        bgcolor=bgcolor,
+                        decoration=decoration,
                     ),
                 )
             )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import flet as ft
@@ -374,6 +375,11 @@ def build_session_view(
     _rebuild_throttle = 0.0
     _output_update_ts = {}
 
+    async def _deferred_update():
+        """Yield to the event loop then push the update — fixes mobile rendering."""
+        await asyncio.sleep(0)
+        page.update()
+
     def _save_notebook():
         page.run_task(storage.save_notebook, session_name, state.notebook_cells)
 
@@ -392,7 +398,7 @@ def build_session_view(
         out = refs["output"].current
         if out:
             out.visible = True
-        page.update()
+        page.run_task(_deferred_update)
 
     def _set_cell_finished(index):
         if index >= len(cell_refs):
@@ -404,7 +410,7 @@ def build_session_view(
             play.visible = True
         if stop:
             stop.visible = False
-        page.update()
+        page.run_task(_deferred_update)
 
     def _append_cell_output(index, text_or_dict):
         if index >= len(cell_refs):
@@ -440,7 +446,7 @@ def build_session_view(
         last = _output_update_ts.get(index, 0.0)
         if now - last >= 0.15:
             _output_update_ts[index] = now
-            page.update()
+            page.run_task(_deferred_update)
 
     def _clear_cell_output(index):
         if index >= len(cell_refs):
@@ -449,7 +455,7 @@ def build_session_view(
         if out_col:
             out_col.controls.clear()
             out_col.visible = False
-            page.update()
+            page.run_task(_deferred_update)
 
     # ── Rebuild all cells (structural changes only) ───────────────────────────
 
@@ -465,10 +471,7 @@ def build_session_view(
             container, refs = build_notebook_cell(page, cell, **make_callbacks(i))
             cells_list.controls.append(container)
             cell_refs.append(refs)
-        try:
-            cells_list.update()
-        except Exception:
-            page.update()
+        page.run_task(_deferred_update)
 
     def _stop_cell(idx):
         if 0 <= idx < len(state.notebook_cells):
