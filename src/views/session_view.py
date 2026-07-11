@@ -415,7 +415,40 @@ def build_session_view(
     def _append_cell_output(index, text_or_dict):
         if index >= len(cell_refs):
             return
-        out_col = cell_refs[index]["output"].current
+        refs = cell_refs[index]
+
+        # Try xterm terminal first
+        terminal = refs.get("terminal")
+        if terminal is not None:
+            text = ""
+            if isinstance(text_or_dict, str):
+                text = text_or_dict
+            elif isinstance(text_or_dict, dict):
+                dtype = text_or_dict.get("type", "")
+                if dtype == "stream":
+                    text = text_or_dict.get("text", "")
+                elif dtype == "error":
+                    text = "\n".join(text_or_dict.get("traceback", []))
+                else:
+                    return
+            if not text:
+                return
+            # Convert \n to \r\n for xterm
+            text = text.replace("\r\n", "\n").replace("\n", "\r\n")
+            terminal.write(text)
+            # Make output panel visible
+            out_col = refs["output"].current
+            if out_col:
+                out_col.visible = True
+            now = time.monotonic()
+            last = _output_update_ts.get(index, 0.0)
+            if now - last >= 0.15:
+                _output_update_ts[index] = now
+                page.run_task(_deferred_update)
+            return
+
+        # Fallback: text-based output
+        out_col = refs["output"].current
         if not out_col:
             return
         text = ""
@@ -451,7 +484,12 @@ def build_session_view(
     def _clear_cell_output(index):
         if index >= len(cell_refs):
             return
-        out_col = cell_refs[index]["output"].current
+        refs = cell_refs[index]
+        # Clear xterm terminal if available
+        terminal = refs.get("terminal")
+        if terminal is not None:
+            terminal.clear()
+        out_col = refs["output"].current
         if out_col:
             out_col.controls.clear()
             out_col.visible = False
@@ -541,23 +579,69 @@ def build_session_view(
         _save_notebook()
 
     # ── Interactive Stdin Hook ──
+    # Track which cell is currently running for stdin routing
+    _running_cell_index = {"value": -1}
+
     def _interactive_stdin_hook(prompt):
         """Handle kernel input requests (input()/getpass()).
 
-        The ``prompt`` arg comes from colab_cli's wrapper and is a plain
-        string.  We show a Flet dialog, block the background thread until
-        the user submits, and return the typed value.
+        When an xterm terminal is available for the running cell, the user
+        types directly in the terminal.  Otherwise falls back to a dialog.
         """
         input_event = threading.Event()
         user_input = {"value": ""}
 
-        # Detect password mode from prompt text
         prompt_str = str(prompt) if prompt else "Input required"
         is_password = any(
             kw in prompt_str.lower()
             for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
         )
 
+        # Try terminal-based stdin
+        idx = _running_cell_index["value"]
+        terminal = None
+        if 0 <= idx < len(cell_refs):
+            terminal = cell_refs[idx].get("terminal")
+
+        if terminal is not None:
+            # Write the prompt to the terminal
+            terminal.write(prompt_str.replace("\n", "\r\n"))
+
+            # Buffer user input from terminal keystrokes
+            input_buffer = []
+            original_on_output = terminal.on_output
+
+            def _terminal_input_handler(e):
+                char = e.data if hasattr(e, "data") else str(e)
+                if char in ("\r", "\n"):
+                    # Enter pressed — submit
+                    terminal.write("\r\n")
+                    user_input["value"] = "".join(input_buffer)
+                    terminal.on_output = original_on_output
+                    input_event.set()
+                elif char in ("\x7f", "\b"):
+                    # Backspace
+                    if input_buffer:
+                        input_buffer.pop()
+                        terminal.write("\b \b")
+                else:
+                    input_buffer.append(char)
+                    if is_password:
+                        terminal.write("*")
+                    else:
+                        terminal.write(char)
+
+            terminal.on_output = _terminal_input_handler
+
+            async def _force_update():
+                await asyncio.sleep(0)
+                page.update()
+
+            page.run_task(_force_update)
+            input_event.wait(timeout=300)
+            return user_input["value"]
+
+        # Fallback: dialog-based input
         dialog_field = ft.TextField(
             label=prompt_str,
             autofocus=True,
@@ -595,7 +679,15 @@ def build_session_view(
             return
         cell["is_running"] = True
         cell["outputs"] = []
+        _running_cell_index["value"] = index
         _set_cell_running(index)
+
+        # Write initial text to terminal if it was saved
+        if 0 <= index < len(cell_refs):
+            terminal = cell_refs[index].get("terminal")
+            if terminal is not None and hasattr(terminal, "_initial_text"):
+                terminal.write(terminal._initial_text)
+                del terminal._initial_text
 
         def _on_output(text_or_dict):
             if isinstance(text_or_dict, str):
@@ -620,6 +712,7 @@ def build_session_view(
             _append_cell_output(index, err)
         finally:
             cell["is_running"] = False
+            _running_cell_index["value"] = -1
             _set_cell_finished(index)
             _save_notebook()
             # Force a final update to flush any remaining output
