@@ -542,14 +542,33 @@ def build_session_view(
 
     # ── Interactive Stdin Hook ──
     def _interactive_stdin_hook(prompt):
+        """Handle kernel input requests (input()/getpass()).
+
+        The ``prompt`` arg comes from colab_cli's wrapper and is a plain
+        string.  We show a Flet dialog, block the background thread until
+        the user submits, and return the typed value.
+        """
         input_event = threading.Event()
         user_input = {"value": ""}
 
-        dialog_field = ft.TextField(label=prompt, autofocus=True)
+        # Detect password mode from prompt text
+        prompt_str = str(prompt) if prompt else "Input required"
+        is_password = any(
+            kw in prompt_str.lower()
+            for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
+        )
+
+        dialog_field = ft.TextField(
+            label=prompt_str,
+            autofocus=True,
+            password=is_password,
+            can_reveal_password=is_password,
+        )
 
         def _submit_input(e):
-            user_input["value"] = dialog_field.value
+            user_input["value"] = dialog_field.value or ""
             page.pop_dialog()
+            page.update()
             input_event.set()
 
         dialog_field.on_submit = _submit_input
@@ -558,10 +577,13 @@ def build_session_view(
             title=ft.Text("Kernel Input Required"),
             content=dialog_field,
             actions=[ft.TextButton("Submit", on_click=_submit_input)],
+            modal=True,
         )
 
         async def _show():
             page.show_dialog(dialog)
+            await asyncio.sleep(0)
+            page.update()
 
         page.run_task(_show)
         input_event.wait(timeout=300)
@@ -600,6 +622,8 @@ def build_session_view(
             cell["is_running"] = False
             _set_cell_finished(index)
             _save_notebook()
+            # Force a final update to flush any remaining output
+            await asyncio.sleep(0)
             page.update()
 
     # Initial Load
