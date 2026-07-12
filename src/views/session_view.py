@@ -630,7 +630,11 @@ def build_session_view(
                     else:
                         page.run_task(terminal.write, char)
 
-            terminal.on_output = _terminal_input_handler
+            # terminal.on_output must be set from the main (event loop) thread;
+            # we are currently in the stdin_hook worker thread, so schedule it.
+            page.loop.call_soon_threadsafe(
+                setattr, terminal, "on_output", _terminal_input_handler
+            )
 
             async def _force_update():
                 await asyncio.sleep(0)

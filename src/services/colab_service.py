@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import threading
+import time
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,9 @@ class ColabService:
         self._cli_available = False
         self._cli_state = None
         self._cancel_event = threading.Event()
+        # In-process keep-alive tasks for platforms that don't support subprocess
+        # (Android).  Keyed by session name, cancelled when the session stops.
+        self._keep_alive_tasks: dict[str, asyncio.Task] = {}
 
     # ── Availability ──────────────────────────────────────────────────────────
 
@@ -401,9 +405,20 @@ class ColabService:
                 "variant": variant.value,
                 "accelerator": accelerator.value,
                 "status": "READY",
+                "keep_alive_subprocess": getattr(s, "keep_alive_pid", None) is not None,
             }
 
-        return await asyncio.to_thread(_new)
+        result = await asyncio.to_thread(_new)
+
+        # If keep-alive was requested but subprocess spawning failed (Android →
+        # PermissionError/OSError caught above), start an in-process keep-alive
+        # loop that calls keep_alive_assignment every 60s from the event loop.
+        if keep_alive and not result.get("keep_alive_subprocess", False):
+            self._start_in_process_keep_alive(
+                result["name"], result["endpoint"], auth_method
+            )
+
+        return result
 
     async def list_sessions(self, auth_method: str = "oauth2") -> list:
         """List all active sessions. Returns list of session dicts."""
@@ -467,6 +482,17 @@ class ColabService:
         self, session_name: str, auth_method: str = "oauth2"
     ) -> bool:
         """Stop a session by name."""
+
+        # Cancel any in-process keep-alive loop first
+        task = self._keep_alive_tasks.pop(session_name, None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("keep-alive task for %s raised unexpected exception", session_name)
 
         def _stop():
             from colab_cli.auth import AuthProvider
@@ -1076,3 +1102,52 @@ except:
             raise ValueError(
                 f"Multiple sessions active. Specify one: {', '.join(names)}"
             )
+
+    # ── In-process keep-alive (Android alternative to subprocess) ──────────
+
+    def _start_in_process_keep_alive(
+        self, session_name: str, endpoint: str, auth_method: str
+    ):
+        """Start an asyncio task that pings the keep-alive endpoint every 60s.
+
+        Replaces ``spawn_keep_alive`` which fails on Android (subprocess not
+        available).  The task runs for at most 24 hours and exits early on
+        consecutive 4xx errors (session gone).
+        """
+        existing = self._keep_alive_tasks.get(session_name)
+        if existing is not None and not existing.done():
+            existing.cancel()
+
+        task = asyncio.create_task(
+            self._keep_alive_loop(session_name, endpoint, auth_method)
+        )
+        self._keep_alive_tasks[session_name] = task
+
+    async def _keep_alive_loop(
+        self, session_name: str, endpoint: str, auth_method: str
+    ):
+        """Periodic keep-alive ping (60 s interval, max 24 h)."""
+        from colab_cli.auth import AuthProvider
+        from colab_cli.common import State
+
+        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
+        start = time.time()
+        max_dur = 24 * 3600
+        consecutive_4xx = 0
+
+        while time.time() - start < max_dur:
+            try:
+                st = State()
+                st.auth_provider = provider
+                await asyncio.to_thread(st.client.keep_alive_assignment, endpoint)
+                consecutive_4xx = 0
+            except Exception as e:
+                code = (
+                    getattr(e, "response", None) and e.response.status_code
+                )
+                if code is not None and 400 <= code < 500:
+                    consecutive_4xx += 1
+                    if consecutive_4xx >= 2:
+                        break
+                # Network blips are non-fatal — just retry next cycle
+            await asyncio.sleep(60)
