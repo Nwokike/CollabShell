@@ -7,7 +7,7 @@ import asyncio
 import flet as ft
 
 from core import tokens, constants
-from core.styles import section_header, build_banner_ad
+from core.styles import build_banner_ad
 from core.theme import AppColors
 from components.session_card import build_session_card
 
@@ -125,8 +125,6 @@ def build_home_view(
     )
 
     # ── Sessions List ─────────────────────────────────────────────────────────
-    sessions_section_header = section_header("ACTIVE SESSIONS")
-
     sessions_list = ft.Container(
         content=ft.Column(spacing=tokens.SPACE_SM),
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
@@ -206,6 +204,34 @@ def build_home_view(
         except Exception:
             state.is_loading = False
             await _update_sessions_ui()
+
+    sessions_section_header = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Text(
+                    "ACTIVE SESSIONS",
+                    size=tokens.FONT_SM,
+                    weight=ft.FontWeight.W_700,
+                    color=ft.Colors.PRIMARY,
+                    style=ft.TextStyle(letter_spacing=1),
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.REFRESH_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Refresh active sessions",
+                    on_click=lambda e: page.run_task(_load_sessions),
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding(
+            left=tokens.SPACE_LG,
+            right=tokens.SPACE_LG,
+            top=tokens.SPACE_MD,
+            bottom=tokens.SPACE_XS,
+        ),
+    )
 
     page.run_task(_load_sessions)
 

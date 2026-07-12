@@ -368,12 +368,19 @@ class ColabService:
                     pass  # Non-blocking: daemon will retry
 
                 st.store.add(s)
-                s.keep_alive_pid = spawn_keep_alive(
-                    endpoint,
-                    session_name,
-                    auth_provider=st.auth_provider,
-                    config_path=st.config_path,
-                )
+                try:
+                    s.keep_alive_pid = spawn_keep_alive(
+                        endpoint,
+                        session_name,
+                        auth_provider=st.auth_provider,
+                        config_path=st.config_path,
+                    )
+                except (PermissionError, OSError) as ex:
+                    logger.warning(
+                        "Could not spawn keep-alive background process (likely Android): %s",
+                        ex,
+                    )
+                    s.keep_alive_pid = None
                 st.store.add(s)
             else:
                 st.store.add(s)

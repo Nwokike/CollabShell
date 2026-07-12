@@ -398,7 +398,7 @@ def build_session_view(
         out = refs["output"].current
         if out:
             out.visible = True
-        page.run_task(_deferred_update)
+        page.update()
 
     def _set_cell_finished(index):
         if index >= len(cell_refs):
@@ -410,7 +410,7 @@ def build_session_view(
             play.visible = True
         if stop:
             stop.visible = False
-        page.run_task(_deferred_update)
+        page.update()
 
     def _append_cell_output(index, text_or_dict):
         if index >= len(cell_refs):
@@ -435,16 +435,16 @@ def build_session_view(
                 return
             # Convert \n to \r\n for xterm
             text = text.replace("\r\n", "\n").replace("\n", "\r\n")
-            terminal.write(text)
+            page.run_task(terminal.write, text)
             # Make output panel visible
             out_col = refs["output"].current
             if out_col:
                 out_col.visible = True
             now = time.monotonic()
             last = _output_update_ts.get(index, 0.0)
-            if now - last >= 0.15:
+            if last == 0.0 or now - last >= 0.15:
                 _output_update_ts[index] = now
-                page.run_task(_deferred_update)
+                page.update()
             return
 
         # Fallback: text-based output
@@ -477,9 +477,9 @@ def build_session_view(
         out_col.visible = True
         now = time.monotonic()
         last = _output_update_ts.get(index, 0.0)
-        if now - last >= 0.15:
+        if last == 0.0 or now - last >= 0.15:
             _output_update_ts[index] = now
-            page.run_task(_deferred_update)
+            page.update()
 
     def _clear_cell_output(index):
         if index >= len(cell_refs):
@@ -488,7 +488,7 @@ def build_session_view(
         # Clear xterm terminal if available
         terminal = refs.get("terminal")
         if terminal is not None:
-            terminal.clear()
+            page.run_task(terminal.clear)
         out_col = refs["output"].current
         if out_col:
             out_col.controls.clear()
@@ -605,7 +605,7 @@ def build_session_view(
 
         if terminal is not None:
             # Write the prompt to the terminal
-            terminal.write(prompt_str.replace("\n", "\r\n"))
+            page.run_task(terminal.write, prompt_str.replace("\n", "\r\n"))
 
             # Buffer user input from terminal keystrokes
             input_buffer = []
@@ -615,7 +615,7 @@ def build_session_view(
                 char = e.data if hasattr(e, "data") else str(e)
                 if char in ("\r", "\n"):
                     # Enter pressed — submit
-                    terminal.write("\r\n")
+                    page.run_task(terminal.write, "\r\n")
                     user_input["value"] = "".join(input_buffer)
                     terminal.on_output = original_on_output
                     input_event.set()
@@ -623,13 +623,13 @@ def build_session_view(
                     # Backspace
                     if input_buffer:
                         input_buffer.pop()
-                        terminal.write("\b \b")
+                        page.run_task(terminal.write, "\b \b")
                 else:
                     input_buffer.append(char)
                     if is_password:
-                        terminal.write("*")
+                        page.run_task(terminal.write, "*")
                     else:
-                        terminal.write(char)
+                        page.run_task(terminal.write, char)
 
             terminal.on_output = _terminal_input_handler
 
@@ -686,7 +686,7 @@ def build_session_view(
         if 0 <= index < len(cell_refs):
             terminal = cell_refs[index].get("terminal")
             if terminal is not None and hasattr(terminal, "_initial_text"):
-                terminal.write(terminal._initial_text)
+                page.run_task(terminal.write, terminal._initial_text)
                 del terminal._initial_text
 
         def _on_output(text_or_dict):

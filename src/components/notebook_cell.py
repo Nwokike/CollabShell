@@ -341,7 +341,9 @@ def build_notebook_cell(
                                 content=ft.Image(
                                     src_base64=b64_img, fit=ft.ImageFit.CONTAIN
                                 ),
-                                margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
+                                margin=ft.Margin(
+                                    0, tokens.SPACE_SM, 0, tokens.SPACE_SM
+                                ),
                             )
                         )
                     except Exception as e:
