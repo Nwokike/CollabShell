@@ -200,6 +200,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "flet" },
     { name = "flet-ads" },
+    { name = "flet-xterm" },
     { name = "google-colab-cli" },
 ]
 
@@ -212,6 +213,7 @@ dev = [
 requires-dist = [
     { name = "flet", specifier = ">=0.85.3" },
     { name = "flet-ads", specifier = ">=0.85.0" },
+    { name = "flet-xterm", editable = "../flet-xterm" },
     { name = "google-colab-cli", specifier = ">=0.6.0" },
 ]
 
@@ -320,6 +322,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d2/e6/f36b398c86f0d3e5201754115512a31fd43328df134a20236fbf678d99f3/flet_ads-0.85.3.tar.gz", hash = "sha256:a4aeb422a751f1b5636c072709db154c41fc0602fdbdca4751c8dbdc1c494e88", size = 12797, upload-time = "2026-06-08T01:56:51.374Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/1c/6f2244badcd7827788c54703cb2896610ef0831e364695ad64bd9f659475/flet_ads-0.85.3-py3-none-any.whl", hash = "sha256:b315411a9c1996398800b53e5885ed33452dd4cb5f58ea6c83f58005dd09f8bf", size = 16464, upload-time = "2026-06-08T01:56:52.347Z" },
+]
+
+[[package]]
+name = "flet-xterm"
+version = "0.1.0"
+source = { editable = "../flet-xterm" }
+dependencies = [
+    { name = "flet" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "flet", specifier = ">=0.85.3" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extras = ["python"] },
 ]
 
 [[package]]

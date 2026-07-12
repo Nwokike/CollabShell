@@ -413,6 +413,7 @@ def build_session_view(
         page.update()
 
     def _append_cell_output(index, text_or_dict):
+        print(f"DEBUG: _append_cell_output called with: {text_or_dict}", flush=True)
         if index >= len(cell_refs):
             return
         refs = cell_refs[index]
@@ -690,6 +691,7 @@ def build_session_view(
                 del terminal._initial_text
 
         def _on_output(text_or_dict):
+            print(f"DEBUG: _on_output received: {text_or_dict}", flush=True)
             if isinstance(text_or_dict, str):
                 cell["outputs"].append({"type": "stream", "text": text_or_dict})
             elif isinstance(text_or_dict, dict):

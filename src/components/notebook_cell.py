@@ -236,7 +236,11 @@ def build_notebook_cell(
     # ── Code Cell ──
 
     # Build terminal or text-based output
-    if XTERM_AVAILABLE:
+    # Custom Flutter controls are only compiled for Web and Mobile targets in our environment.
+    # On desktop development machines running via `flet run` (non-compiled), we fall back to text.
+    is_supported_platform = page.platform in ["android", "ios", "web"]
+
+    if XTERM_AVAILABLE and is_supported_platform:
         terminal = FletXterm(
             theme_name="defaultTheme",
             cursor_type="block",
@@ -306,7 +310,7 @@ def build_notebook_cell(
             padding=tokens.SPACE_SM,
             bgcolor=AppColors.TERMINAL_BG,
             border_radius=tokens.RADIUS_SM,
-            visible=len(outputs) > 0 or is_running,
+            visible=True,
             width=float("inf"),
         )
     else:
@@ -398,7 +402,7 @@ def build_notebook_cell(
             padding=tokens.SPACE_SM,
             bgcolor=AppColors.TERMINAL_BG,
             border_radius=tokens.RADIUS_SM,
-            visible=len(output_controls) > 0 or is_running,
+            visible=True,
             width=float("inf"),
         )
 
