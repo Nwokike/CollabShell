@@ -326,6 +326,8 @@ def build_notebook_cell(
         # Fallback: text-based output (original behavior)
         output_controls = []
         for out in outputs:
+            if len(output_controls) >= 1000:
+                break
             if out.get("type") == "stream":
                 is_err = out.get("name") == "stderr"
                 text = out.get("text", "")

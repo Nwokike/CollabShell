@@ -373,6 +373,7 @@ def build_session_view(
     cell_refs = []
     _rebuild_throttle = 0.0
     _output_update_ts = {}
+    _save_debounce_handle = None
 
     async def _deferred_update():
         """Yield to the event loop then push the update — fixes mobile rendering."""
@@ -380,7 +381,21 @@ def build_session_view(
         page.update()
 
     def _save_notebook():
+        """Immediately persist the notebook.  Used for structural changes
+        (add/delete/move cell)."""
         page.run_task(storage.save_notebook, session_name, state.notebook_cells)
+
+    def _debounced_save():
+        """Debounce per-keystroke save (1 s) so rapid typing doesn't thrash
+        the JSON writer."""
+        nonlocal _save_debounce_handle
+        if _save_debounce_handle is not None:
+            _save_debounce_handle.cancel()
+        try:
+            loop = asyncio.get_running_loop()
+            _save_debounce_handle = loop.call_later(1.0, _save_notebook)
+        except RuntimeError:
+            _save_notebook()
 
     # ── Targeted per-cell helpers ─────────────────────────────────────────────
 
@@ -468,6 +483,11 @@ def build_session_view(
             return
         from components.ansi_parser import parse_ansi_to_flet_text
 
+        # Cap text-based output controls to prevent memory exhaustion
+        _MAX_OUTPUT_CONTROLS = 5000
+        if len(out_col.controls) >= _MAX_OUTPUT_CONTROLS:
+            out_col.controls.pop(0)
+
         out_col.controls.append(
             parse_ansi_to_flet_text(
                 raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
@@ -537,7 +557,7 @@ def build_session_view(
             "on_delete": lambda: _delete_cell(idx),
             "on_move_up": lambda: _move_cell(idx, -1),
             "on_move_down": lambda: _move_cell(idx, 1),
-            "on_change": _save_notebook,
+            "on_change": _debounced_save,  # per-keystroke → debounced
             "on_clear_output": _clear,
         }
 
@@ -694,10 +714,14 @@ def build_session_view(
                     page.run_task(terminal.write, initial_text)
 
         def _on_output(text_or_dict):
+            # Cap the outputs list at 5000 entries to avoid memory exhaustion
+            _MAX_OUTPUT_ENTRIES = 5000
             if isinstance(text_or_dict, str):
                 cell["outputs"].append({"type": "stream", "text": text_or_dict})
             elif isinstance(text_or_dict, dict):
                 cell["outputs"].append(text_or_dict)
+            if len(cell["outputs"]) > _MAX_OUTPUT_ENTRIES:
+                cell["outputs"].pop(0)
             page.loop.call_soon_threadsafe(_append_cell_output, index, text_or_dict)
 
         try:

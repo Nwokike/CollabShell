@@ -164,7 +164,16 @@ def apply_storage_patches():
                 has_file = True
                 break
         if not has_file:
-            file_handler = logging.FileHandler(os.path.join(storage_dir, "colab.log"))
+            log_path = os.path.join(storage_dir, "colab.log")
+            # Simple log rotation: keep last 5 MB before rolling
+            _MAX_LOG_BYTES = 5 * 1024 * 1024
+            if os.path.exists(log_path) and os.path.getsize(log_path) >= _MAX_LOG_BYTES:
+                rotated = log_path + ".1"
+                try:
+                    os.replace(log_path, rotated)
+                except OSError:
+                    pass
+            file_handler = logging.FileHandler(log_path)
             file_handler.setFormatter(logging.Formatter(log_format))
             logger.addHandler(file_handler)
 
