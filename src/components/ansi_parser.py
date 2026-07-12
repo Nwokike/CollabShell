@@ -3,8 +3,9 @@ from rich.ansi import AnsiDecoder
 
 from core.theme import AppColors
 
-# Reusable decoder instance
-_decoder = AnsiDecoder()
+# Maximum number of styled spans we produce before falling back to plain text
+# (protects against memory blowout from absurdly long terminal dumps).
+_MAX_SPANS = 2000
 
 
 def _rich_color_to_hex(color):
@@ -90,25 +91,39 @@ def parse_ansi_to_flet_text(
             color=default_color,
         )
 
-    decoded_lines = list(_decoder.decode(cleaned_text))
+    # Create a fresh AnsiDecoder per call so the internal style state doesn't
+    # leak between independent parse invocations.
+    decoder = AnsiDecoder()
+    decoded_lines = list(decoder.decode(cleaned_text))
 
     flet_spans = []
+    span_count = 0
+
     for line_idx, rich_text in enumerate(decoded_lines):
         if line_idx > 0:
+            if span_count >= _MAX_SPANS:
+                break
             flet_spans.append(
                 ft.TextSpan("\n", style=ft.TextStyle(color=default_color))
             )
+            span_count += 1
 
         if not rich_text.spans:
+            if span_count >= _MAX_SPANS:
+                break
             flet_spans.append(
                 ft.TextSpan(rich_text.plain, style=ft.TextStyle(color=default_color))
             )
+            span_count += 1
             continue
 
         last_idx = 0
         spans = sorted(rich_text.spans, key=lambda s: s.start)
 
         for span in spans:
+            if span_count >= _MAX_SPANS:
+                break
+
             # Unstyled text before this span
             if span.start > last_idx:
                 flet_spans.append(
@@ -117,8 +132,11 @@ def parse_ansi_to_flet_text(
                         style=ft.TextStyle(color=default_color),
                     )
                 )
+                span_count += 1
 
             # Styled text
+            if span_count >= _MAX_SPANS:
+                break
             flet_color = _rich_color_to_hex(span.style.color) or default_color
             weight = ft.FontWeight.BOLD if span.style.bold else None
             italic = span.style.italic
@@ -150,15 +168,22 @@ def parse_ansi_to_flet_text(
                     ),
                 )
             )
+            span_count += 1
             last_idx = span.end
+
+        if span_count >= _MAX_SPANS:
+            break
 
         # Remaining unstyled text
         if last_idx < len(rich_text.plain):
+            if span_count >= _MAX_SPANS:
+                break
             flet_spans.append(
                 ft.TextSpan(
                     rich_text.plain[last_idx:], style=ft.TextStyle(color=default_color)
                 )
             )
+            span_count += 1
 
     return ft.Text(
         spans=flet_spans, size=default_size, font_family="RobotoMono", no_wrap=False

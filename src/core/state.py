@@ -21,7 +21,7 @@ class AppState:
     notebook_cells: list = []
 
     # ── File browser ──────────────────────────────────────────────────────────
-    current_path: str = "content"
+    current_path: str = "/content"
     file_listing: list = []
     is_browsing: bool = False
 

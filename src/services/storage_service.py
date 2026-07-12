@@ -9,24 +9,28 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
+import re
 import time
 from pathlib import Path
 
 import flet as ft
 
+# Shared storage directory resolver — matches core.storage_patch so desktop
+# and mobile never diverge.
+from core.storage_patch import resolve_storage_dir
+
 logger = logging.getLogger(__name__)
 
 # Use Flet sandbox data storage path on Android/iOS mobile to avoid permission issues
-storage_env = os.getenv("FLET_APP_STORAGE_DATA")
-if storage_env:
-    _STORAGE_DIR = Path(storage_env) / "colab-cli"
-else:
-    # On desktop, the user wants the storage folder beside src.
-    _STORAGE_DIR = Path.cwd() / "storage"
+_STORAGE_DIR = Path(resolve_storage_dir())
 
 _STORAGE_FILE = _STORAGE_DIR / "storage.json"
 _WRITE_DEBOUNCE_SEC = 1.0
+
+
+def _slugify(name: str) -> str:
+    """Sanitize session names into valid filename tokens."""
+    return re.sub(r"[^a-zA-Z0-9_\-]", "_", name)
 
 
 class StorageService:
@@ -61,9 +65,19 @@ class StorageService:
     def _save_now(self) -> None:
         try:
             _STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-            _STORAGE_FILE.write_bytes(
-                json.dumps(self._data, ensure_ascii=False, indent=2).encode("utf-8")
+            data_bytes = json.dumps(self._data, ensure_ascii=False, indent=2).encode(
+                "utf-8"
             )
+            # Backup the current file before overwriting (only if content changed)
+            if _STORAGE_FILE.exists():
+                old = _STORAGE_FILE.read_bytes()
+                if old != data_bytes:
+                    bak = _STORAGE_FILE.with_suffix(".json.bak")
+                    bak.write_bytes(old)
+            # Atomic write via temp file + rename
+            tmp = _STORAGE_FILE.with_suffix(".json.tmp")
+            tmp.write_bytes(data_bytes)
+            tmp.replace(_STORAGE_FILE)
             self._dirty = False
             self._last_write = time.monotonic()
         except Exception as e:
@@ -118,14 +132,16 @@ class StorageService:
                 self._save_now()
 
     def _get_notebook_file(self, session_name: str) -> Path:
-        return _STORAGE_DIR / f"notebook_{session_name}.json"
+        return _STORAGE_DIR / f"notebook_{_slugify(session_name)}.json"
 
     async def save_notebook(self, session_name: str, cells: list[dict]) -> None:
         try:
             nb_file = self._get_notebook_file(session_name)
-            nb_file.write_bytes(
-                json.dumps(cells, ensure_ascii=False, indent=2).encode("utf-8")
-            )
+            # Atomic write: temp + rename (same pattern as _save_now)
+            data_bytes = json.dumps(cells, ensure_ascii=False, indent=2).encode("utf-8")
+            tmp = nb_file.with_suffix(".json.tmp")
+            tmp.write_bytes(data_bytes)
+            tmp.replace(nb_file)
         except Exception as e:
             logger.warning("StorageService.save_notebook failed: %s", e)
 
@@ -141,12 +157,22 @@ class StorageService:
         return []
 
     async def cleanup_orphaned_notebooks(self, active_session_names: list[str]) -> None:
-        """Deletes notebook history for sessions that no longer exist."""
+        """Deletes notebook history for sessions that no longer exist.
+
+        Safety: if *active_session_names* is empty we short-circuit so that a
+        transient failure when refreshing the session list does **not** delete
+        every cached notebook (data-loss prevention).
+        """
+        if not active_session_names:
+            logger.debug("cleanup_orphaned_notebooks: empty list — skipped")
+            return
         try:
             if not _STORAGE_DIR.exists():
                 return
 
-            active_files = [f"notebook_{name}.json" for name in active_session_names]
+            active_files = {
+                f"notebook_{_slugify(name)}.json" for name in active_session_names
+            }
 
             for f in _STORAGE_DIR.glob("notebook_*.json"):
                 if f.name not in active_files:

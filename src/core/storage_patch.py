@@ -4,17 +4,27 @@ import os
 from pathlib import Path
 
 
-def apply_storage_patches():
-    # 1. Resolve storage directory
+def resolve_storage_dir() -> str:
+    """Return the canonical colab-cli storage directory path.
+
+    On mobile the sandbox path (FLET_APP_STORAGE_DATA / colab-cli) is used;
+    on desktop the 'storage' folder beside the project root is used.
+    Both :func:`apply_storage_patches` and :class:`StorageService` call this
+    so they never diverge.
+    """
     storage_env = os.getenv("FLET_APP_STORAGE_DATA")
     if storage_env:
         storage_dir = os.path.join(storage_env, "colab-cli")
     else:
-        # Local PC beside 'src'
-        # __file__ is /home/.../Colab/src/core/storage_patch.py
-        # parent is core/, parent.parent is src/, parent.parent.parent is Colab/ (project root)
+        # __file__ …/Colab/src/core/storage_patch.py → project root
         project_root = Path(__file__).resolve().parent.parent.parent
         storage_dir = os.path.join(project_root, "storage")
+    return storage_dir
+
+
+def apply_storage_patches():
+    # 1. Resolve storage directory — shared with StorageService
+    storage_dir = resolve_storage_dir()
 
     os.makedirs(storage_dir, exist_ok=True)
 

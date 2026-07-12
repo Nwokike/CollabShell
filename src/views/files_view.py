@@ -23,7 +23,7 @@ def build_files_view(
 ) -> ft.View:
     """Build the file browser view for a session."""
 
-    current_path = state.current_path or "content"
+    current_path = state.current_path or "/content"
     files = []
     is_loading = False
 
@@ -157,23 +157,36 @@ def build_files_view(
         page.show_dialog(action_sheet)
 
     # ── Upload ────────────────────────────────────────────────────────────────
-    def _on_upload_picked(e: ft.FilePickerResultEvent):
-        if not page.route.startswith("/files"):
+    async def _on_upload_click(e):
+        if not file_picker:
             return
-        if e.files:
-            local_path = e.files[0].path
+        files = await file_picker.pick_files(
+            dialog_title="Select file to upload",
+            with_data=True,
+        )
+        if not files:
+            return
+        picked = files[0]
+        if picked.bytes is not None:
+            # Android: content URI — write bytes to a temp file for the SDK
+            tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
+            os.makedirs(tmp_dir, exist_ok=True)
+            tmp_path = os.path.join(tmp_dir, picked.name)
+            with open(tmp_path, "wb") as f:
+                f.write(picked.bytes)
+            remote_path = f"{current_path}/{picked.name}"
+            try:
+                await _do_upload(tmp_path, remote_path)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        else:
+            local_path = picked.path
             filename = os.path.basename(local_path)
             remote_path = f"{current_path}/{filename}"
-            page.run_task(_do_upload, local_path, remote_path)
+            await _do_upload(local_path, remote_path)
 
-    if file_picker:
-        file_picker.on_result = _on_upload_picked
-
-    async def _on_upload_click(e):
-        if file_picker:
-            await file_picker.pick_files(dialog_title="Select file to upload")
-
-    async def _do_upload(local_path, remote_path):
+    async def _do_upload(local_path: str, remote_path: str):
         state.is_uploading = True
         if snack:
             snack(f"Uploading {os.path.basename(local_path)}...")

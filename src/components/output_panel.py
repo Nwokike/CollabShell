@@ -50,11 +50,9 @@ def build_output_panel(
         text_to_copy = "\n".join(output_lines)
         if text_to_copy and e.control.page:
             await e.control.page.clipboard.set(text_to_copy)
-            e.control.page.snack_bar = ft.SnackBar(
-                ft.Text("Output copied to clipboard!")
+            e.control.page.show_dialog(
+                ft.SnackBar(ft.Text("Output copied to clipboard!"))
             )
-            e.control.page.snack_bar.open = True
-            e.control.page.update()
 
     header = ft.Container(
         content=ft.Row(

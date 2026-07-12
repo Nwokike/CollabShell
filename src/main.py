@@ -56,15 +56,15 @@ async def main(page: ft.Page):
     def on_error(e):
         logger.error("Page error: %s", e.data)
         try:
-            page.snack_bar = ft.SnackBar(
-                content=ft.Text(
-                    "Something went wrong. Please try again.",
-                    color=ft.Colors.WHITE,
-                ),
-                bgcolor=ft.Colors.BLACK,
+            page.show_dialog(
+                ft.SnackBar(
+                    content=ft.Text(
+                        "Something went wrong. Please try again.",
+                        color=ft.Colors.WHITE,
+                    ),
+                    bgcolor=ft.Colors.BLACK,
+                )
             )
-            page.snack_bar.open = True
-            page.update()
         except Exception:
             pass
 
@@ -147,9 +147,7 @@ async def main(page: ft.Page):
 
     def _snack(msg: str):
         """Show a snackbar with the given message."""
-        page.snack_bar = ft.SnackBar(content=ft.Text(msg))
-        page.snack_bar.open = True
-        page.update()
+        page.show_dialog(ft.SnackBar(content=ft.Text(msg)))
 
     def _build_nav_bar(active_route: str):
         routes = ["/home", "/history", "/settings"]
@@ -555,14 +553,20 @@ async def main(page: ft.Page):
     page.on_disconnect = on_disconnect
 
     # ── Wire up routing ───────────────────────────────────────────────────────
-    page.on_route_change = route_change
+    # Navigation is driven explicitly via navigate()/route_change() (which set
+    # page.route and rebuild views). We deliberately do NOT register
+    # on_route_change: assigning page.route already fires the route-change
+    # event, so registering it would cause every navigation to run twice.
+    page.on_route_change = None
 
     async def view_pop(e):
         page.views.pop()
         if page.views:
             top = page.views[-1]
             page.route = top.route
-        page.update()
+        else:
+            page.route = "/home"
+        await route_change()
 
     page.on_view_pop = view_pop
 

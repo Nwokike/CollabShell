@@ -40,23 +40,22 @@ def build_run_view(
         page.update()
 
     file_picker = getattr(page, "file_picker", None)
-
-    def _on_file_picked(e: ft.FilePickerResultEvent):
-        if page.route != "/run":
-            return
-        if e.files and script_path_ref.current:
-            script_path_ref.current.value = e.files[0].path
-            page.update()
-
-    if file_picker:
-        file_picker.on_result = _on_file_picked
+    _picked_file = {}  # {"bytes": bytes, "name": str}, set by _on_browse_click
 
     async def _on_browse_click(e):
-        if file_picker:
-            await file_picker.pick_files(
-                allowed_extensions=["py"],
-                dialog_title="Select Python Script",
-            )
+        nonlocal _picked_file
+        if not file_picker:
+            return
+        files = await file_picker.pick_files(
+            allowed_extensions=["py"],
+            dialog_title="Select Python Script",
+            with_data=True,
+        )
+        if files and script_path_ref.current:
+            f = files[0]
+            script_path_ref.current.value = f.name
+            _picked_file = {"bytes": f.bytes, "name": f.name}
+            page.update()
 
     hardware_type = "CPU"
 
@@ -124,13 +123,18 @@ def build_run_view(
             output_lines.append(f"[*] Session '{sn}' created. Running script...")
             page.update()
 
-            # Read and execute the script
-            with open(script, "r", encoding="utf-8") as f:
-                code = f.read()
+            # Read the script — prefer bytes (from mobile file picker) over path
+            if _picked_file.get("bytes"):
+                code = _picked_file["bytes"].decode("utf-8")
+                script_name = _picked_file.get("name", script)
+            else:
+                with open(script, "r", encoding="utf-8") as f:
+                    code = f.read()
+                script_name = script
 
             # Inject sys.argv if args provided
             if args:
-                argv_setup = f"import sys; sys.argv = {repr([script] + args)}\n"
+                argv_setup = f"import sys; sys.argv = {repr([script_name] + args)}\n"
                 code = argv_setup + code
 
             await colab_service.exec_code(

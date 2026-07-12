@@ -15,8 +15,8 @@ def build_session_card(
     session dict keys: name, accelerator, variant, status, running, last_execution, accelerator_label
     """
     name = session.get("name", "?")
-    session.get("accelerator_label", "CPU")
     variant = session.get("variant", "DEFAULT")
+    accel_str = session.get("accelerator_label") or session.get("accelerator", "NONE")
     status = session.get("status", "IDLE")
     running = session.get("running")
     last_exec = session.get("last_execution")
@@ -28,8 +28,6 @@ def build_session_card(
         subtitle = f"Last: {last_exec.get('file', '')} at {last_exec.get('time', '')}"
     elif status == "IDLE":
         subtitle = "Ready for commands"
-
-    accel_str = session.get("accelerator", "NONE")
 
     return ft.Container(
         content=ft.Row(

@@ -85,12 +85,22 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            self.interstitial = fta.InterstitialAd(
+            new_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: None,
-                on_close=self._handle_close,
+                on_close=lambda e: self.page.run_task(self._handle_close, e),
             )
+            # InterstitialAd is a Service and must be mounted on the page to be
+            # displayed. Replace any previously mounted instance so re-preloading
+            # (e.g. after an ad closes) does not leak services.
+            if (
+                self.interstitial is not None
+                and self.interstitial in self.page.services
+            ):
+                self.page.services.remove(self.interstitial)
+            self.interstitial = new_ad
+            self.page.services.append(self.interstitial)
         except Exception:
             self.interstitial = None
 

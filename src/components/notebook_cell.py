@@ -47,6 +47,7 @@ def build_notebook_cell(
         "output": output_ref,
         "code_input": editor_ref,
         "terminal": None,  # Will hold FletXterm instance if available
+        "initial_text": "",  # Replayed into the terminal before each run
     }
 
     def _handle_change(e):
@@ -68,35 +69,39 @@ def build_notebook_cell(
                     text_to_copy += data["text/plain"] + "\n"
         if text_to_copy:
             await ft.Clipboard().set(text_to_copy.strip())
-            page.snack_bar = ft.SnackBar(ft.Text("Output copied to clipboard!"))
-            page.snack_bar.open = True
-            page.update()
+            page.show_dialog(
+                ft.SnackBar(ft.Text("Output copied to clipboard!"))
+            )
 
     # ── Cell Actions ──
-    actions_row = ft.Row(
-        controls=[
-            ft.IconButton(
-                ft.Icons.ARROW_UPWARD_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                tooltip="Move Up",
-                on_click=lambda e: on_move_up() if on_move_up else None,
-            ),
-            ft.IconButton(
-                ft.Icons.ARROW_DOWNWARD_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                tooltip="Move Down",
-                on_click=lambda e: on_move_down() if on_move_down else None,
-            ),
-            ft.IconButton(
-                ft.Icons.DELETE_OUTLINE_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                icon_color=AppColors.ERROR,
-                tooltip="Delete Cell",
-                on_click=lambda e: on_delete() if on_delete else None,
-            ),
-        ],
-        spacing=0,
-    )
+    # A Flutter control can only have a single parent, so build a fresh
+    # instance wherever the actions are needed (markdown edit, markdown
+    # render, and code cells would otherwise attempt to share one control).
+    def _make_actions_row():
+        return ft.Row(
+            controls=[
+                ft.IconButton(
+                    ft.Icons.ARROW_UPWARD_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Move Up",
+                    on_click=lambda e: on_move_up() if on_move_up else None,
+                ),
+                ft.IconButton(
+                    ft.Icons.ARROW_DOWNWARD_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Move Down",
+                    on_click=lambda e: on_move_down() if on_move_down else None,
+                ),
+                ft.IconButton(
+                    ft.Icons.DELETE_OUTLINE_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    icon_color=AppColors.ERROR,
+                    tooltip="Delete Cell",
+                    on_click=lambda e: on_delete() if on_delete else None,
+                ),
+            ],
+            spacing=0,
+        )
 
     if cell_type == "markdown":
         # ── Markdown Cell (unchanged) ──
@@ -175,7 +180,7 @@ def build_notebook_cell(
                             height=28,
                             style=ft.ButtonStyle(padding=ft.Padding(12, 0, 12, 0)),
                         ),
-                        actions_row,
+                        _make_actions_row(),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -211,7 +216,7 @@ def build_notebook_cell(
                                 tooltip="Edit Markdown",
                                 on_click=_edit,
                             ),
-                            actions_row,
+                            _make_actions_row(),
                         ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
@@ -236,9 +241,13 @@ def build_notebook_cell(
     # ── Code Cell ──
 
     # Build terminal or text-based output
-    # Custom Flutter controls are only compiled for Web and Mobile targets in our environment.
-    # On desktop development machines running via `flet run` (non-compiled), we fall back to text.
-    is_supported_platform = page.platform in ["android", "ios", "web"]
+    # The FletXterm custom control is compiled into the mobile (and web) builds,
+    # so enable it on those targets and fall back to text on desktop.
+    is_supported_platform = page.platform in (
+        ft.PagePlatform.ANDROID,
+        ft.PagePlatform.IOS,
+        ft.PagePlatform.WEB,
+    )
 
     if XTERM_AVAILABLE and is_supported_platform:
         terminal = FletXterm(
@@ -268,7 +277,7 @@ def build_notebook_cell(
                 if "text/plain" in data:
                     initial_text += data["text/plain"].replace("\n", "\r\n")
         if initial_text:
-            terminal._initial_text = initial_text
+            refs["initial_text"] = initial_text
 
         output_actions = ft.Row(
             controls=[
@@ -343,7 +352,7 @@ def build_notebook_cell(
                         output_controls.append(
                             ft.Container(
                                 content=ft.Image(
-                                    src_base64=b64_img, fit=ft.ImageFit.CONTAIN
+                                    src_base64=b64_img, fit=ft.BoxFit.CONTAIN
                                 ),
                                 margin=ft.Margin(
                                     0, tokens.SPACE_SM, 0, tokens.SPACE_SM
@@ -462,10 +471,10 @@ def build_notebook_cell(
                 ft.Container(
                     content=ft.Row(
                         controls=[
-                            play_button,
+                                play_button,
                             stop_row,
                             ft.Container(expand=True),
-                            actions_row,
+                            _make_actions_row(),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,

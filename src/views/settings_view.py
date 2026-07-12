@@ -25,9 +25,7 @@ def build_settings_view(
     """Build the settings view with every CLI flag exposed."""
 
     def _snack(msg: str):
-        page.snack_bar = ft.SnackBar(content=ft.Text(msg))
-        page.snack_bar.open = True
-        page.update()
+        page.show_dialog(ft.SnackBar(content=ft.Text(msg)))
 
     # ── PREFERENCES ───────────────────────────────────────────────────────────
     theme_mode_state = ["system"]

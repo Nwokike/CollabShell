@@ -250,17 +250,13 @@ def build_session_view(
         )
 
     # ── IPYNB Export/Import ────────────────────────────────────────────────────
-    _pending_file_op = None
-
-    def _on_file_result(e: ft.FilePickerResultEvent):
-        nonlocal _pending_file_op
-        op = _pending_file_op
-        _pending_file_op = None
-
-        if op == "export" and e.path:
+    # FilePicker results are awaited directly (pick_files/save_file return the
+    # selection) rather than via the deprecated on_result callback.
+    async def _on_file_result(op: str, path: str = None, files=None):
+        if op == "export" and path:
             try:
                 ipynb = cells_to_ipynb(state.notebook_cells)
-                Path(e.path).write_text(
+                Path(path).write_text(
                     json.dumps(ipynb, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
                 if snack:
@@ -269,10 +265,15 @@ def build_session_view(
                 if snack:
                     snack(f"❌ Export failed: {ex}")
 
-        elif op == "import" and e.files:
+        elif op == "import" and files:
             try:
-                path = e.files[0].path
-                raw = Path(path).read_bytes()
+                picked = files[0]
+                # On Android the picker returns file contents (bytes) rather than a
+                # filesystem path, so prefer bytes when available.
+                if picked.bytes is not None:
+                    raw = picked.bytes
+                else:
+                    raw = Path(picked.path).read_bytes()
                 ipynb = json.loads(raw)
                 cells = ipynb_to_cells(ipynb)
                 state.notebook_cells = cells
@@ -284,23 +285,21 @@ def build_session_view(
                 if snack:
                     snack(f"❌ Import failed: {ex}")
 
-    page.file_picker.on_result = _on_file_result
-    page.update()
-
-    def _on_export_ipynb(e):
-        nonlocal _pending_file_op
-        _pending_file_op = "export"
-        page.file_picker.save_file(
+    async def _on_export_ipynb(e):
+        path = await page.file_picker.save_file(
             allowed_extensions=["ipynb"],
             file_name=f"{session_name}.ipynb",
         )
+        if path:
+            await _on_file_result("export", path=path)
 
-    def _on_import_ipynb(e):
-        nonlocal _pending_file_op
-        _pending_file_op = "import"
-        page.file_picker.pick_files(
+    async def _on_import_ipynb(e):
+        files = await page.file_picker.pick_files(
             allowed_extensions=["ipynb"],
+            with_data=True,
         )
+        if files:
+            await _on_file_result("import", files=files)
 
     def _action_chip(icon, label, on_click, color=None):
         icon_color = color or ft.Colors.ON_SURFACE
@@ -413,7 +412,6 @@ def build_session_view(
         page.update()
 
     def _append_cell_output(index, text_or_dict):
-        print(f"DEBUG: _append_cell_output called with: {text_or_dict}", flush=True)
         if index >= len(cell_refs):
             return
         refs = cell_refs[index]
@@ -686,12 +684,12 @@ def build_session_view(
         # Write initial text to terminal if it was saved
         if 0 <= index < len(cell_refs):
             terminal = cell_refs[index].get("terminal")
-            if terminal is not None and hasattr(terminal, "_initial_text"):
-                page.run_task(terminal.write, terminal._initial_text)
-                del terminal._initial_text
+            if terminal is not None:
+                initial_text = cell_refs[index].get("initial_text")
+                if initial_text:
+                    page.run_task(terminal.write, initial_text)
 
         def _on_output(text_or_dict):
-            print(f"DEBUG: _on_output received: {text_or_dict}", flush=True)
             if isinstance(text_or_dict, str):
                 cell["outputs"].append({"type": "stream", "text": text_or_dict})
             elif isinstance(text_or_dict, dict):

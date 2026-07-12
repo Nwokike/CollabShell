@@ -195,11 +195,6 @@ def build_home_view(
             state.active_sessions = sessions
             state.is_loading = False
 
-            # Cleanup orphaned history files automatically
-            if storage:
-                active_names = [s["name"] for s in state.active_sessions]
-                page.run_task(storage.cleanup_orphaned_notebooks, active_names)
-
             await _update_sessions_ui()
         except Exception:
             state.is_loading = False
