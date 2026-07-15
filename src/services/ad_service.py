@@ -40,6 +40,7 @@ class AdService:
         self.page = page
         self.interstitial = None
         self._on_close: Optional[Callable] = None
+        self._active_rewarded_ad = None
 
     @property
     def banner_id(self) -> str:

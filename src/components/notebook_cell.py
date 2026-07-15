@@ -39,7 +39,7 @@ def build_notebook_cell(
 
     play_btn_ref = ft.Ref[ft.IconButton]()
     stop_row_ref = ft.Ref[ft.Row]()
-    output_ref = ft.Ref[ft.Column]()
+    output_ref = ft.Ref[ft.ListView]()
 
     refs = {
         "play_btn": play_btn_ref,
@@ -241,13 +241,10 @@ def build_notebook_cell(
     # ── Code Cell ──
 
     # Build terminal or text-based output
-    # The FletXterm custom control is compiled into the mobile (and web) builds,
-    # so enable it on those targets and fall back to text on desktop.
-    is_supported_platform = page.platform in (
-        ft.PagePlatform.ANDROID,
-        ft.PagePlatform.IOS,
-        ft.PagePlatform.WEB,
-    )
+    # The FletXterm custom control is compiled into the Android build.
+    # On a desktop dev server (or if xterm is unavailable) we fall back to
+    # text-based ANSI output.
+    is_supported_platform = page.platform.is_mobile() if page.platform else False
 
     if XTERM_AVAILABLE and is_supported_platform:
         terminal = FletXterm(
@@ -406,8 +403,17 @@ def build_notebook_cell(
 
         output_panel = ft.Container(
             content=ft.Column(
-                ref=output_ref,
-                controls=output_controls + [output_actions],
+                controls=[
+                    ft.ListView(
+                        ref=output_ref,
+                        controls=output_controls,
+                        spacing=tokens.SPACE_XXS,
+                        auto_scroll=True,
+                        height=320,
+                        expand=False,
+                    ),
+                    output_actions,
+                ],
                 spacing=tokens.SPACE_XXS,
             ),
             padding=tokens.SPACE_SM,

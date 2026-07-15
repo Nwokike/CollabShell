@@ -712,6 +712,8 @@ def build_session_view(
                 initial_text = cell_refs[index].get("initial_text")
                 if initial_text:
                     page.run_task(terminal.write, initial_text)
+                    # Clear so a re-run doesn't replay stale output
+                    cell_refs[index]["initial_text"] = ""
 
         def _on_output(text_or_dict):
             # Cap the outputs list at 5000 entries to avoid memory exhaustion

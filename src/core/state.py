@@ -44,7 +44,6 @@ class AppState:
     # ── UI ────────────────────────────────────────────────────────────────────
     theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
     is_loading: bool = False
-    cli_version: str = ""
     cli_available: bool = False
     update_available_version: str | None = None
     onboarding_done: bool = False

@@ -243,9 +243,7 @@ def build_onboarding_view(
                                 color=AppColors.SUCCESS,
                             ),
                             ft.Text(
-                                f"Colab CLI v{state.cli_version}"
-                                if state.cli_version
-                                else "Colab CLI ready",
+                                "Colab CLI ready",
                                 size=tokens.FONT_SM,
                             ),
                         ],

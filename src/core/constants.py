@@ -59,7 +59,6 @@ LBL_EXPORT_LOG = "Export Log"
 LBL_MANAGE_COMPUTE = "Manage Compute"
 LBL_SIGN_IN = "Sign in to Google"
 LBL_RE_AUTH = "Re-authenticate"
-LBL_CHECK_UPDATES = "Check for Updates"
 
 # ── Error messages ────────────────────────────────────────────────────────────
 ERR_NETWORK = "Network error. Check your connection."

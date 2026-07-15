@@ -47,7 +47,6 @@ def _format_size(size_bytes) -> str:
 def build_file_item(
     file_info: dict,
     on_click=None,
-    on_delete=None,
 ) -> ft.Container:
     """Build a file browser list item.
 

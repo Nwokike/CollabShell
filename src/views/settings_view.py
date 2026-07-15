@@ -657,78 +657,6 @@ def build_settings_view(
         spacing=0,
     )
 
-    # ── UPDATES ───────────────────────────────────────────────────────────────
-    async def _on_check_updates(e):
-        _snack(f"CLI version: {await colab_service.get_cli_version()}")
-
-    updates_section = ft.Column(
-        controls=[
-            section_header("UPDATES"),
-            glass_card(
-                ft.Column(
-                    controls=[
-                        ft.Row(
-                            controls=[
-                                ft.Icon(
-                                    ft.Icons.INFO_ROUNDED,
-                                    size=tokens.ICON_LG,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
-                                ft.Column(
-                                    controls=[
-                                        ft.Text(
-                                            "CLI Version",
-                                            size=tokens.FONT_MD,
-                                            weight=ft.FontWeight.W_500,
-                                        ),
-                                        ft.Text(
-                                            f"v{state.cli_version}"
-                                            if state.cli_version
-                                            else "Unknown",
-                                            size=tokens.FONT_XS,
-                                            color=ft.Colors.ON_SURFACE_VARIANT,
-                                        ),
-                                    ],
-                                    spacing=tokens.SPACE_XXS,
-                                    expand=True,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_LG,
-                        ),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        ft.Row(
-                            controls=[
-                                ft.OutlinedButton(
-                                    constants.LBL_CHECK_UPDATES,
-                                    icon=ft.Icons.SYSTEM_UPDATE_ROUNDED,
-                                    on_click=lambda e: page.run_task(
-                                        _on_check_updates, e
-                                    ),
-                                    expand=True,
-                                ),
-                                ft.OutlinedButton(
-                                    constants.LBL_MANAGE_COMPUTE,
-                                    icon=ft.Icons.CREDIT_CARD_ROUNDED,
-                                    on_click=lambda e: page.run_task(
-                                        ft.UrlLauncher().launch_url,
-                                        "https://colab.research.google.com/signup",
-                                    ),
-                                    expand=True,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_SM,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
-                ),
-                margin=ft.Margin(
-                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
-                ),
-            ),
-        ],
-        spacing=0,
-    )
-
     # ── ABOUT ─────────────────────────────────────────────────────────────────
     about_section = ft.Column(
         controls=[
@@ -757,23 +685,6 @@ def build_settings_view(
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
-                        ft.Row(
-                            controls=[
-                                ft.Text(
-                                    "CLI Version",
-                                    size=tokens.FONT_SM,
-                                ),
-                                ft.Text(
-                                    f"v{state.cli_version}"
-                                    if state.cli_version
-                                    else "Unknown",
-                                    size=tokens.FONT_SM,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        ft.Divider(height=tokens.SPACE_SM),
                         ft.Text(
                             "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
                             size=tokens.FONT_XXS,
@@ -802,7 +713,6 @@ def build_settings_view(
             behavior_section,
             advanced_section,
             build_banner_ad(page),
-            updates_section,
             about_section,
             ft.Container(height=tokens.SPACE_XXL),
         ],

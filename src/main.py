@@ -47,9 +47,6 @@ async def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.SYSTEM
     state.theme_mode = page.theme_mode
 
-    page.window.min_width = 360
-    page.window.min_height = 600
-
     page.padding = 0
     page.spacing = 0
 
@@ -127,7 +124,6 @@ async def main(page: ft.Page):
     async def _init_cli():
         try:
             await colab_service.init()
-            state.cli_version = await colab_service.get_version()
             state.cli_available = True
 
             auth_info = await colab_service.check_auth()

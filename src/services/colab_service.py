@@ -38,32 +38,16 @@ class ColabService:
 
             def _init():
                 from colab_cli.common import State
-                from colab_cli.auto_update import get_app_version
 
                 self._cli_state = State()
-                version = get_app_version()
                 self._cli_available = True
-                return version
+                return True
 
-            await asyncio.to_thread(_init)
-            return True
+            return await asyncio.to_thread(_init)
         except Exception as e:
             logger.error("Failed to init colab_cli: %s", e)
             self._cli_available = False
             return False
-
-    async def get_version(self) -> str:
-        """Return the installed CLI version."""
-
-        def _get():
-            from colab_cli.auto_update import get_app_version
-
-            return get_app_version()
-
-        try:
-            return await asyncio.to_thread(_get)
-        except Exception:
-            return "unknown"
 
     # ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -297,7 +281,6 @@ class ColabService:
             from colab_cli.common import State
             from colab_cli.client import Accelerator, Variant, ColabRequestError
             from colab_cli.state import SessionState
-            from colab_cli.commands.session import spawn_keep_alive
             from colab_cli.utils import get_status_code
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
@@ -372,23 +355,9 @@ class ColabService:
                     pass  # Non-blocking: daemon will retry
 
                 st.store.add(s)
-                try:
-                    s.keep_alive_pid = spawn_keep_alive(
-                        endpoint,
-                        session_name,
-                        auth_provider=st.auth_provider,
-                        config_path=st.config_path,
-                    )
-                except (PermissionError, OSError) as ex:
-                    logger.warning(
-                        "Could not spawn keep-alive background process (likely Android): %s",
-                        ex,
-                    )
-                    s.keep_alive_pid = None
-                st.store.add(s)
+                s.keep_alive_pid = None
             else:
                 st.store.add(s)
-                s.keep_alive_pid = None
             st.history.log_event(
                 session_name,
                 "session_created",
@@ -405,15 +374,13 @@ class ColabService:
                 "variant": variant.value,
                 "accelerator": accelerator.value,
                 "status": "READY",
-                "keep_alive_subprocess": getattr(s, "keep_alive_pid", None) is not None,
             }
 
         result = await asyncio.to_thread(_new)
 
-        # If keep-alive was requested but subprocess spawning failed (Android →
-        # PermissionError/OSError caught above), start an in-process keep-alive
-        # loop that calls keep_alive_assignment every 60s from the event loop.
-        if keep_alive and not result.get("keep_alive_subprocess", False):
+        # Always start in-process keep-alive when requested (the subprocess
+        # path was removed because it doesn't work on Android).
+        if keep_alive:
             self._start_in_process_keep_alive(
                 result["name"], result["endpoint"], auth_method
             )
@@ -496,7 +463,7 @@ class ColabService:
 
         def _stop():
             from colab_cli.auth import AuthProvider
-            from colab_cli.common import State, kill_process
+            from colab_cli.common import State
             from colab_cli.runtime import ColabRuntime
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
@@ -507,8 +474,8 @@ class ColabService:
             if not s:
                 return False
 
-            if getattr(s, "keep_alive_pid", None):
-                kill_process(s.keep_alive_pid)
+            # No subprocess to kill — the in-process keep-alive task was
+            # already cancelled in the async wrapper above.
 
             try:
                 runtime = ColabRuntime(s.url, s.token, kernel_id=s.kernel_id)
@@ -1074,15 +1041,6 @@ except:
             return True
 
         return await asyncio.to_thread(_export)
-
-    async def get_cli_version(self) -> str:
-        """Return the installed google-colab-cli version."""
-        try:
-            from colab_cli.auto_update import get_app_version
-
-            return await asyncio.to_thread(get_app_version)
-        except Exception:
-            return "unknown"
 
     # ── Cancel ────────────────────────────────────────────────────────────────
 

@@ -195,6 +195,12 @@ def build_home_view(
             state.active_sessions = sessions
             state.is_loading = False
 
+            # Clean up notebook cache for deleted sessions (the method
+            # short-circuits safely when the list is empty).
+            if storage:
+                active_names = [s["name"] for s in state.active_sessions]
+                page.run_task(storage.cleanup_orphaned_notebooks, active_names)
+
             await _update_sessions_ui()
         except Exception:
             state.is_loading = False

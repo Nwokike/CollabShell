@@ -181,10 +181,9 @@ def build_files_view(
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
         else:
-            local_path = picked.path
-            filename = os.path.basename(local_path)
-            remote_path = f"{current_path}/{filename}"
-            await _do_upload(local_path, remote_path)
+            if snack:
+                snack("Could not read file — picker did not return content.")
+            return
 
     async def _do_upload(local_path: str, remote_path: str):
         state.is_uploading = True
