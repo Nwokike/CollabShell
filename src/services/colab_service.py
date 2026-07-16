@@ -14,6 +14,9 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+_oauth_verifying_lock = threading.Lock()
+_verified_oauth_endpoints = set()
+
 
 class ColabService:
     """Async wrapper around the colab_cli Python SDK."""
@@ -680,75 +683,128 @@ class ColabService:
                 def drivefs_hook(deserialize_msg, wsclient):
                     content = deserialize_msg.get("content", {})
                     if content.get("request", {}).get("authType") == "dfs_ephemeral":
-                        msg_id = deserialize_msg.get("metadata", {}).get("colab_msg_id")
-                        if on_output:
-                            on_output("Intercepted Drive Auth Request. Authorizing...")
-
-                        url = f"{st.client.colab_domain}/tun/m/credentials-propagation/{s.endpoint}"
-                        params = {
-                            "authuser": "0",
-                            "authtype": "dfs_ephemeral",
-                            "version": "2",
-                            "dryrun": "true",
-                            "propagate": "true",
-                            "record": "false",
-                        }
-                        creds = get_credentials(
-                            st.client_oauth_config, provider=st.auth_provider
-                        )
-                        resp = creds.request("GET", url, params=params)
-                        token = (
-                            json.loads(resp.text.split("\n", 1)[-1]).get("token")
-                            if get_status_code(resp) == 200
-                            else None
-                        )
-                        headers = {"x-goog-colab-token": token}
-                        resp = creds.request(
-                            "POST",
-                            url,
-                            params=params,
-                            headers=headers,
-                            files={"file_id": (None, "empty.ipynb")},
-                        )
-                        data = json.loads(resp.text.split("\n", 1)[-1])
-
-                        if not data.get("success"):
-                            uri = data.get("unauthorized_redirect_uri")
-                            if on_output:
-                                on_output(
-                                    f"\nERROR: Google Authorization needed.\nPlease visit: {uri}\nGrant access, then try again."
-                                )
-                            raise ValueError(f"Authorization needed: {uri}")
-
-                        params["dryrun"] = "false"
-                        resp = creds.request(
-                            "POST",
-                            url,
-                            params=params,
-                            headers=headers,
-                            files={"file_id": (None, "empty.ipynb")},
-                        )
-                        if get_status_code(resp) == 200:
-                            if on_output:
-                                on_output("Credentials propagated successfully.")
-                            reply = wsclient.session.msg(
-                                "input_reply",
-                                {
-                                    "value": {
-                                        "type": "colab_reply",
-                                        "colab_msg_id": msg_id,
-                                    }
-                                },
+                        with _oauth_verifying_lock:
+                            if s.endpoint in _verified_oauth_endpoints:
+                                return True
+                            msg_id = deserialize_msg.get("metadata", {}).get(
+                                "colab_msg_id"
                             )
-                            if "header" in deserialize_msg:
-                                reply["parent_header"] = deserialize_msg["header"]
-                            wsclient.stdin_channel.send(reply)
-                        else:
                             if on_output:
-                                on_output(
-                                    f"Error propagating: {get_status_code(resp)} {resp.text}"
+                                on_output("Intercepted Drive Auth Request. Checking...")
+
+                            url = f"{st.client.colab_domain}/tun/m/credentials-propagation/{s.endpoint}"
+                            params = {
+                                "authuser": "0",
+                                "authtype": "dfs_ephemeral",
+                                "version": "2",
+                                "dryrun": "true",
+                                "propagate": "true",
+                                "record": "false",
+                            }
+                            creds = get_credentials(
+                                st.client_oauth_config, provider=st.auth_provider
+                            )
+                            resp = creds.request("GET", url, params=params)
+                            token = (
+                                json.loads(resp.text.split("\n", 1)[-1]).get("token")
+                                if get_status_code(resp) == 200
+                                else None
+                            )
+                            headers = {"x-goog-colab-token": token}
+                            resp = creds.request(
+                                "POST",
+                                url,
+                                params=params,
+                                headers=headers,
+                                files={"file_id": (None, "empty.ipynb")},
+                            )
+                            data = json.loads(resp.text.split("\n", 1)[-1])
+
+                            if not data.get("success"):
+                                uri = data.get("unauthorized_redirect_uri")
+                                if active_stdin_hook:
+                                    if on_output:
+                                        on_output(
+                                            "\nAuthorization required. Please authorize in browser using dialog link."
+                                        )
+
+                                    def _on_oauth_done(success, message=None):
+                                        pass
+
+                                    prompt_text = (
+                                        f"Google Drive Authorization Required\n\n"
+                                        f"Please click 'Open Link in Browser' below and grant access to your Google Drive.\n\n"
+                                        f"After granting access, return here and click Submit.\n\n{uri}"
+                                    )
+                                    try:
+                                        active_stdin_hook(
+                                            prompt_text, on_complete=_on_oauth_done
+                                        )
+                                    except TypeError:
+                                        active_stdin_hook(prompt_text)
+
+                                    for _retry in range(10):
+                                        resp_get = creds.request(
+                                            "GET", url, params=params
+                                        )
+                                        if get_status_code(resp_get) == 200:
+                                            fresh_token = json.loads(
+                                                resp_get.text.split("\n", 1)[-1]
+                                            ).get("token")
+                                            if fresh_token:
+                                                headers["x-goog-colab-token"] = (
+                                                    fresh_token
+                                                )
+                                        resp = creds.request(
+                                            "POST",
+                                            url,
+                                            params=params,
+                                            headers=headers,
+                                            files={"file_id": (None, "empty.ipynb")},
+                                        )
+                                        data = json.loads(resp.text.split("\n", 1)[-1])
+                                        if data.get("success"):
+                                            break
+                                        time.sleep(2.0)
+
+                                if not data.get("success"):
+                                    uri = data.get("unauthorized_redirect_uri")
+                                    if on_output:
+                                        on_output(
+                                            f"\nERROR: Google Authorization needed.\nPlease visit: {uri}\nGrant access, then try again."
+                                        )
+                                    raise ValueError(f"Authorization needed: {uri}")
+
+                            _verified_oauth_endpoints.add(s.endpoint)
+                            params["dryrun"] = "false"
+                            resp = creds.request(
+                                "POST",
+                                url,
+                                params=params,
+                                headers=headers,
+                                files={"file_id": (None, "empty.ipynb")},
+                            )
+                            if get_status_code(resp) == 200:
+                                if on_output:
+                                    on_output("Credentials propagated successfully.")
+                                reply = wsclient.session.msg(
+                                    "input_reply",
+                                    {
+                                        "value": {
+                                            "type": "colab_reply",
+                                            "colab_msg_id": msg_id,
+                                        }
+                                    },
                                 )
-                        return True
+                                if "header" in deserialize_msg:
+                                    reply["parent_header"] = deserialize_msg["header"]
+                                wsclient.stdin_channel.send(reply)
+                            else:
+                                if on_output:
+                                    on_output(
+                                        f"Error propagating: {get_status_code(resp)} {resp.text}"
+                                    )
+                            return True
                     return False
 
                 runtime.colab_request_hook = drivefs_hook
@@ -757,8 +813,11 @@ class ColabService:
             wrapped_user_stdin_hook = None
             if active_stdin_hook is not None:
 
-                def _app_stdin_hook(prompt):
-                    res = active_stdin_hook(prompt)
+                def _app_stdin_hook(prompt, *args, **kwargs):
+                    try:
+                        res = active_stdin_hook(prompt, *args, **kwargs)
+                    except TypeError:
+                        res = active_stdin_hook(prompt)
                     try:
                         kc = runtime.kernel_client
                         wsclient = (
@@ -818,6 +877,8 @@ class ColabService:
                     ) from e
                 raise
             finally:
+                if intercept_oauth and runtime:
+                    runtime.colab_request_hook = None
                 s.running = None
                 if st.store.get(session_name):
                     st.store.add(s)
@@ -1100,6 +1161,7 @@ except Exception as e:
         path: str = "/content/drive",
         auth_method: str = "oauth2",
         on_output: Optional[Callable] = None,
+        stdin_hook: Optional[Callable] = None,
     ) -> bool:
         """Mount Google Drive at the given path."""
         code = f"from google.colab import drive\ndrive.mount('{path}')"
@@ -1111,6 +1173,7 @@ except Exception as e:
                 auth_method=auth_method,
                 on_output=on_output,
                 intercept_oauth=True,
+                stdin_hook=stdin_hook,
             )
             return True
         except Exception as e:
@@ -1153,6 +1216,7 @@ except:
         session_name: str,
         auth_method: str = "oauth2",
         on_output: Optional[Callable] = None,
+        stdin_hook: Optional[Callable] = None,
     ) -> bool:
         """Authenticate GCP on the VM."""
         await self._ensure_online()
@@ -1165,6 +1229,7 @@ except:
                 auth_method=auth_method,
                 on_output=on_output,
                 intercept_oauth=True,
+                stdin_hook=stdin_hook,
             )
             return True
         except Exception as e:

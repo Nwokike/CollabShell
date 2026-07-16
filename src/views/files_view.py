@@ -132,6 +132,18 @@ def build_files_view(
                 dialog_title=f"Save {default_name}",
                 file_name=default_name,
             )
+            if not local_path and page.platform in [
+                ft.PagePlatform.ANDROID,
+                ft.PagePlatform.ANDROID_TV,
+                ft.PagePlatform.IOS,
+            ]:
+                # On mobile where save_file returns None, save directly to Downloads directory
+                dl_dir = "/storage/emulated/0/Download"
+                if not os.path.exists(dl_dir):
+                    dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                os.makedirs(dl_dir, exist_ok=True)
+                local_path = os.path.join(dl_dir, default_name)
+
             if not local_path:
                 continue
 
@@ -338,7 +350,7 @@ def build_files_view(
             return
         picked_files = await file_picker.pick_files(
             dialog_title="Select file to upload",
-            with_data=True,
+            with_data=bool(getattr(page, "web", False)),
         )
         if not picked_files:
             return

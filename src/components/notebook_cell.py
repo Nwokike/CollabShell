@@ -188,7 +188,9 @@ def build_notebook_cell(
                             value=source,
                             extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                             selectable=True,
-                            on_tap_link=lambda e: page.launch_url(e.data),
+                            on_tap_link=lambda e: page.run_task(
+                                ft.UrlLauncher().launch_url, e.data
+                            ),
                         ),
                         padding=tokens.SPACE_SM,
                         expand=True,

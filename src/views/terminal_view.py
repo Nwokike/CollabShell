@@ -135,6 +135,10 @@ def build_terminal_panel(
 
                 import flet_webview as fwv
 
+                original_platform = page.platform
+                if page.platform == ft.PagePlatform.ANDROID_TV:
+                    page.platform = ft.PagePlatform.ANDROID
+
                 webview = fwv.WebView(
                     url="about:blank",
                     expand=True,
@@ -147,6 +151,14 @@ def build_terminal_panel(
 
                 body.content = webview
                 page.update()
+
+                try:
+                    await webview.set_javascript_mode(fwv.JavaScriptMode.UNRESTRICTED)
+                except Exception as ex:
+                    logger.warning("Could not set JS mode on WebView: %s", ex)
+
+                if original_platform != page.platform:
+                    page.platform = original_platform
 
                 await webview.load_html(html)
 

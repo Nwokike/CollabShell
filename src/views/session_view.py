@@ -251,36 +251,167 @@ def build_session_view(
 
         return _handler
 
+    _active_auth_dialog = {"current": None}
+
+    def _close_active_auth():
+        if _active_auth_dialog["current"] and _active_auth_dialog["current"].open:
+            _active_auth_dialog["current"].open = False
+            page.update()
+
     async def _on_mount_drive(e):
-        if snack:
-            snack("Mounting Google Drive...")
+        dialog = ft.AlertDialog(
+            title=ft.Text("Mounting Google Drive..."),
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.ProgressRing(width=24, height=24, stroke_width=3),
+                            ft.Text(
+                                "Initiating mount on virtual machine...",
+                                size=tokens.FONT_SM,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_MD,
+                    ),
+                    ft.Text(
+                        "Please wait while Colab checks or mounts your Google Drive...",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+                tight=True,
+                spacing=tokens.SPACE_SM,
+            ),
+            actions=[ft.TextButton("Cancel", on_click=lambda e: _close_active_auth())],
+            modal=True,
+        )
+        _active_auth_dialog["current"] = dialog
+        page.show_dialog(dialog)
+        page.update()
+
         try:
             await colab_service.mount_drive(
                 session_name,
                 path=state.drive_mount_path,
                 auth_method=state.auth_method,
                 on_output=_action_output("Drive"),
+                stdin_hook=_interactive_stdin_hook,
             )
-            if snack:
-                snack(f"✅ Drive mounted at {state.drive_mount_path}")
+            if dialog.open:
+                dialog.title = ft.Text("Success")
+                dialog.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="green", size=24),
+                        ft.Text(
+                            f"Drive mounted at {state.drive_mount_path}",
+                            size=tokens.FONT_SM,
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                )
+                dialog.actions = [
+                    ft.FilledButton("Done", on_click=lambda e: _close_active_auth())
+                ]
+                dialog.update()
+
+                async def _auto_close():
+                    await asyncio.sleep(1.5)
+                    _close_active_auth()
+
+                page.run_task(_auto_close)
         except Exception as ex:
-            if snack:
-                snack(f"❌ {ex}")
+            if dialog.open:
+                dialog.title = ft.Text("Failed")
+                dialog.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.ERROR_ROUNDED, color="red", size=24),
+                        ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                )
+                dialog.actions = [
+                    ft.FilledButton("Close", on_click=lambda e: _close_active_auth())
+                ]
+                dialog.update()
 
     async def _on_auth_gcp(e):
-        if snack:
-            snack("Authenticating with GCP on VM...")
+        dialog = ft.AlertDialog(
+            title=ft.Text("Authenticating GCP..."),
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.ProgressRing(width=24, height=24, stroke_width=3),
+                            ft.Text(
+                                "Initiating GCP auth on virtual machine...",
+                                size=tokens.FONT_SM,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_MD,
+                    ),
+                    ft.Text(
+                        "Please wait while Colab checks or sets up your credentials...",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+                tight=True,
+                spacing=tokens.SPACE_SM,
+            ),
+            actions=[ft.TextButton("Cancel", on_click=lambda e: _close_active_auth())],
+            modal=True,
+        )
+        _active_auth_dialog["current"] = dialog
+        page.show_dialog(dialog)
+        page.update()
+
         try:
             await colab_service.auth_gcp_on_vm(
                 session_name,
                 auth_method=state.auth_method,
                 on_output=_action_output("Auth GCP"),
+                stdin_hook=_interactive_stdin_hook,
             )
-            if snack:
-                snack("✅ GCP auth complete")
+            if dialog.open:
+                dialog.title = ft.Text("Success")
+                dialog.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="green", size=24),
+                        ft.Text(
+                            "GCP authenticated successfully on VM",
+                            size=tokens.FONT_SM,
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                )
+                dialog.actions = [
+                    ft.FilledButton("Done", on_click=lambda e: _close_active_auth())
+                ]
+                dialog.update()
+
+                async def _auto_close():
+                    await asyncio.sleep(1.5)
+                    _close_active_auth()
+
+                page.run_task(_auto_close)
         except Exception as ex:
-            if snack:
-                snack(f"❌ {ex}")
+            if dialog.open:
+                dialog.title = ft.Text("Failed")
+                dialog.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.ERROR_ROUNDED, color="red", size=24),
+                        ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                )
+                dialog.actions = [
+                    ft.FilledButton("Close", on_click=lambda e: _close_active_auth())
+                ]
+                dialog.update()
 
     async def _on_view_logs(e):
         if navigate:
@@ -626,10 +757,12 @@ def build_session_view(
     # Track which cell is currently running for stdin routing
     _running_cell_index = {"value": -1}
 
-    def _interactive_stdin_hook(prompt):
-        """Handle kernel input requests (input()/getpass()).
+    def _interactive_stdin_hook(prompt, *args, **kwargs):
+        """Handle kernel input requests (input()/getpass() and Drive OAuth).
 
         Presents an AlertDialog for clean, non-blocking user input with clickable OAuth links.
+        Differentiates between ephemeral Drive mount (no code) vs GCP/standard input (code box required).
+        Reuses active authentication dialog if open so the spinner morphs directly into the prompt and back.
         """
         input_event = threading.Event()
         user_input = {"value": ""}
@@ -655,61 +788,194 @@ def build_session_view(
                 extracted_url = word.strip("'\"),;:")
                 break
 
-        dialog_field = ft.TextField(
-            label="Verification Code / Input",
-            autofocus=True,
-            password=is_password,
-            can_reveal_password=is_password,
+        is_ephemeral_drive_oauth = bool(
+            extracted_url and "authorize-for-drive-credentials-ephem" in extracted_url
         )
 
-        def _submit_input(e=None):
-            user_input["value"] = dialog_field.value or ""
-            logger.info("[stdin_hook] User submitted input via dialog")
+        dialog_field = ft.TextField(
+            label="Verification Code (Paste code here and click Submit)"
+            if extracted_url
+            else "Verification Code / Input",
+            autofocus=True,
+            password=is_password and not bool(extracted_url),
+            can_reveal_password=is_password and not bool(extracted_url),
+        )
+
+        reused_dialog = bool(
+            _active_auth_dialog["current"] and _active_auth_dialog["current"].open
+        )
+        dialog = (
+            _active_auth_dialog["current"]
+            if reused_dialog
+            else ft.AlertDialog(modal=True)
+        )
+
+        def _close_dialog(success=True, message=None):
+            if not dialog.open:
+                return
             dialog.open = False
             page.update()
+            if snack and success and is_ephemeral_drive_oauth:
+                snack("✅ Google Drive authorized successfully!")
+            elif snack and not success and message:
+                snack(f"❌ {message}")
+
+        on_complete = kwargs.get("on_complete")
+        if isinstance(on_complete, dict):
+            on_complete["fn"] = _close_dialog
+
+        def _submit_input(e=None):
+            if not dialog.open:
+                return
+            user_input["value"] = dialog_field.value or ""
+            logger.info("[stdin_hook] User submitted input via dialog")
+            if is_ephemeral_drive_oauth:
+                dialog.title = ft.Text("Verifying Authorization...")
+                dialog.content = ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.ProgressRing(width=24, height=24, stroke_width=3),
+                                ft.Text(
+                                    "Checking credentials with Google servers...",
+                                    size=tokens.FONT_SM,
+                                    weight=ft.FontWeight.BOLD,
+                                ),
+                            ],
+                            spacing=tokens.SPACE_MD,
+                        ),
+                        ft.Text(
+                            "Please wait up to 20 seconds while Google syncs your authorization across their backend...",
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    tight=True,
+                    spacing=tokens.SPACE_SM,
+                )
+                dialog.actions = [
+                    ft.TextButton(
+                        "Cancel",
+                        on_click=lambda e: _close_dialog(
+                            False, "Authorization cancelled"
+                        ),
+                    )
+                ]
+                dialog.update()
+            else:
+                if reused_dialog:
+                    dialog.title = ft.Text("Verifying Code...")
+                    dialog.content = ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.ProgressRing(
+                                        width=24, height=24, stroke_width=3
+                                    ),
+                                    ft.Text(
+                                        "Submitting code to virtual machine...",
+                                        size=tokens.FONT_SM,
+                                        weight=ft.FontWeight.BOLD,
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_MD,
+                            ),
+                            ft.Text(
+                                "Please wait while Colab processes your verification code...",
+                                size=tokens.FONT_XS,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        ],
+                        tight=True,
+                        spacing=tokens.SPACE_SM,
+                    )
+                    dialog.actions = [
+                        ft.TextButton(
+                            "Cancel",
+                            on_click=lambda e: _close_dialog(
+                                False, "Verification cancelled"
+                            ),
+                        )
+                    ]
+                    dialog.update()
+                else:
+                    dialog.open = False
+                    page.update()
             input_event.set()
 
         dialog_field.on_submit = _submit_input
 
-        content_controls = [ft.Text(prompt_str, size=tokens.FONT_SM, selectable=True)]
+        display_text = prompt_str
+        if extracted_url and len(extracted_url) > 60:
+            display_text = display_text.replace(extracted_url, "").strip()
+            if (
+                not display_text
+                or "Google Drive Authorization Required" in display_text
+            ):
+                if is_ephemeral_drive_oauth:
+                    display_text = (
+                        "Google Drive Authorization Required.\n\n"
+                        "1. Click '🌐 Open Link in Browser' below and choose your Google account.\n"
+                        "2. Click 'Allow' on the Google permission page.\n\n"
+                        "Once the web page says 'Please close this window', return here and click 'Confirm & Continue' below!"
+                    )
+                else:
+                    display_text = (
+                        "GCP / Google Cloud Authorization Required.\n\n"
+                        "1. Click '🌐 Open Link in Browser' below and sign into your Google account.\n"
+                        "2. Click 'Allow' to grant credentials access.\n"
+                        "3. Copy the verification code (`4/0AX...`), paste it into the box below, and click 'Submit'!"
+                    )
+
+        content_controls = [ft.Text(display_text, size=tokens.FONT_SM, selectable=True)]
         if extracted_url:
+
+            async def _launch_url_task(e=None):
+                await ft.UrlLauncher().launch_url(extracted_url)
+
+            async def _copy_url_task(e=None):
+                await ft.Clipboard().set(extracted_url)
+                if snack:
+                    snack("Copied URL to clipboard!")
+
             content_controls.append(
                 ft.Row(
                     [
                         ft.FilledButton(
                             "🌐 Open Link in Browser",
-                            on_click=lambda e: page.launch_url(extracted_url),
+                            on_click=lambda e: page.run_task(_launch_url_task, e),
                         ),
                         ft.IconButton(
                             ft.Icons.COPY_ROUNDED,
                             tooltip="Copy URL",
-                            on_click=lambda e: (
-                                page.set_clipboard(extracted_url),
-                                (snack("Copied URL to clipboard!") if snack else None),
-                            ),
+                            on_click=lambda e: page.run_task(_copy_url_task, e),
                         ),
                     ],
                     wrap=True,
                 )
             )
-        content_controls.append(dialog_field)
+        if not is_ephemeral_drive_oauth:
+            content_controls.append(dialog_field)
 
-        dialog = ft.AlertDialog(
-            title=ft.Text("Authentication / Input Required"),
-            content=ft.Column(
-                controls=content_controls, tight=True, spacing=tokens.SPACE_MD
-            ),
-            actions=[
-                ft.TextButton("Cancel", on_click=lambda e: _submit_input()),
-                ft.FilledButton("Submit", on_click=_submit_input),
-            ],
-            modal=True,
+        dialog.title = ft.Text("Authentication / Input Required")
+        dialog.content = ft.Column(
+            controls=content_controls, tight=True, spacing=tokens.SPACE_MD
         )
+        dialog.actions = [
+            ft.TextButton("Cancel", on_click=lambda e: _submit_input()),
+            ft.FilledButton(
+                "Confirm & Continue" if is_ephemeral_drive_oauth else "Submit",
+                on_click=_submit_input,
+            ),
+        ]
 
         async def _show():
-            page.show_dialog(dialog)
-            await asyncio.sleep(0)
-            page.update()
+            if reused_dialog:
+                dialog.update()
+            else:
+                page.show_dialog(dialog)
+                await asyncio.sleep(0)
+                page.update()
 
         page.run_task(_show)
         input_event.wait(timeout=300)
