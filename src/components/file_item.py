@@ -58,8 +58,10 @@ def build_file_item(
     size = file_info.get("size", 0)
 
     icon = _file_icon(name, is_dir)
-    
-    trailing_icon = ft.Icons.CHECK_CIRCLE_ROUNDED if selected else ft.Icons.RADIO_BUTTON_UNCHECKED
+
+    trailing_icon = (
+        ft.Icons.CHECK_CIRCLE_ROUNDED if selected else ft.Icons.RADIO_BUTTON_UNCHECKED
+    )
 
     return ft.Container(
         bgcolor=ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT,
@@ -94,7 +96,9 @@ def build_file_item(
                 ft.Icon(
                     trailing_icon,
                     size=tokens.ICON_MD,
-                    color=ft.Colors.PRIMARY if selected else ft.Colors.ON_SURFACE_VARIANT,
+                    color=ft.Colors.PRIMARY
+                    if selected
+                    else ft.Colors.ON_SURFACE_VARIANT,
                 ),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,

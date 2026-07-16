@@ -105,50 +105,68 @@ def build_home_view(
         def _on_new(e):
             dialog.content = ft.Container(
                 width=300,
-                padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL),
+                padding=ft.Padding(
+                    tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL
+                ),
                 content=ft.Column(
                     controls=[
                         ft.ProgressRing(stroke_width=2),
                         ft.Container(height=16),
-                        ft.Text("Preparing...", size=tokens.FONT_MD, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ft.Text(
+                            "Preparing...",
+                            size=tokens.FONT_MD,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     alignment=ft.MainAxisAlignment.CENTER,
                     tight=True,
-                )
+                ),
             )
             page.update()
-            
+
             async def _do_new():
                 import asyncio
+
                 await asyncio.sleep(0.2)
                 dialog.open = False
                 page.update()
                 if on_new_session:
                     on_new_session(mode)
+
             page.run_task(_do_new)
 
         def make_on_select(session_name):
             def handler(e):
                 dialog.content = ft.Container(
                     width=300,
-                    padding=ft.Padding(tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL),
+                    padding=ft.Padding(
+                        tokens.SPACE_XL,
+                        tokens.SPACE_XL,
+                        tokens.SPACE_XL,
+                        tokens.SPACE_XL,
+                    ),
                     content=ft.Column(
                         controls=[
                             ft.ProgressRing(stroke_width=2),
                             ft.Container(height=16),
-                            ft.Text(f"Opening {session_name}...", size=tokens.FONT_MD, color=ft.Colors.ON_SURFACE_VARIANT),
+                            ft.Text(
+                                f"Opening {session_name}...",
+                                size=tokens.FONT_MD,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         alignment=ft.MainAxisAlignment.CENTER,
                         tight=True,
-                    )
+                    ),
                 )
                 page.update()
 
                 async def _do_navigate():
                     import asyncio
                     import urllib.parse
+
                     await asyncio.sleep(0.2)
                     dialog.open = False
                     page.update()
@@ -157,10 +175,14 @@ def build_home_view(
                         if mode == "notebook":
                             await navigate(f"/session?session={encoded_session}")
                         elif mode == "terminal":
-                            await navigate(f"/session?session={encoded_session}&tab=terminal")
+                            await navigate(
+                                f"/session?session={encoded_session}&tab=terminal"
+                            )
                         elif mode == "files":
                             await navigate(f"/files?session={encoded_session}")
+
                 page.run_task(_do_navigate)
+
             return handler
 
         controls = [
@@ -203,16 +225,22 @@ def build_home_view(
         dialog = ft.AlertDialog(
             content=ft.Container(
                 width=400,
-                padding=ft.Padding(tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM),
+                padding=ft.Padding(
+                    tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_SM
+                ),
                 content=ft.Column(
                     controls=[
                         ft.Text(
-                            "Select Session" if mode == "notebook" else f"Select Session for {mode.capitalize()}", 
-                            size=tokens.FONT_LG, 
-                            weight=ft.FontWeight.BOLD
+                            "Select Session"
+                            if mode == "notebook"
+                            else f"Select Session for {mode.capitalize()}",
+                            size=tokens.FONT_LG,
+                            weight=ft.FontWeight.BOLD,
                         ),
                         ft.Divider(height=1, color=ft.Colors.TRANSPARENT),
-                        ft.Column(controls=controls, spacing=0, scroll=ft.ScrollMode.ADAPTIVE),
+                        ft.Column(
+                            controls=controls, spacing=0, scroll=ft.ScrollMode.ADAPTIVE
+                        ),
                     ],
                     tight=True,
                     spacing=tokens.SPACE_SM,
@@ -221,6 +249,7 @@ def build_home_view(
             shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_LG),
         )
         page.show_dialog(dialog)
+
     quick_actions = ft.Container(
         content=ft.Row(
             controls=[

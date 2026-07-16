@@ -183,7 +183,7 @@ async def main(page: ft.Page):
         def _close_limit_dialog(e=None):
             limit_dialog.open = False
             page.update()
-            
+
         def _on_proceed(e):
             _close_limit_dialog()
             _show_new_session_sheet(mode=mode, ignore_warning=True)
@@ -233,6 +233,7 @@ async def main(page: ft.Page):
 
             paid_gpus = {"L4", "G4", "A100", "H100"}
             if gpu in paid_gpus:
+
                 def _close_confirm(data):
                     confirm_dialog.data = data
                     confirm_dialog.open = False
@@ -317,14 +318,17 @@ async def main(page: ft.Page):
                     auth_method=state.auth_method,
                 )
                 state.active_sessions = sessions
-                
+
                 if mode:
                     import urllib.parse
-                    encoded_session = urllib.parse.quote(result['name'])
+
+                    encoded_session = urllib.parse.quote(result["name"])
                     if mode == "notebook":
                         await navigate(f"/session?session={encoded_session}")
                     elif mode == "terminal":
-                        await navigate(f"/session?session={encoded_session}&tab=terminal")
+                        await navigate(
+                            f"/session?session={encoded_session}&tab=terminal"
+                        )
                     elif mode == "files":
                         await navigate(f"/files?session={encoded_session}")
                 else:

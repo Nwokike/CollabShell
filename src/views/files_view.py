@@ -50,7 +50,7 @@ def build_files_view(
             current_path = path
             state.current_path = path
         is_loading = True
-        
+
         selected_files.clear()
         action_bar_container.content = _build_action_bar()
         upload_fab.visible = True
@@ -59,7 +59,7 @@ def build_files_view(
             upload_fab.update()
         except Exception:
             pass
-            
+
         file_list_container.content = _build_file_list()
         try:
             file_list_container.update()
@@ -78,7 +78,7 @@ def build_files_view(
                 snack(f"Error: {ex}")
             files = []
         is_loading = False
-        
+
         file_list_container.content = _build_file_list()
         breadcrumb_container.content = _build_breadcrumb()
         try:
@@ -93,7 +93,7 @@ def build_files_view(
             selected_files.remove(name)
         else:
             selected_files.add(name)
-            
+
         file_list_container.content = _build_file_list()
         action_bar_container.content = _build_action_bar()
         upload_fab.visible = len(selected_files) == 0
@@ -108,12 +108,12 @@ def build_files_view(
         selected_items = [f for f in files if f["name"] in selected_files]
         if not selected_items:
             return
-            
+
         for item in selected_items:
             name = item["name"]
             is_dir = item.get("type") == "directory"
             remote_path = posixpath.normpath(posixpath.join(current_path, name))
-            
+
             size_bytes = item.get("size")
             size_str = ""
             if size_bytes is not None:
@@ -127,21 +127,25 @@ def build_files_view(
                 size_str = " (folder)"
 
             default_name = f"{name}.zip" if is_dir else name
-            
+
             local_path = await page.file_picker.save_file(
                 dialog_title=f"Save {default_name}",
                 file_name=default_name,
             )
             if not local_path:
                 continue
-                
+
             prog_bar = ft.ProgressBar(
                 color=ft.Colors.PRIMARY,
                 bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
             )
-            
+
             download_dialog = ft.AlertDialog(
-                title=ft.Text(f"Downloading {default_name}", size=tokens.FONT_SM, font_family="Outfit"),
+                title=ft.Text(
+                    f"Downloading {default_name}",
+                    size=tokens.FONT_SM,
+                    font_family="Outfit",
+                ),
                 content=ft.Column(
                     [
                         prog_bar,
@@ -156,7 +160,7 @@ def build_files_view(
                 ),
             )
             page.show_dialog(download_dialog)
-            
+
             try:
                 if is_dir:
                     await colab_service.download_folder(
@@ -180,7 +184,7 @@ def build_files_view(
             finally:
                 download_dialog.open = False
                 page.update()
-                
+
         # Clear selection after download
         selected_files.clear()
         file_list_container.content = _build_file_list()
@@ -197,7 +201,7 @@ def build_files_view(
         selected_items = [f for f in files if f["name"] in selected_files]
         if not selected_items:
             return
-            
+
         names = [f["name"] for f in selected_items]
         names_str = ", ".join(names)
 
@@ -207,11 +211,11 @@ def build_files_view(
 
         confirm = ft.AlertDialog(
             title=ft.Text(f"Delete {len(names)} item(s)?"),
-            content=ft.Text(f"Are you sure you want to delete:\n{names_str}\n\nThis cannot be undone."),
+            content=ft.Text(
+                f"Are you sure you want to delete:\n{names_str}\n\nThis cannot be undone."
+            ),
             actions=[
-                ft.TextButton(
-                    content=ft.Text("Cancel"), on_click=_close_confirm
-                ),
+                ft.TextButton(content=ft.Text("Cancel"), on_click=_close_confirm),
                 ft.FilledButton(
                     "Delete",
                     on_click=lambda e: page.run_task(_confirm_delete, names),
@@ -236,7 +240,7 @@ def build_files_view(
                 except Exception as ex:
                     if snack:
                         snack(f"❌ {ex}")
-            
+
             selected_files.clear()
             upload_fab.visible = True
             try:
@@ -253,10 +257,10 @@ def build_files_view(
 
         selected_items = [f for f in files if f["name"] in selected_files]
         num_selected = len(selected_files)
-        
+
         can_open = num_selected == 1 and selected_items[0].get("type") == "directory"
         can_download = True
-        
+
         actions = []
         if can_open:
             item = selected_items[0]
@@ -266,40 +270,53 @@ def build_files_view(
                 ft.FilledButton(
                     "Open",
                     icon=ft.Icons.FOLDER_OPEN_ROUNDED,
-                    on_click=lambda e: page.run_task(_load_files, new_path)
+                    on_click=lambda e: page.run_task(_load_files, new_path),
                 )
             )
-        
+
         if can_download:
             actions.append(
                 ft.FilledTonalButton(
                     "Download",
                     icon=ft.Icons.DOWNLOAD_ROUNDED,
-                    on_click=lambda e: page.run_task(_do_download_selected)
+                    on_click=lambda e: page.run_task(_do_download_selected),
                 )
             )
-            
+
         actions.append(
             ft.TextButton(
                 "Delete",
                 icon=ft.Icons.DELETE_ROUNDED,
                 style=ft.ButtonStyle(color=ft.Colors.ERROR),
-                on_click=lambda e: page.run_task(_do_delete_selected)
+                on_click=lambda e: page.run_task(_do_delete_selected),
             )
         )
-        
+
         return ft.Container(
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
-            padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD),
-            border_radius=ft.BorderRadius(top_left=tokens.RADIUS_LG, top_right=tokens.RADIUS_LG, bottom_left=0, bottom_right=0),
-            shadow=ft.BoxShadow(spread_radius=1, blur_radius=10, color=ft.Colors.BLACK12),
+            padding=ft.Padding(
+                tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD
+            ),
+            border_radius=ft.BorderRadius(
+                top_left=tokens.RADIUS_LG,
+                top_right=tokens.RADIUS_LG,
+                bottom_left=0,
+                bottom_right=0,
+            ),
+            shadow=ft.BoxShadow(
+                spread_radius=1, blur_radius=10, color=ft.Colors.BLACK12
+            ),
             content=ft.Row(
                 controls=[
-                    ft.Text(f"{num_selected} selected", weight=ft.FontWeight.BOLD, expand=True),
-                    *actions
+                    ft.Text(
+                        f"{num_selected} selected",
+                        weight=ft.FontWeight.BOLD,
+                        expand=True,
+                    ),
+                    *actions,
                 ],
                 alignment=ft.MainAxisAlignment.END,
-            )
+            ),
         )
 
     # ── Upload ────────────────────────────────────────────────────────────────
@@ -314,7 +331,7 @@ def build_files_view(
             return
         picked = picked_files[0]
         remote_path = posixpath.normpath(posixpath.join(current_path, picked.name))
-        
+
         if picked.bytes is not None:
             # Android: content URI — write bytes to a temp file for the SDK
             tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
@@ -338,7 +355,7 @@ def build_files_view(
 
     async def _do_upload(local_path: str, remote_path: str, file_size: int = None):
         state.is_uploading = True
-        
+
         size_str = ""
         if file_size is not None:
             if file_size < 1024:
@@ -347,25 +364,33 @@ def build_files_view(
                 size_str = f" ({file_size / 1024:.1f} KB)"
             else:
                 size_str = f" ({file_size / (1024 * 1024):.1f} MB)"
-                
+
         prog_bar = ft.ProgressBar(
             color=ft.Colors.PRIMARY,
             bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
         )
-        
+
         upload_dialog = ft.AlertDialog(
-            title=ft.Text(f"Uploading {os.path.basename(local_path)}", size=tokens.FONT_SM, font_family="Outfit"),
+            title=ft.Text(
+                f"Uploading {os.path.basename(local_path)}",
+                size=tokens.FONT_SM,
+                font_family="Outfit",
+            ),
             content=ft.Column(
                 [
                     prog_bar,
-                    ft.Text(f"Uploading...{size_str}", size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE_VARIANT),
+                    ft.Text(
+                        f"Uploading...{size_str}",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
                 ],
                 spacing=tokens.SPACE_SM,
                 tight=True,
             ),
         )
         page.show_dialog(upload_dialog)
-        
+
         try:
             await colab_service.upload(
                 local_path,
@@ -485,7 +510,6 @@ def build_files_view(
     if theme_btn:
         appbar_actions.append(theme_btn)
 
-
     # Load files on view creation
     page.run_task(_load_files)
 
@@ -511,9 +535,7 @@ def build_files_view(
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=tokens.SPACE_XS,
                         ),
-                        padding=ft.Padding(
-                            tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
-                        ),
+                        padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
                     ),
                     ft.Divider(height=1),
                     # File list
