@@ -104,7 +104,7 @@ def build_files_view(
         except Exception:
             pass
 
-    async def _do_download_selected(e):
+    async def _do_download_selected(e=None):
         selected_items = [f for f in files if f["name"] in selected_files]
         file_items = [f for f in selected_items if f.get("type") != "directory"]
         if not file_items:
@@ -256,7 +256,7 @@ def build_files_view(
         return ft.Container(
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
             padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD),
-            border_radius=ft.border_radius.only(top_left=tokens.RADIUS_LG, top_right=tokens.RADIUS_LG),
+            border_radius=ft.BorderRadius(top_left=tokens.RADIUS_LG, top_right=tokens.RADIUS_LG, bottom_left=0, bottom_right=0),
             shadow=ft.BoxShadow(spread_radius=1, blur_radius=10, color=ft.Colors.BLACK12),
             content=ft.Row(
                 controls=[
