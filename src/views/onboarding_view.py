@@ -116,7 +116,7 @@ def build_onboarding_view(
                     "Start CPU (free), GPU (T4/A100/H100), or TPU session runtimes.",
                 ),
                 _feature_row(
-                    ft.Icons.NOTEBOOK_OUTLINED,
+                    ft.Icons.NOTE_ADD_ROUNDED,
                     "2. Run Cells",
                     "Edit and run interactive code blocks in the notebook view.",
                 ),
