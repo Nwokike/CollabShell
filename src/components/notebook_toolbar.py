@@ -9,6 +9,7 @@ def build_notebook_toolbar(
     on_clear_all,
     on_export_ipynb=None,
     on_import_ipynb=None,
+    on_open_terminal=None,
 ) -> ft.Container:
     trailing = [
         ft.IconButton(
@@ -57,6 +58,18 @@ def build_notebook_toolbar(
                         shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
                     ),
                 ),
+                ft.FilledButton(
+                    "Terminal",
+                    icon=ft.Icons.TERMINAL_ROUNDED,
+                    on_click=on_open_terminal,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.PRIMARY),
+                        color=ft.Colors.PRIMARY,
+                        shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
+                    ),
+                )
+                if on_open_terminal
+                else ft.Container(),
                 ft.Container(expand=True),
                 *trailing,
             ],

@@ -459,7 +459,9 @@ class ColabService:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.exception("keep-alive task for %s raised unexpected exception", session_name)
+                logger.exception(
+                    "keep-alive task for %s raised unexpected exception", session_name
+                )
 
         def _stop():
             from colab_cli.auth import AuthProvider
@@ -1100,9 +1102,7 @@ except:
                 await asyncio.to_thread(st.client.keep_alive_assignment, endpoint)
                 consecutive_4xx = 0
             except Exception as e:
-                code = (
-                    getattr(e, "response", None) and e.response.status_code
-                )
+                code = getattr(e, "response", None) and e.response.status_code
                 if code is not None and 400 <= code < 500:
                     consecutive_4xx += 1
                     if consecutive_4xx >= 2:

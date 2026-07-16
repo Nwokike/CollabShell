@@ -437,6 +437,23 @@ async def main(page: ft.Page):
             )
             page.views.append(view)
 
+        elif route == "/terminal":
+            from views.terminal_view import build_terminal_view
+
+            session_name = query_params.get("session", "")
+            view = build_terminal_view(
+                page=page,
+                colab_service=colab_service,
+                state=state,
+                session_name=session_name,
+                on_back=lambda e: page.run_task(
+                    navigate, f"/session?session={session_name}"
+                ),
+                snack=_snack,
+                theme_btn=theme_btn,
+            )
+            page.views.append(view)
+
         elif route == "/history":
             from views.history_view import build_history_view
 

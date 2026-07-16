@@ -4,14 +4,6 @@ from core import tokens
 from core.theme import AppColors
 from components.ansi_parser import parse_ansi_to_flet_text
 
-# Try to import FletXterm, fall back to text-based output if not available
-try:
-    from flet_xterm import FletXterm
-
-    XTERM_AVAILABLE = True
-except ImportError:
-    XTERM_AVAILABLE = False
-
 
 def build_notebook_cell(
     page: ft.Page,
@@ -23,11 +15,12 @@ def build_notebook_cell(
     on_move_down=None,
     on_change=None,
     on_clear_output=None,
+    on_open_terminal=None,
 ) -> tuple[ft.Container, dict]:
     """Builds a single notebook cell (Code or Markdown).
 
     Returns (container, refs_dict) where refs_dict holds Ref objects
-    for mutable parts of the cell (play_btn, stop_row, output, terminal).
+    for mutable parts of the cell (play_btn, stop_row, output).
     """
 
     cell_type = cell.get("type", "code")
@@ -46,8 +39,6 @@ def build_notebook_cell(
         "stop_row": stop_row_ref,
         "output": output_ref,
         "code_input": editor_ref,
-        "terminal": None,  # Will hold FletXterm instance if available
-        "initial_text": "",  # Replayed into the terminal before each run
     }
 
     def _handle_change(e):
@@ -69,9 +60,7 @@ def build_notebook_cell(
                     text_to_copy += data["text/plain"] + "\n"
         if text_to_copy:
             await ft.Clipboard().set(text_to_copy.strip())
-            page.show_dialog(
-                ft.SnackBar(ft.Text("Output copied to clipboard!"))
-            )
+            page.show_dialog(ft.SnackBar(ft.Text("Output copied to clipboard!")))
 
     # ── Cell Actions ──
     # A Flutter control can only have a single parent, so build a fresh
@@ -239,189 +228,111 @@ def build_notebook_cell(
         ), refs
 
     # ── Code Cell ──
-
-    # Build terminal or text-based output
-    # The FletXterm custom control is compiled into the Android build.
-    # On a desktop dev server (or if xterm is unavailable) we fall back to
-    # text-based ANSI output.
-    is_supported_platform = page.platform.is_mobile() if page.platform else False
-
-    if XTERM_AVAILABLE and is_supported_platform:
-        terminal = FletXterm(
-            theme_name="defaultTheme",
-            cursor_type="block",
-            font_size=13,
-            font_family="monospace",
-            read_only=False,
-            max_lines=5000,
-            background_opacity=1.0,
-            height=200,
-            expand=False,
-        )
-        refs["terminal"] = terminal
-
-        # Replay existing outputs into terminal
-        initial_text = ""
-        for out in outputs:
-            if out.get("type") == "stream":
-                text = out.get("text", "")
-                initial_text += text.replace("\n", "\r\n")
-            elif out.get("type") == "error":
-                traceback = "\n".join(out.get("traceback", []))
-                initial_text += traceback.replace("\n", "\r\n")
-            elif out.get("type") in ["execute_result", "display_data"]:
-                data = out.get("data", {})
-                if "text/plain" in data:
-                    initial_text += data["text/plain"].replace("\n", "\r\n")
-        if initial_text:
-            refs["initial_text"] = initial_text
-
-        output_actions = ft.Row(
-            controls=[
-                ft.Text(
-                    "TERMINAL",
-                    size=tokens.FONT_XXS,
-                    color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
-                    weight=ft.FontWeight.W_600,
-                ),
-                ft.Row(
-                    controls=[
-                        ft.IconButton(
-                            ft.Icons.COPY_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Copy Output",
-                            on_click=_copy_output,
-                        ),
-                        ft.IconButton(
-                            ft.Icons.CLEAR_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Clear Output",
-                            on_click=lambda e: (
-                                on_clear_output() if on_clear_output else None
-                            ),
-                        ),
-                    ],
-                    spacing=0,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        output_panel = ft.Container(
-            content=ft.Column(
-                ref=output_ref,
-                controls=[terminal, output_actions],
-                spacing=tokens.SPACE_XXS,
-            ),
-            padding=tokens.SPACE_SM,
-            bgcolor=AppColors.TERMINAL_BG,
-            border_radius=tokens.RADIUS_SM,
-            visible=True,
-            width=float("inf"),
-        )
-    else:
-        # Fallback: text-based output (original behavior)
-        output_controls = []
-        for out in outputs:
-            if len(output_controls) >= 1000:
-                break
-            if out.get("type") == "stream":
-                is_err = out.get("name") == "stderr"
-                text = out.get("text", "")
-                output_controls.append(
-                    parse_ansi_to_flet_text(
-                        raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
-                    )
+    output_controls = []
+    for out in outputs:
+        if len(output_controls) >= 1000:
+            break
+        if out.get("type") == "stream":
+            is_err = out.get("name") == "stderr"
+            text = out.get("text", "")
+            output_controls.append(
+                parse_ansi_to_flet_text(
+                    raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
                 )
-            elif out.get("type") == "error":
-                traceback = "\n".join(out.get("traceback", []))
-                output_controls.append(
-                    parse_ansi_to_flet_text(
-                        raw_text=traceback,
-                        default_size=tokens.FONT_SM,
-                        is_error=True,
-                    )
+            )
+        elif out.get("type") == "error":
+            traceback = "\n".join(out.get("traceback", []))
+            output_controls.append(
+                parse_ansi_to_flet_text(
+                    raw_text=traceback,
+                    default_size=tokens.FONT_SM,
+                    is_error=True,
                 )
-            elif out.get("type") in ["execute_result", "display_data"]:
-                data = out.get("data", {})
-                if "image/png" in data:
-                    try:
-                        b64_img = data["image/png"]
-                        b64_img = b64_img.replace("\n", "").replace("\r", "")
-                        output_controls.append(
-                            ft.Container(
-                                content=ft.Image(
-                                    src_base64=b64_img, fit=ft.BoxFit.CONTAIN
-                                ),
-                                margin=ft.Margin(
-                                    0, tokens.SPACE_SM, 0, tokens.SPACE_SM
-                                ),
-                            )
-                        )
-                    except Exception as e:
-                        output_controls.append(
-                            ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
-                        )
-                elif "text/plain" in data:
+            )
+        elif out.get("type") in ["execute_result", "display_data"]:
+            data = out.get("data", {})
+            if "image/png" in data:
+                try:
+                    b64_img = data["image/png"]
+                    b64_img = b64_img.replace("\n", "").replace("\r", "")
                     output_controls.append(
-                        parse_ansi_to_flet_text(
-                            raw_text=data["text/plain"],
-                            default_size=tokens.FONT_SM,
+                        ft.Container(
+                            content=ft.Image(src_base64=b64_img, fit=ft.BoxFit.CONTAIN),
+                            margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
                         )
                     )
+                except Exception as e:
+                    output_controls.append(
+                        ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
+                    )
+            elif "text/plain" in data:
+                output_controls.append(
+                    parse_ansi_to_flet_text(
+                        raw_text=data["text/plain"],
+                        default_size=tokens.FONT_SM,
+                    )
+                )
 
-        output_actions = ft.Row(
-            controls=[
-                ft.Text(
-                    "OUTPUT",
-                    size=tokens.FONT_XXS,
-                    color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
-                    weight=ft.FontWeight.W_600,
-                ),
-                ft.Row(
-                    controls=[
-                        ft.IconButton(
-                            ft.Icons.COPY_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Copy Output",
-                            on_click=_copy_output,
-                        ),
-                        ft.IconButton(
-                            ft.Icons.CLEAR_ALL_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            tooltip="Clear Output",
-                            on_click=lambda e: (
-                                on_clear_output() if on_clear_output else None
-                            ),
-                        ),
-                    ],
-                    spacing=0,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        output_panel = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.ListView(
-                        ref=output_ref,
-                        controls=output_controls,
-                        spacing=tokens.SPACE_XXS,
-                        auto_scroll=True,
-                        height=320,
-                        expand=False,
-                    ),
-                    output_actions,
-                ],
-                spacing=tokens.SPACE_XXS,
+    output_actions = ft.Row(
+        controls=[
+            ft.Text(
+                "OUTPUT",
+                size=tokens.FONT_XXS,
+                color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
+                weight=ft.FontWeight.W_600,
             ),
-            padding=tokens.SPACE_SM,
-            bgcolor=AppColors.TERMINAL_BG,
-            border_radius=tokens.RADIUS_SM,
-            visible=True,
-            width=float("inf"),
-        )
+            ft.Row(
+                controls=[
+                    ft.IconButton(
+                        ft.Icons.TERMINAL_ROUNDED,
+                        icon_size=tokens.ICON_SM,
+                        tooltip="Open Real Terminal",
+                        on_click=lambda e: (
+                            on_open_terminal() if on_open_terminal else None
+                        ),
+                    ),
+                    ft.IconButton(
+                        ft.Icons.COPY_ALL_ROUNDED,
+                        icon_size=tokens.ICON_SM,
+                        tooltip="Copy Output",
+                        on_click=_copy_output,
+                    ),
+                    ft.IconButton(
+                        ft.Icons.CLEAR_ALL_ROUNDED,
+                        icon_size=tokens.ICON_SM,
+                        tooltip="Clear Output",
+                        on_click=lambda e: (
+                            on_clear_output() if on_clear_output else None
+                        ),
+                    ),
+                ],
+                spacing=0,
+            ),
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
+
+    output_panel = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.ListView(
+                    ref=output_ref,
+                    controls=output_controls,
+                    spacing=tokens.SPACE_XXS,
+                    auto_scroll=True,
+                    height=320,
+                    expand=False,
+                ),
+                output_actions,
+            ],
+            spacing=tokens.SPACE_XXS,
+        ),
+        padding=tokens.SPACE_SM,
+        bgcolor=AppColors.TERMINAL_BG,
+        border_radius=tokens.RADIUS_SM,
+        visible=True,
+        width=float("inf"),
+    )
 
     play_button = ft.IconButton(
         ft.Icons.PLAY_ARROW_ROUNDED,
@@ -479,7 +390,7 @@ def build_notebook_cell(
                 ft.Container(
                     content=ft.Row(
                         controls=[
-                                play_button,
+                            play_button,
                             stop_row,
                             ft.Container(expand=True),
                             _make_actions_row(),

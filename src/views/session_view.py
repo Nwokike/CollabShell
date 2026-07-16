@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import flet as ft
 import threading
 import uuid
 from pathlib import Path
-
 from core import tokens, constants
 from core.styles import (
     glass_card,
@@ -22,6 +22,8 @@ from components.notebook_cell import build_notebook_cell
 from components.notebook_toolbar import build_notebook_toolbar
 from services.storage_service import StorageService
 from services.ipynb_converter import cells_to_ipynb, ipynb_to_cells
+
+logger = logging.getLogger(__name__)
 
 
 def build_session_view(
@@ -237,6 +239,11 @@ def build_session_view(
         if navigate:
             await navigate(f"/history?session={session_name}")
 
+    async def _on_terminal(e):
+        """Open the real Colab terminal in a new view."""
+        if navigate:
+            await navigate(f"/terminal?session={session_name}")
+
     # ── Keep-Alive Toggles ─────────────────────────────────────────────────────
     async def _on_keep_alive(e):
         state.keep_alive_enabled = e.control.value
@@ -345,6 +352,12 @@ def build_session_view(
                     AppColors.BADGE_TPU,
                 ),
                 _action_chip(
+                    ft.Icons.TERMINAL_ROUNDED,
+                    "Terminal",
+                    lambda e: page.run_task(_on_terminal, e),
+                    AppColors.BADGE_GPU,
+                ),
+                _action_chip(
                     ft.Icons.HISTORY_ROUNDED,
                     "Logs",
                     lambda e: page.run_task(_on_view_logs, e),
@@ -431,37 +444,6 @@ def build_session_view(
             return
         refs = cell_refs[index]
 
-        # Try xterm terminal first
-        terminal = refs.get("terminal")
-        if terminal is not None:
-            text = ""
-            if isinstance(text_or_dict, str):
-                text = text_or_dict
-            elif isinstance(text_or_dict, dict):
-                dtype = text_or_dict.get("type", "")
-                if dtype == "stream":
-                    text = text_or_dict.get("text", "")
-                elif dtype == "error":
-                    text = "\n".join(text_or_dict.get("traceback", []))
-                else:
-                    return
-            if not text:
-                return
-            # Convert \n to \r\n for xterm
-            text = text.replace("\r\n", "\n").replace("\n", "\r\n")
-            page.run_task(terminal.write, text)
-            # Make output panel visible
-            out_col = refs["output"].current
-            if out_col:
-                out_col.visible = True
-            now = time.monotonic()
-            last = _output_update_ts.get(index, 0.0)
-            if last == 0.0 or now - last >= 0.15:
-                _output_update_ts[index] = now
-                page.update()
-            return
-
-        # Fallback: text-based output
         out_col = refs["output"].current
         if not out_col:
             return
@@ -504,10 +486,6 @@ def build_session_view(
         if index >= len(cell_refs):
             return
         refs = cell_refs[index]
-        # Clear xterm terminal if available
-        terminal = refs.get("terminal")
-        if terminal is not None:
-            page.run_task(terminal.clear)
         out_col = refs["output"].current
         if out_col:
             out_col.controls.clear()
@@ -559,6 +537,7 @@ def build_session_view(
             "on_move_down": lambda: _move_cell(idx, 1),
             "on_change": _debounced_save,  # per-keystroke → debounced
             "on_clear_output": _clear,
+            "on_open_terminal": lambda: page.go("/terminal"),
         }
 
     def _add_cell(cell_type):
@@ -604,67 +583,26 @@ def build_session_view(
     def _interactive_stdin_hook(prompt):
         """Handle kernel input requests (input()/getpass()).
 
-        When an xterm terminal is available for the running cell, the user
-        types directly in the terminal.  Otherwise falls back to a dialog.
+        Presents an AlertDialog for clean, non-blocking user input.
         """
         input_event = threading.Event()
         user_input = {"value": ""}
 
-        prompt_str = str(prompt) if prompt else "Input required"
-        is_password = any(
-            kw in prompt_str.lower()
-            for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
-        )
-
-        # Try terminal-based stdin
-        idx = _running_cell_index["value"]
-        terminal = None
-        if 0 <= idx < len(cell_refs):
-            terminal = cell_refs[idx].get("terminal")
-
-        if terminal is not None:
-            # Write the prompt to the terminal
-            page.run_task(terminal.write, prompt_str.replace("\n", "\r\n"))
-
-            # Buffer user input from terminal keystrokes
-            input_buffer = []
-            original_on_output = terminal.on_output
-
-            def _terminal_input_handler(e):
-                char = e.data if hasattr(e, "data") else str(e)
-                if char in ("\r", "\n"):
-                    # Enter pressed — submit
-                    page.run_task(terminal.write, "\r\n")
-                    user_input["value"] = "".join(input_buffer)
-                    terminal.on_output = original_on_output
-                    input_event.set()
-                elif char in ("\x7f", "\b"):
-                    # Backspace
-                    if input_buffer:
-                        input_buffer.pop()
-                        page.run_task(terminal.write, "\b \b")
-                else:
-                    input_buffer.append(char)
-                    if is_password:
-                        page.run_task(terminal.write, "*")
-                    else:
-                        page.run_task(terminal.write, char)
-
-            # terminal.on_output must be set from the main (event loop) thread;
-            # we are currently in the stdin_hook worker thread, so schedule it.
-            page.loop.call_soon_threadsafe(
-                setattr, terminal, "on_output", _terminal_input_handler
+        if isinstance(prompt, dict):
+            content_dict = prompt.get("content", {})
+            prompt_str = content_dict.get("prompt", str(prompt))
+            is_password = content_dict.get("password", False)
+        else:
+            prompt_str = str(prompt) if prompt else "Input required"
+            is_password = any(
+                kw in prompt_str.lower()
+                for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
             )
 
-            async def _force_update():
-                await asyncio.sleep(0)
-                page.update()
+        logger.info(
+            f"[stdin_hook] Prompt requested: {prompt_str} (password={is_password})"
+        )
 
-            page.run_task(_force_update)
-            input_event.wait(timeout=300)
-            return user_input["value"]
-
-        # Fallback: dialog-based input
         dialog_field = ft.TextField(
             label=prompt_str,
             autofocus=True,
@@ -674,6 +612,7 @@ def build_session_view(
 
         def _submit_input(e):
             user_input["value"] = dialog_field.value or ""
+            logger.info("[stdin_hook] User submitted input via dialog")
             page.pop_dialog()
             page.update()
             input_event.set()
@@ -704,16 +643,6 @@ def build_session_view(
         cell["outputs"] = []
         _running_cell_index["value"] = index
         _set_cell_running(index)
-
-        # Write initial text to terminal if it was saved
-        if 0 <= index < len(cell_refs):
-            terminal = cell_refs[index].get("terminal")
-            if terminal is not None:
-                initial_text = cell_refs[index].get("initial_text")
-                if initial_text:
-                    page.run_task(terminal.write, initial_text)
-                    # Clear so a re-run doesn't replay stale output
-                    cell_refs[index]["initial_text"] = ""
 
         def _on_output(text_or_dict):
             # Cap the outputs list at 5000 entries to avoid memory exhaustion
@@ -775,6 +704,7 @@ def build_session_view(
         on_clear_all=_clear_all_outputs,
         on_export_ipynb=_on_export_ipynb,
         on_import_ipynb=_on_import_ipynb,
+        on_open_terminal=lambda e: page.go("/terminal"),
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────
