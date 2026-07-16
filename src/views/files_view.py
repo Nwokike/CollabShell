@@ -197,7 +197,7 @@ def build_files_view(
         except Exception:
             pass
 
-    async def _do_delete_selected(e):
+    async def _do_delete_selected(e=None):
         selected_items = [f for f in files if f["name"] in selected_files]
         if not selected_items:
             return
@@ -320,7 +320,7 @@ def build_files_view(
         )
 
     # ── Upload ────────────────────────────────────────────────────────────────
-    async def _on_upload_click(e):
+    async def _on_upload_click(e=None):
         if not file_picker:
             return
         picked_files = await file_picker.pick_files(
