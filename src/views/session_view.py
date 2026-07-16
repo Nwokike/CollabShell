@@ -106,6 +106,29 @@ def build_session_view(
     )
 
     # ── Action Row (Compact) ─────────────────────────────────────────────────
+    # ── Tab Controllers & Terminal Setup ─────────────────────────────────────
+    from views.terminal_view import build_terminal_panel
+
+    terminal_panel, terminal_init_func = build_terminal_panel(
+        page, session_name, colab_service, snack
+    )
+    _terminal_initialized = {"value": False}
+    tabs_ref = ft.Ref[ft.Tabs]()
+    notebook_container_ref = ft.Ref[ft.Container]()
+    terminal_container_ref = ft.Ref[ft.Container]()
+
+    def _on_tab_change(e):
+        idx = tabs_ref.current.selected_index if tabs_ref.current else 0
+        if idx == 1 and not _terminal_initialized["value"]:
+            _terminal_initialized["value"] = True
+            page.run_task(terminal_init_func)
+        page.update()
+
+    def _switch_to_terminal_tab():
+        if tabs_ref.current:
+            tabs_ref.current.selected_index = 1
+            _on_tab_change(None)
+
     async def _navigate_home(msg=None):
         if msg and snack:
             snack(msg)
@@ -240,9 +263,8 @@ def build_session_view(
             await navigate(f"/history?session={session_name}")
 
     async def _on_terminal(e):
-        """Open the real Colab terminal in a new view."""
-        if navigate:
-            await navigate(f"/terminal?session={session_name}")
+        """Switch to the real Colab terminal tab."""
+        _switch_to_terminal_tab()
 
     # ── Keep-Alive Toggles ─────────────────────────────────────────────────────
     async def _on_keep_alive(e):
@@ -537,7 +559,7 @@ def build_session_view(
             "on_move_down": lambda: _move_cell(idx, 1),
             "on_change": _debounced_save,  # per-keystroke → debounced
             "on_clear_output": _clear,
-            "on_open_terminal": lambda: page.go("/terminal"),
+            "on_open_terminal": _switch_to_terminal_tab,
         }
 
     def _add_cell(cell_type):
@@ -704,7 +726,7 @@ def build_session_view(
         on_clear_all=_clear_all_outputs,
         on_export_ipynb=_on_export_ipynb,
         on_import_ipynb=_on_import_ipynb,
-        on_open_terminal=lambda e: page.go("/terminal"),
+        on_open_terminal=_switch_to_terminal_tab,
     )
 
     # ── Full view ─────────────────────────────────────────────────────────────
@@ -778,32 +800,80 @@ def build_session_view(
         ),
     )
 
+    notebook_body = ft.Column(
+        controls=[
+            keep_alive_card,
+            action_row,
+            notebook_section,
+            build_banner_ad(page),
+            ft.Container(height=100),
+        ],
+        spacing=tokens.SPACE_SM,
+        scroll=ft.ScrollMode.AUTO,
+        expand=True,
+    )
+
+    notebook_container = ft.Container(
+        ref=notebook_container_ref,
+        content=ft.Stack(
+            controls=[
+                notebook_body,
+                ft.Container(
+                    content=toolbar,
+                    bottom=0,
+                    left=0,
+                    right=0,
+                ),
+            ],
+            expand=True,
+        ),
+        expand=True,
+    )
+
+    terminal_container = ft.Container(
+        ref=terminal_container_ref,
+        content=terminal_panel,
+        expand=True,
+    )
+
+    tabs = ft.Tabs(
+        ref=tabs_ref,
+        length=2,
+        selected_index=0,
+        animation_duration=250,
+        on_change=_on_tab_change,
+        expand=True,
+        content=ft.Column(
+            expand=True,
+            spacing=0,
+            controls=[
+                ft.TabBar(
+                    tabs=[
+                        ft.Tab(
+                            label="Notebook",
+                            icon=ft.Icons.EDIT_NOTE_ROUNDED,
+                        ),
+                        ft.Tab(
+                            label="Real Terminal",
+                            icon=ft.Icons.TERMINAL_ROUNDED,
+                        ),
+                    ]
+                ),
+                ft.TabBarView(
+                    expand=True,
+                    controls=[
+                        notebook_container,
+                        terminal_container,
+                    ],
+                ),
+            ],
+        ),
+    )
+
     view_content = ft.Column(
         controls=[
-            ft.Stack(
-                controls=[
-                    ft.Column(
-                        controls=[
-                            status_header,
-                            keep_alive_card,
-                            action_row,
-                            notebook_section,
-                            build_banner_ad(page),
-                            ft.Container(height=100),
-                        ],
-                        spacing=tokens.SPACE_SM,
-                        scroll=ft.ScrollMode.AUTO,
-                        expand=True,
-                    ),
-                    ft.Container(
-                        content=toolbar,
-                        bottom=0,
-                        left=0,
-                        right=0,
-                    ),
-                ],
-                expand=True,
-            ),
+            status_header,
+            tabs,
         ],
         expand=True,
         spacing=0,

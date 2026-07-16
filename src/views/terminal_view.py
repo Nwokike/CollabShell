@@ -21,34 +21,31 @@ from services.xterm_html import create_terminal_ws_url, xterm_page
 
 logger = logging.getLogger(__name__)
 
-# Try to import flet_webview (only available when installed and in built apps)
-try:
-    import flet_webview as fwv
 
-    WEBVIEW_AVAILABLE = True
-except ImportError:
-    WEBVIEW_AVAILABLE = False
-
-
-def build_terminal_view(
+def build_terminal_panel(
     page: ft.Page,
-    colab_service,
-    state,
     session_name: str,
-    on_back=None,
+    colab_service,
     snack=None,
-    theme_btn=None,
-) -> ft.View:
-    """Build a view with the real Colab terminal."""
+) -> tuple[ft.Container, callable]:
+    """Build terminal panel (status + webview/pywebview body) and return (container, init_task)."""
+    can_embed = False
+    try:
+        import flet_webview as fwv
 
-    _session_info = None
+        if hasattr(ft, "webview") or hasattr(fwv, "WebView"):
+            if page.platform in [
+                ft.PagePlatform.ANDROID,
+                ft.PagePlatform.IOS,
+                ft.PagePlatform.MACOS,
+            ]:
+                can_embed = True
+    except ImportError:
+        pass
+
     _spinner_ref = ft.Ref[ft.ProgressRing]()
     _status_ref = ft.Ref[ft.Text]()
-
-    is_mobile = page.platform.is_mobile() if page.platform else False
-    can_embed = WEBVIEW_AVAILABLE and is_mobile
-
-    # ── Status row ────────────────────────────────────────────────────────────
+    _session_info = None
 
     status = ft.Container(
         content=ft.Row(
@@ -68,8 +65,6 @@ def build_terminal_view(
             tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
         ),
     )
-
-    # ── Helpers (defined before the layout so lambdas can capture them) ────────
 
     async def _launch_external(e):
         """Spawn desktop_terminal.py as a subprocess."""
@@ -113,10 +108,7 @@ def build_terminal_view(
                 snack(f"Error: {ex}")
             logger.exception("Failed to launch external terminal")
 
-    # ── Body ──────────────────────────────────────────────────────────────────
-
     if can_embed:
-        # Embedded WebView with xterm.js — this is the production path
         body = ft.Container(
             content=ft.Text("Initialising…"),
             expand=True,
@@ -141,6 +133,8 @@ def build_terminal_view(
                 )
                 html = xterm_page(local_ws_url)
 
+                import flet_webview as fwv
+
                 webview = fwv.WebView(
                     url="about:blank",
                     expand=True,
@@ -151,11 +145,9 @@ def build_terminal_view(
                 if _spinner_ref.current:
                     _spinner_ref.current.visible = False
 
-                # Replace the placeholder with the WebView
                 body.content = webview
                 page.update()
 
-                # Load the xterm.js HTML into the WebView
                 await webview.load_html(html)
 
             except Exception as ex:
@@ -167,10 +159,9 @@ def build_terminal_view(
                     _spinner_ref.current.visible = False
                 page.update()
 
-        page.run_task(_connect_and_embed)
+        init_func = _connect_and_embed
 
     else:
-        # Desktop dev — show a launch button for the external pywebview window
         body = ft.Container(
             content=ft.Column(
                 controls=[
@@ -202,17 +193,43 @@ def build_terminal_view(
             expand=True,
         )
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+        async def _dummy_init():
+            if _status_ref.current:
+                _status_ref.current.value = ""
+            if _spinner_ref.current:
+                _spinner_ref.current.visible = False
+            page.update()
 
-    content = ft.Column(
-        controls=[status, body],
-        spacing=0,
+        init_func = _dummy_init
+
+    panel = ft.Container(
+        content=ft.Column(
+            controls=[status, body],
+            spacing=0,
+            expand=True,
+        ),
         expand=True,
     )
 
+    return panel, init_func
+
+
+def build_terminal_view(
+    page: ft.Page,
+    colab_service,
+    session_name: str,
+    state=None,
+    on_back=None,
+    snack=None,
+    theme_btn=None,
+) -> ft.View:
+    """Build a view with the real Colab terminal."""
+    panel, init_func = build_terminal_panel(page, session_name, colab_service, snack)
+    page.run_task(init_func)
+
     view = ft.View(
         route=f"/terminal?session={session_name}",
-        controls=[content],
+        controls=[panel],
         padding=0,
         appbar=ft.AppBar(
             leading=ft.Container(
