@@ -106,12 +106,12 @@ def build_files_view(
 
     async def _do_download_selected(e=None):
         selected_items = [f for f in files if f["name"] in selected_files]
-        file_items = [f for f in selected_items if f.get("type") != "directory"]
-        if not file_items:
+        if not selected_items:
             return
             
-        for item in file_items:
+        for item in selected_items:
             name = item["name"]
+            is_dir = item.get("type") == "directory"
             remote_path = posixpath.normpath(posixpath.join(current_path, name))
             
             download_dialog = ft.AlertDialog(
@@ -130,13 +130,23 @@ def build_files_view(
             try:
                 local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
                 os.makedirs(local_dir, exist_ok=True)
-                local_path = os.path.join(local_dir, name)
-                await colab_service.download(
-                    remote_path,
-                    local_path,
-                    session_name=session_name,
-                    auth_method=state.auth_method,
-                )
+                
+                if is_dir:
+                    local_path = os.path.join(local_dir, f"{name}.zip")
+                    await colab_service.download_folder(
+                        remote_dir_path=remote_path,
+                        local_zip_path=local_path,
+                        session_name=session_name,
+                        auth_method=state.auth_method,
+                    )
+                else:
+                    local_path = os.path.join(local_dir, name)
+                    await colab_service.download(
+                        remote_path,
+                        local_path,
+                        session_name=session_name,
+                        auth_method=state.auth_method,
+                    )
                 if snack:
                     snack(f"✅ Saved to {local_path}")
             except Exception as ex:

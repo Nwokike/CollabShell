@@ -929,6 +929,54 @@ class ColabService:
 
         return await asyncio.to_thread(_download)
 
+    async def download_folder(
+        self,
+        remote_dir_path: str,
+        local_zip_path: str,
+        session_name: str = None,
+        auth_method: str = "oauth2",
+    ) -> bool:
+        """Download a remote directory as a zip file to a local path."""
+        import posixpath
+        
+        remote_dir_path = posixpath.normpath(remote_dir_path)
+        base_name = posixpath.basename(remote_dir_path)
+        if not base_name:
+            base_name = "folder"
+            
+        parent_dir = posixpath.dirname(remote_dir_path)
+        zip_remote_path = posixpath.join(parent_dir, f"{base_name}_temp.zip")
+        
+        code = f"""
+import shutil
+shutil.make_archive('{zip_remote_path[:-4]}', 'zip', '{remote_dir_path}')
+"""
+        try:
+            await self.exec_code(
+                code=code,
+                session_name=session_name,
+                auth_method=auth_method,
+                timeout=60.0,
+            )
+            
+            await self.download(
+                remote_path=zip_remote_path,
+                local_path=local_zip_path,
+                session_name=session_name,
+                auth_method=auth_method,
+            )
+            return True
+        finally:
+            try:
+                await self.rm(
+                    path=zip_remote_path,
+                    session_name=session_name,
+                    auth_method=auth_method,
+                )
+            except Exception:
+                pass
+
+
     async def rm(
         self, path: str, session_name: str = None, auth_method: str = "oauth2"
     ) -> bool:
