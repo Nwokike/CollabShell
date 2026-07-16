@@ -151,26 +151,27 @@ def build_terminal_panel(
                 if page.platform == ft.PagePlatform.ANDROID_TV:
                     page.platform = ft.PagePlatform.ANDROID
 
-                if _webview_instance is None:
-                    _webview_instance = fwv.WebView(
-                        url="about:blank",
-                        expand=True,
-                    )
-                    body.content = _webview_instance
+                if _webview_instance is not None:
+                    # Tear down existing WebView to guarantee fresh reload on Android
+                    body.content = ft.Container(expand=True)
                     page.update()
-                    # Allow native Android WebView platform view time to mount before method calls
-                    await asyncio.sleep(0.35)
+                    await asyncio.sleep(0.1)
 
-                    try:
-                        await _webview_instance.set_javascript_mode(
-                            fwv.JavaScriptMode.UNRESTRICTED
-                        )
-                    except Exception as ex:
-                        logger.warning("Could not set JS mode on WebView: %s", ex)
-                else:
-                    # Reuse existing mounted WebView when reconnecting/refreshing
-                    body.content = _webview_instance
-                    page.update()
+                _webview_instance = fwv.WebView(
+                    url="about:blank",
+                    expand=True,
+                )
+                body.content = _webview_instance
+                page.update()
+                # Allow native Android WebView platform view time to mount before method calls
+                await asyncio.sleep(0.35)
+
+                try:
+                    await _webview_instance.set_javascript_mode(
+                        fwv.JavaScriptMode.UNRESTRICTED
+                    )
+                except Exception as ex:
+                    logger.warning("Could not set JS mode on WebView: %s", ex)
 
                 if _status_ref.current:
                     _status_ref.current.value = ""

@@ -120,7 +120,11 @@ def build_session_view(
     terminal_container_ref = ft.Ref[ft.Container]()
 
     def _on_tab_change(e):
-        idx = tabs_ref.current.selected_index if tabs_ref.current else 0
+        idx = int(e.data) if e and e.data else 0
+        # Toggle visibility manually (no TabBarView = no swipe)
+        if notebook_container_ref.current and terminal_container_ref.current:
+            notebook_container_ref.current.visible = idx == 0
+            terminal_container_ref.current.visible = idx == 1
         if idx == 1 and not _terminal_initialized["value"]:
             _terminal_initialized["value"] = True
             page.run_task(terminal_init_func)
@@ -129,7 +133,9 @@ def build_session_view(
     def _switch_to_terminal_tab():
         if tabs_ref.current:
             tabs_ref.current.selected_index = 1
-            _on_tab_change(None)
+        if not _terminal_initialized["value"]:
+            _terminal_initialized["value"] = True
+            page.run_task(terminal_init_func)
 
     async def _navigate_home(msg=None):
         if msg and snack:
@@ -1171,65 +1177,130 @@ def build_session_view(
             expand=True,
         ),
         expand=True,
+        visible=(initial_tab == "notebook"),
+    )
+
+    terminal_toolbar = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(
+                            ft.Icons.TERMINAL_ROUNDED,
+                            size=16,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Text(
+                            "Colab TTY",
+                            size=13,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    spacing=6,
+                ),
+                ft.Row(
+                    controls=[
+                        ft.TextButton(
+                            content="New Terminal",
+                            icon=ft.Icons.ADD_ROUNDED,
+                            style=ft.ButtonStyle(
+                                color=ft.Colors.PRIMARY,
+                                padding=ft.Padding(12, 0, 12, 0),
+                            ),
+                            on_click=lambda e: page.run_task(terminal_init_func),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.REFRESH_ROUNDED,
+                            tooltip="Refresh connection",
+                            icon_size=18,
+                            style=ft.ButtonStyle(
+                                padding=4,
+                            ),
+                            on_click=lambda e: page.run_task(terminal_init_func),
+                        ),
+                    ],
+                    spacing=0,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding(16, 4, 8, 4),
+        border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        bgcolor=ft.Colors.SURFACE,
     )
 
     terminal_container = ft.Container(
         ref=terminal_container_ref,
-        content=terminal_panel,
+        content=ft.Column(
+            controls=[
+                terminal_toolbar,
+                ft.Container(content=terminal_panel, expand=True),
+            ],
+            spacing=0,
+            expand=True,
+        ),
         expand=True,
+        visible=(initial_tab == "terminal"),
     )
 
     tabs = ft.Tabs(
         ref=tabs_ref,
         length=2,
         selected_index=1 if initial_tab == "terminal" else 0,
-        animation_duration=250,
         on_change=_on_tab_change,
-        expand=True,
+        expand=False,
         content=ft.Column(
-            expand=True,
             spacing=0,
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.TabBar(
-                            expand=True,
-                            tabs=[
-                                ft.Tab(
-                                    label="Notebook",
-                                    icon=ft.Icons.EDIT_NOTE_ROUNDED,
-                                ),
-                                ft.Tab(
-                                    label="Real Terminal",
-                                    icon=ft.Icons.TERMINAL_ROUNDED,
-                                ),
-                            ],
+                ft.TabBar(
+                    height=48,
+                    label_padding=ft.Padding(16, 0, 16, 0),
+                    divider_color=ft.Colors.TRANSPARENT,
+                    tabs=[
+                        ft.Tab(
+                            label=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, size=20),
+                                    ft.Text(
+                                        "Notebook", size=14, weight=ft.FontWeight.W_500
+                                    ),
+                                ],
+                                spacing=8,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                            )
                         ),
-                        ft.IconButton(
-                            icon=ft.Icons.REFRESH_ROUNDED,
-                            tooltip="Refresh Terminal",
-                            icon_size=20,
-                            on_click=lambda e: page.run_task(terminal_init_func),
+                        ft.Tab(
+                            label=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=20),
+                                    ft.Text(
+                                        "Terminal", size=14, weight=ft.FontWeight.W_500
+                                    ),
+                                ],
+                                spacing=8,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                            )
                         ),
                     ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.TabBarView(
-                    expand=True,
-                    controls=[
-                        notebook_container,
-                        terminal_container,
-                    ],
-                ),
+                # No TabBarView — content is managed manually below to avoid swipe
             ],
         ),
     )
 
-    view_content = ft.Column(
+    # Content panels stacked and visibility-toggled manually (no swipe)
+    content_stack = ft.Stack(
+        expand=True,
         controls=[
-            status_header,
-            tabs,
+            notebook_container,
+            terminal_container,
         ],
+    )
+
+    view_content = ft.Column(
+        controls=[status_header, tabs, content_stack],
         expand=True,
         spacing=0,
     )

@@ -76,7 +76,7 @@ def xterm_page(ws_url: str) -> str:
                           color: #e0e0e0; cursor: pointer; transition: all 0.1s; }}
     #extra-keys button:active {{ background: rgba(80, 80, 80, 0.8); transform: scale(0.95); }}
     #extra-keys button.active {{ background: #8be9fd; border-color: #8be9fd; color: #1e1e1e; }}
-    #term {{ padding-top: 32px; padding-bottom: 44px; height: 100%; }}
+    #term {{ padding-top: 32px; height: calc(100% - 44px); }}
     .xterm-viewport::-webkit-scrollbar {{ width: 8px; }}
     .xterm-viewport::-webkit-scrollbar-thumb {{ background: rgba(255,255,255,0.2); border-radius: 4px; }}
   </style>
