@@ -35,13 +35,15 @@
 
 | Capability | Description |
 | :--- | :--- |
-| **Session Lifecycle Control** | Instantly create, list, restart, and stop active Google Colab sessions directly from your device. |
+| **Interactive PTY Terminal (TTY)** | Real-time live web terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. |
+| **Tabbed Workspace** | Seamlessly toggle between **Notebook** cell execution and live **Terminal** shell tabs inside active cloud runtimes. |
+| **Session Lifecycle Control** | Instantly create, list, restart, and stop active Google Colab sessions directly from your device with smart intent routing. |
 | **Hardware Tiers** | Provision CPU (always free), T4 GPU, or TPU v5e/v6e runtimes based on your Google tier limits. |
-| **Interactive Terminal** | Run Python scripts and interactive code blocks on the remote VM with a full console output viewer. |
-| **Google Drive Mounts** | Mount your personal Google Drive storage to the remote virtual machine for persistent datasets. |
-| **Package Installer** | Fast pip and uv package installation directly on the remote instance. |
-| **Exportable Event Logs** | Maintain history profiles and export session logs as Jupyter Notebooks (.ipynb), Markdown (.md), or plain text. |
-| **Sandbox Security** | Secure OAuth2 credentials management sandboxed on your device storage. |
+| **Native OS File Picker & Transfers** | Save downloaded files and archives anywhere on your device via the native OS File Picker without Android storage permission issues. |
+| **Folder Zip-and-Download** | Archive and download entire remote directory structures (`/content/folder`) right to your local device with live sweeping progress bars. |
+| **Google Drive & GCP Mounts** | Mount your personal Google Drive storage (`/content/drive`) or propagate Google Cloud credentials with real-time execution progress. |
+| **Exportable Event Logs** | Maintain universal history profiles (`storage/history/`) and export session logs as Jupyter Notebooks (.ipynb), Markdown (.md), or plain text. |
+| **Sandbox Security** | Secure OAuth2 credentials management sandboxed directly on your device storage. |
 ---
 
 ## Screenshots
@@ -97,6 +99,20 @@
   </tr>
 </table>
 
+### Real-Time Terminal & Remote File Manager
+<table>
+  <tr>
+    <td width="33%"><img src="screenshots/session_terminal_dark.png" width="100%" alt="Interactive TTY Terminal" /></td>
+    <td width="33%"><img src="screenshots/files_browser_dark.png" width="100%" alt="Remote File Browser" /></td>
+    <td width="33%"><img src="screenshots/file_transfer_progress.png" width="100%" alt="File Transfer Progress" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Interactive TTY Shell — live real-time bash commands over Colab WebSockets</em></td>
+    <td align="center"><em>Remote File Browser — navigate folders, select items, and trigger action bar tools</em></td>
+    <td align="center"><em>Native OS Picker & Progress — sweeping progress bars and accurate payload sizes</em></td>
+  </tr>
+</table>
+
 ### History, Settings & Scripts
 <table>
   <tr>
@@ -116,6 +132,9 @@
 ## Features
 
 - **Collab Shell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
+- **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`).
+- **Universal Storage & History Normalization** — Monkey-patched backend state persistence (`storage_patch.py`) guaranteeing history and execution logs save reliably across Android and Linux desktops.
+- **Native OS File Picker & Zip-and-Download** — Save files anywhere on your OS/Android device without permission headaches, and archive entire cloud folders on the fly.
 - **Dynamic Onboarding Guide** — 3-step walk-through onboarding introducing features with gesture-swipe controls.
 - **Preloaded Interstitial Ads** — Intelligent Google AdMob integration displaying ads seamlessly on mobile platforms.
 - **Non-Blocking Execution** — Asynchronous connection wrappers ensuring the Flet UI stays fully responsive during long remote computations.

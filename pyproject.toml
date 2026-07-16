@@ -19,8 +19,6 @@ build_number = 2
 [tool.flet.app]
 path = "src"
 
-[tool.flet.dev_packages]
-flet-xterm = "../flet-xterm"
 
 [tool.flet.app.boot_screen]
 show = true
@@ -43,7 +41,7 @@ allowBackup = "false"
 "android.permission.ACCESS_NETWORK_STATE" = true
 
 [tool.flet.android.signing]
-key_store = "/home/onyii/Desktop/kiri-apps/Colab/kiri_keystore.jks"
+key_store = "../../../../kiri_keystore.jks"
 key_alias = "upload"
 
 
@@ -56,6 +54,4 @@ dev = [
     "pyqt6-webengine>=6.11.0",
 ]
 
-[tool.uv.sources]
-flet-xterm = { path = "../flet-xterm", editable = true }
 

@@ -42,11 +42,11 @@ jobs:
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > upload-key.jks
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > kiri_keystore.jks
       - name: Build APK (split per ABI)
         env:
           PIP_FIND_LINKS: ${{ github.workspace }}/wheels
-          FLET_ANDROID_SIGNING_KEY_STORE: ${{ github.workspace }}/upload-key.jks
+          FLET_ANDROID_SIGNING_KEY_STORE: ${{ github.workspace }}/kiri_keystore.jks
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -77,11 +77,11 @@ jobs:
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > upload-key.jks
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > kiri_keystore.jks
       - name: Build AAB
         env:
           PIP_FIND_LINKS: ${{ github.workspace }}/wheels
-          FLET_ANDROID_SIGNING_KEY_STORE: ${{ github.workspace }}/upload-key.jks
+          FLET_ANDROID_SIGNING_KEY_STORE: ${{ github.workspace }}/kiri_keystore.jks
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
