@@ -715,13 +715,43 @@ class ColabService:
 
                 runtime.colab_request_hook = drivefs_hook
 
+            wrapped_user_stdin_hook = None
+            if stdin_hook is not None:
+
+                def _app_stdin_hook(prompt):
+                    res = stdin_hook(prompt)
+                    try:
+                        kc = runtime.kernel_client
+                        wsclient = (
+                            getattr(kc._manager, "client", None)
+                            if kc and hasattr(kc, "_manager")
+                            else None
+                        )
+                        if wsclient and hasattr(wsclient, "stdin_channel"):
+                            content = {"value": res}
+                            reply_msg = wsclient.session.msg("input_reply", content)
+                            if isinstance(prompt, dict) and "header" in prompt:
+                                reply_msg["parent_header"] = prompt["header"]
+                            wsclient.stdin_channel.send(reply_msg)
+                            logger.info(
+                                "[colab_service] Successfully sent input_reply over WebSocket from our app code."
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"[colab_service] Failed to send input_reply over WebSocket: {e}",
+                            exc_info=True,
+                        )
+                    return res
+
+                wrapped_user_stdin_hook = _app_stdin_hook
+
             try:
                 outputs = runtime.execute_code(
                     code,
                     output_hook=output_hook if on_output else None,
                     timeout=timeout,
                     allow_stdin=intercept_oauth or (stdin_hook is not None),
-                    stdin_hook=stdin_hook,
+                    stdin_hook=wrapped_user_stdin_hook,
                 )
                 st.history.log_event(
                     session_name,
