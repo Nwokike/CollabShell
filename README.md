@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Collab Shell — Manage and run Google Colab sessions directly from your phone with native TPU and GPU control
+  Collab Shell — Run cloud notebooks, interactive terminals & manage files natively on your phone
 </p>
 
 <p align="center">
