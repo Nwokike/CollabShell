@@ -385,18 +385,9 @@ async def main(page: ft.Page):
                 on_session_tap=lambda name: page.run_task(
                     navigate, f"/session?session={name}"
                 ),
-                on_quick_run=lambda e: page.run_task(navigate, "/run"),
-                on_quick_terminal=lambda e: page.run_task(
-                    navigate,
-                    f"/session?session={state.active_sessions[0]['name']}"
-                    if state.active_sessions
-                    else "/run",
-                ),
-                on_cloud_files=lambda e: page.run_task(
-                    navigate,
-                    f"/files?session={state.active_sessions[0]['name']}"
-                    if state.active_sessions
-                    else "/files",
+                navigate=navigate,
+                on_refresh=lambda e: page.run_task(
+                    colab_service.list_sessions, "oauth2"
                 ),
                 storage=storage,
             )
@@ -406,11 +397,14 @@ async def main(page: ft.Page):
             from views.session_view import build_session_view
 
             session_name = query_params.get("session", "")
+            initial_tab = query_params.get("tab", "notebook")
+
             view = build_session_view(
                 page=page,
                 colab_service=colab_service,
                 state=state,
                 session_name=session_name,
+                initial_tab=initial_tab,
                 on_back=lambda e: page.run_task(navigate, "/home"),
                 navigate=navigate,
                 snack=_snack,

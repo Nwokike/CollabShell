@@ -403,8 +403,29 @@ class ColabService:
             results = []
             name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
 
+            recovered_count = 0
             for a in assignments:
-                name = name_by_ep.get(a.endpoint, "Unknown")
+                name = name_by_ep.get(a.endpoint)
+
+                # Auto-recover orphaned sessions not in local state
+                if not name:
+                    recovered_count += 1
+                    name = f"recovered-{recovered_count}"
+
+                    from colab_cli.state import SessionState
+
+                    # Reconstruct the session using Google's runtime info
+                    recovered_session = SessionState(
+                        name=name,
+                        token=a.runtime_proxy_info.token,
+                        url=a.runtime_proxy_info.url,
+                        endpoint=a.endpoint,
+                        variant=a.variant.name,
+                        accelerator=a.accelerator.value,
+                    )
+                    st.store.add(recovered_session)
+                    local_sessions[name] = recovered_session
+
                 accel_label = (
                     "CPU" if a.accelerator.value == "NONE" else a.accelerator.value
                 )

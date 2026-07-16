@@ -328,7 +328,7 @@ def build_run_view(
                                                     ),
                                                     ft.dropdown.Option(
                                                         key="v6e1",
-                                                        text="v6e1  ·  Free tier",
+                                                        text="v6e1",
                                                     ),
                                                 ],
                                                 value="v5e1",

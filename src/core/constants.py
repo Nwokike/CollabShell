@@ -25,7 +25,7 @@ HARDWARE_TYPES = ["CPU", "GPU", "TPU"]
 
 # Free-tier indicators — show contextual tips to users
 FREE_TIER_GPU = ["T4"]
-FREE_TIER_TPU = ["v5e1", "v6e1"]
+FREE_TIER_TPU = ["v5e1"]
 PAID_TIER_GPU = ["L4", "G4", "A100", "H100"]
 
 # ── Timeout presets ───────────────────────────────────────────────────────────

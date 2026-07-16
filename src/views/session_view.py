@@ -31,6 +31,7 @@ def build_session_view(
     colab_service,
     state,
     session_name: str,
+    initial_tab: str = "notebook",
     on_back=None,
     navigate=None,
     snack=None,
@@ -856,7 +857,7 @@ def build_session_view(
     tabs = ft.Tabs(
         ref=tabs_ref,
         length=2,
-        selected_index=0,
+        selected_index=1 if initial_tab == "terminal" else 0,
         animation_duration=250,
         on_change=_on_tab_change,
         expand=True,
@@ -895,6 +896,10 @@ def build_session_view(
         expand=True,
         spacing=0,
     )
+
+    if initial_tab == "terminal" and not _terminal_initialized["value"]:
+        _terminal_initialized["value"] = True
+        page.run_task(terminal_init_func)
 
     return ft.View(
         route=f"/session?session={session_name}",
