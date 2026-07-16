@@ -22,6 +22,8 @@ credentials.json
 token.json
 oauth_code.txt
 storage/
+.env
+.env.*
 
 # Signing keys
 *.jks

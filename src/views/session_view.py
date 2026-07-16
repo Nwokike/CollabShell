@@ -629,7 +629,7 @@ def build_session_view(
     def _interactive_stdin_hook(prompt):
         """Handle kernel input requests (input()/getpass()).
 
-        Presents an AlertDialog for clean, non-blocking user input.
+        Presents an AlertDialog for clean, non-blocking user input with clickable OAuth links.
         """
         input_event = threading.Event()
         user_input = {"value": ""}
@@ -649,14 +649,20 @@ def build_session_view(
             f"[stdin_hook] Prompt requested: {prompt_str} (password={is_password})"
         )
 
+        extracted_url = None
+        for word in prompt_str.split():
+            if word.startswith("http://") or word.startswith("https://"):
+                extracted_url = word.strip("'\"),;:")
+                break
+
         dialog_field = ft.TextField(
-            label=prompt_str,
+            label="Verification Code / Input",
             autofocus=True,
             password=is_password,
             can_reveal_password=is_password,
         )
 
-        def _submit_input(e):
+        def _submit_input(e=None):
             user_input["value"] = dialog_field.value or ""
             logger.info("[stdin_hook] User submitted input via dialog")
             dialog.open = False
@@ -665,10 +671,38 @@ def build_session_view(
 
         dialog_field.on_submit = _submit_input
 
+        content_controls = [ft.Text(prompt_str, size=tokens.FONT_SM, selectable=True)]
+        if extracted_url:
+            content_controls.append(
+                ft.Row(
+                    [
+                        ft.FilledButton(
+                            "🌐 Open Link in Browser",
+                            on_click=lambda e: page.launch_url(extracted_url),
+                        ),
+                        ft.IconButton(
+                            ft.Icons.COPY_ROUNDED,
+                            tooltip="Copy URL",
+                            on_click=lambda e: (
+                                page.set_clipboard(extracted_url),
+                                (snack("Copied URL to clipboard!") if snack else None),
+                            ),
+                        ),
+                    ],
+                    wrap=True,
+                )
+            )
+        content_controls.append(dialog_field)
+
         dialog = ft.AlertDialog(
-            title=ft.Text("Kernel Input Required"),
-            content=dialog_field,
-            actions=[ft.TextButton("Submit", on_click=_submit_input)],
+            title=ft.Text("Authentication / Input Required"),
+            content=ft.Column(
+                controls=content_controls, tight=True, spacing=tokens.SPACE_MD
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=lambda e: _submit_input()),
+                ft.FilledButton("Submit", on_click=_submit_input),
+            ],
             modal=True,
         )
 

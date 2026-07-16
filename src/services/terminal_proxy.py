@@ -91,30 +91,43 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
+# Global lock for thread-safe target updates
+_settings_lock = threading.Lock()
+
+
 def get_terminal_proxy_url(colab_ws_url: str) -> str:
     """Start (or reconfigure) the local Tornado WebSocket proxy bridge pointing to *colab_ws_url*
     and return the local WebSocket URL (`ws://127.0.0.1:<port>/`) for the WebView to connect to.
     """
     global _proxy_server, _proxy_port, _proxy_thread, _ioloop, _current_colab_url
 
-    if _proxy_server is not None and _proxy_port is not None and _ioloop is not None:
-        # Update target if proxy is already running
+    with _settings_lock:
+        if (
+            _proxy_server is not None
+            and _proxy_port is not None
+            and _ioloop is not None
+        ):
+            # Update target if proxy is already running
+            _current_colab_url = colab_ws_url
+            if (
+                _proxy_server.request_callback.settings.get("colab_ws_url")
+                != colab_ws_url
+            ):
+                _proxy_server.request_callback.settings["colab_ws_url"] = colab_ws_url
+                logger.info("Updated existing proxy server target to: %s", colab_ws_url)
+            return f"ws://127.0.0.1:{_proxy_port}/"
+
+        port = _find_free_port()
+        _proxy_port = port
         _current_colab_url = colab_ws_url
-        if _proxy_server.request_callback.settings.get("colab_ws_url") != colab_ws_url:
-            _proxy_server.request_callback.settings["colab_ws_url"] = colab_ws_url
-            logger.info("Updated existing proxy server target to: %s", colab_ws_url)
-        return f"ws://127.0.0.1:{_proxy_port}/"
 
-    port = _find_free_port()
-    _proxy_port = port
-    _current_colab_url = colab_ws_url
-
-    app = tornado.web.Application(
-        [(r"/", TerminalProxyHandler)],
-        colab_ws_url=colab_ws_url,
-    )
+        app = tornado.web.Application(
+            [(r"/", TerminalProxyHandler)],
+            colab_ws_url=colab_ws_url,
+        )
 
     started_event = threading.Event()
+    start_error: list[Exception] = []
 
     def _run():
         global _proxy_server, _ioloop
@@ -123,19 +136,46 @@ def get_terminal_proxy_url(colab_ws_url: str) -> str:
         asyncio.set_event_loop(loop)
         _ioloop = tornado.ioloop.IOLoop.current()
 
-        _proxy_server = app.listen(port, address="127.0.0.1")
-        logger.info("Started local terminal proxy server on ws://127.0.0.1:%s/", port)
-        started_event.set()
-
         try:
+            _proxy_server = app.listen(port, address="127.0.0.1")
+            logger.info(
+                "Started local terminal proxy server on ws://127.0.0.1:%s/", port
+            )
+            started_event.set()
             _ioloop.start()
         except Exception as e:
-            logger.error("Terminal proxy IOLoop exited: %s", e)
+            logger.error("Terminal proxy IOLoop exited with error: %s", e)
+            start_error.append(e)
+            started_event.set()
 
     _proxy_thread = threading.Thread(
         target=_run, name="TerminalProxyThread", daemon=True
     )
     _proxy_thread.start()
-    started_event.wait(timeout=5)
+    if not started_event.wait(timeout=5.0):
+        raise RuntimeError("Tornado proxy bridge failed to start within 5.0s timeout")
+    if start_error:
+        raise RuntimeError(f"Tornado proxy bridge failed to start: {start_error[0]}")
 
     return f"ws://127.0.0.1:{port}/"
+
+
+def stop_proxy():
+    """Cleanly stop the running Tornado proxy server and IOLoop."""
+    global _proxy_server, _proxy_port, _proxy_thread, _ioloop, _current_colab_url
+    with _settings_lock:
+        if _proxy_server is not None:
+            try:
+                _proxy_server.stop()
+            except Exception as e:
+                logger.debug("Error stopping proxy server: %s", e)
+            _proxy_server = None
+        if _ioloop is not None:
+            try:
+                _ioloop.add_callback(_ioloop.stop)
+            except Exception as e:
+                logger.debug("Error stopping proxy IOLoop: %s", e)
+            _ioloop = None
+        _proxy_port = None
+        _current_colab_url = None
+    logger.info("Terminal proxy stopped successfully.")

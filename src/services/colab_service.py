@@ -25,6 +25,7 @@ class ColabService:
         # In-process keep-alive tasks for platforms that don't support subprocess
         # (Android).  Keyed by session name, cancelled when the session stops.
         self._keep_alive_tasks: dict[str, asyncio.Task] = {}
+        self.default_stdin_hook: Optional[Callable] = None
 
     # ── Availability ──────────────────────────────────────────────────────────
 
@@ -736,11 +737,12 @@ class ColabService:
 
                 runtime.colab_request_hook = drivefs_hook
 
+            active_stdin_hook = stdin_hook or self.default_stdin_hook
             wrapped_user_stdin_hook = None
-            if stdin_hook is not None:
+            if active_stdin_hook is not None:
 
                 def _app_stdin_hook(prompt):
-                    res = stdin_hook(prompt)
+                    res = active_stdin_hook(prompt)
                     try:
                         kc = runtime.kernel_client
                         wsclient = (
@@ -771,7 +773,7 @@ class ColabService:
                     code,
                     output_hook=output_hook if on_output else None,
                     timeout=timeout,
-                    allow_stdin=intercept_oauth or (stdin_hook is not None),
+                    allow_stdin=intercept_oauth or (active_stdin_hook is not None),
                     stdin_hook=wrapped_user_stdin_hook,
                 )
                 st.history.log_event(

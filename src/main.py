@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import logging
-import time
+import threading
 
 from core.storage_patch import apply_storage_patches
 
@@ -37,8 +37,8 @@ colab_service = ColabService()
 async def main(page: ft.Page):
     """Main Flet application entry point."""
     page.fonts = {
-        "Outfit": "assets/outfit.css",
-        "RobotoMono": "assets/roboto_mono.css",
+        "Outfit": "assets/fonts/Outfit-Regular.ttf",
+        "RobotoMono": "assets/fonts/RobotoMono-Regular.ttf",
     }
     page.title = constants.APP_NAME
     page.favicon = "icon.png"
@@ -75,6 +75,91 @@ async def main(page: ft.Page):
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
     page.file_picker = file_picker
+
+    def _global_stdin_hook(prompt):
+        """Universal interactive dialog for kernel/GCP OAuth stdin requests."""
+        input_event = threading.Event()
+        user_input = {"value": ""}
+
+        if isinstance(prompt, dict):
+            content_dict = prompt.get("content", {})
+            prompt_str = content_dict.get("prompt", str(prompt))
+            is_password = content_dict.get("password", False)
+        else:
+            prompt_str = str(prompt) if prompt else "Input required"
+            is_password = any(
+                kw in prompt_str.lower()
+                for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
+            )
+
+        logger.info("[global_stdin_hook] Prompt requested: %s", prompt_str)
+
+        extracted_url = None
+        for word in prompt_str.split():
+            if word.startswith("http://") or word.startswith("https://"):
+                extracted_url = word.strip("'\"),;:")
+                break
+
+        dialog_field = ft.TextField(
+            label="Verification Code / Input",
+            autofocus=True,
+            password=is_password,
+            can_reveal_password=is_password,
+        )
+
+        def _submit_input(e=None):
+            user_input["value"] = dialog_field.value or ""
+            dialog.open = False
+            page.update()
+            input_event.set()
+
+        dialog_field.on_submit = _submit_input
+
+        content_controls = [ft.Text(prompt_str, size=tokens.FONT_SM, selectable=True)]
+        if extracted_url:
+            content_controls.append(
+                ft.Row(
+                    [
+                        ft.FilledButton(
+                            "🌐 Open Link in Browser",
+                            on_click=lambda e: page.launch_url(extracted_url),
+                        ),
+                        ft.IconButton(
+                            ft.Icons.COPY_ROUNDED,
+                            tooltip="Copy URL",
+                            on_click=lambda e: (
+                                page.set_clipboard(extracted_url),
+                                _snack("Copied URL to clipboard!"),
+                            ),
+                        ),
+                    ],
+                    wrap=True,
+                )
+            )
+        content_controls.append(dialog_field)
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Authentication / Input Required"),
+            content=ft.Column(
+                controls=content_controls, tight=True, spacing=tokens.SPACE_MD
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=lambda e: _submit_input()),
+                ft.FilledButton("Submit", on_click=_submit_input),
+            ],
+            modal=True,
+        )
+
+        async def _show():
+            page.show_dialog(dialog)
+            await asyncio.sleep(0)
+            page.update()
+
+        page.run_task(_show)
+        input_event.wait(timeout=300)
+        return user_input["value"]
+
+    colab_service.default_stdin_hook = _global_stdin_hook
 
     # ── Load saved settings ───────────────────────────────────────────────────
     try:
@@ -241,7 +326,8 @@ async def main(page: ft.Page):
 
                 confirm_dialog = ft.AlertDialog(
                     modal=True,
-                    title=ft.Text("Paid Accelerator Selected"),
+                    on_dismiss=lambda e: _close_confirm("cancel"),
+                    title=ft.Text("Paid Runtime Warning"),
                     content=ft.Text(
                         f"{gpu} requires Colab Pro or Pay As You Go and may incur charges. Continue?"
                     ),
@@ -334,7 +420,7 @@ async def main(page: ft.Page):
                 else:
                     await route_change()
             except Exception as ex:
-                logger.error(f"Failed to create session: {ex}", exc_info=True)
+                logger.error("Failed to create session: %s", ex, exc_info=True)
                 loading_dialog.open = False
                 page.update()
                 _snack(f"❌ {ex}")
@@ -580,20 +666,22 @@ async def main(page: ft.Page):
         """Stop all sessions synchronously (used by atexit)."""
         if state.keep_alive_on_disconnect or not state.active_sessions:
             return
-        for s in state.active_sessions:
-            try:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            for s in state.active_sessions:
                 name = s.get("name")
                 if not name:
                     continue
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(
-                    colab_service.stop_session(name, auth_method=state.auth_method)
-                )
-                loop.close()
-            except Exception as exc:
-                logger.warning("Cleanup failed for session %s: %s", s.get("name"), exc)
-            time.sleep(0.5)
+                try:
+                    loop.run_until_complete(
+                        colab_service.stop_session(name, auth_method=state.auth_method)
+                    )
+                except Exception as exc:
+                    logger.warning("Cleanup failed for session %s: %s", name, exc)
+            loop.close()
+        except Exception as e:
+            logger.warning("atexit cleanup encountered error: %s", e)
 
     atexit.register(_cleanup_sessions)
 
