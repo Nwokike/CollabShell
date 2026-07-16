@@ -115,13 +115,25 @@ def build_terminal_panel(
             alignment=ft.Alignment.CENTER,
         )
 
-        async def _connect_and_embed():
-            nonlocal _session_info
+        _webview_instance = None
+
+        async def _connect_and_embed(e=None):
+            nonlocal _session_info, _webview_instance
+            if _status_ref.current:
+                _status_ref.current.value = "Connecting to Colab terminal…"
+                _status_ref.current.color = ft.Colors.ON_SURFACE_VARIANT
+            if _spinner_ref.current:
+                _spinner_ref.current.visible = True
+            page.update()
+
             try:
                 _session_info = await _get_terminal_session(colab_service, session_name)
                 if not _session_info:
                     if _status_ref.current:
                         _status_ref.current.value = "Session not found"
+                        _status_ref.current.color = AppColors.ERROR
+                    if _spinner_ref.current:
+                        _spinner_ref.current.visible = False
                     page.update()
                     return
 
@@ -139,28 +151,37 @@ def build_terminal_panel(
                 if page.platform == ft.PagePlatform.ANDROID_TV:
                     page.platform = ft.PagePlatform.ANDROID
 
-                webview = fwv.WebView(
-                    url="about:blank",
-                    expand=True,
-                )
+                if _webview_instance is None:
+                    _webview_instance = fwv.WebView(
+                        url="about:blank",
+                        expand=True,
+                    )
+                    body.content = _webview_instance
+                    page.update()
+                    # Allow native Android WebView platform view time to mount before method calls
+                    await asyncio.sleep(0.35)
+
+                    try:
+                        await _webview_instance.set_javascript_mode(
+                            fwv.JavaScriptMode.UNRESTRICTED
+                        )
+                    except Exception as ex:
+                        logger.warning("Could not set JS mode on WebView: %s", ex)
+                else:
+                    # Reuse existing mounted WebView when reconnecting/refreshing
+                    body.content = _webview_instance
+                    page.update()
 
                 if _status_ref.current:
                     _status_ref.current.value = ""
                 if _spinner_ref.current:
                     _spinner_ref.current.visible = False
-
-                body.content = webview
                 page.update()
-
-                try:
-                    await webview.set_javascript_mode(fwv.JavaScriptMode.UNRESTRICTED)
-                except Exception as ex:
-                    logger.warning("Could not set JS mode on WebView: %s", ex)
 
                 if original_platform != page.platform:
                     page.platform = original_platform
 
-                await webview.load_html(html)
+                await _webview_instance.load_html(html)
 
             except Exception as ex:
                 logger.error("Terminal init failed: %s", ex)
@@ -239,6 +260,16 @@ def build_terminal_view(
     panel, init_func = build_terminal_panel(page, session_name, colab_service, snack)
     page.run_task(init_func)
 
+    refresh_btn = ft.IconButton(
+        icon=ft.Icons.REFRESH_ROUNDED,
+        tooltip="Reconnect / Refresh Terminal",
+        icon_size=tokens.ICON_MD,
+        on_click=lambda e: page.run_task(init_func, e),
+    )
+    appbar_actions = [refresh_btn]
+    if theme_btn:
+        appbar_actions.append(theme_btn)
+
     view = ft.View(
         route=f"/terminal?session={session_name}",
         controls=[panel],
@@ -257,7 +288,7 @@ def build_terminal_view(
             title=ft.Text("Terminal", size=tokens.FONT_LG, weight=ft.FontWeight.W_700),
             center_title=True,
             bgcolor=ft.Colors.TRANSPARENT,
-            actions=[theme_btn] if theme_btn else [],
+            actions=appbar_actions,
         ),
     )
 

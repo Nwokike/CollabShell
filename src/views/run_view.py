@@ -49,12 +49,12 @@ def build_run_view(
         files = await file_picker.pick_files(
             allowed_extensions=["py"],
             dialog_title="Select Python Script",
-            with_data=True,
+            with_data=bool(getattr(page, "web", False)),
         )
         if files and script_path_ref.current:
             f = files[0]
             script_path_ref.current.value = f.name
-            _picked_file = {"bytes": f.bytes, "name": f.name}
+            _picked_file = {"path": f.path, "bytes": f.bytes, "name": f.name}
             page.update()
 
     hardware_type = "CPU"
@@ -123,9 +123,13 @@ def build_run_view(
             output_lines.append(f"[*] Session '{sn}' created. Running script...")
             page.update()
 
-            # Read the script — prefer bytes (from mobile file picker) over path
+            # Read the script — prefer bytes (web mode) or path (native/mobile mode)
             if _picked_file.get("bytes"):
                 code = _picked_file["bytes"].decode("utf-8")
+                script_name = _picked_file.get("name", script)
+            elif _picked_file.get("path"):
+                with open(_picked_file["path"], "r", encoding="utf-8") as f:
+                    code = f.read()
                 script_name = _picked_file.get("name", script)
             else:
                 with open(script, "r", encoding="utf-8") as f:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import flet as ft
 import threading
@@ -470,17 +471,35 @@ def build_session_view(
                     snack(f"❌ Import failed: {ex}")
 
     async def _on_export_ipynb(e):
-        path = await page.file_picker.save_file(
-            allowed_extensions=["ipynb"],
-            file_name=f"{session_name}.ipynb",
-        )
+        if page.platform in [
+            ft.PagePlatform.ANDROID,
+            ft.PagePlatform.ANDROID_TV,
+            ft.PagePlatform.IOS,
+        ]:
+            dl_dir = "/storage/emulated/0/Download"
+            if not os.path.exists(dl_dir):
+                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(dl_dir, exist_ok=True)
+            path = os.path.join(dl_dir, f"{session_name}.ipynb")
+        else:
+            try:
+                path = await page.file_picker.save_file(
+                    allowed_extensions=["ipynb"],
+                    file_name=f"{session_name}.ipynb",
+                )
+            except ValueError:
+                dl_dir = "/storage/emulated/0/Download"
+                if not os.path.exists(dl_dir):
+                    dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                os.makedirs(dl_dir, exist_ok=True)
+                path = os.path.join(dl_dir, f"{session_name}.ipynb")
         if path:
             await _on_file_result("export", path=path)
 
     async def _on_import_ipynb(e):
         files = await page.file_picker.pick_files(
             allowed_extensions=["ipynb"],
-            with_data=True,
+            with_data=bool(getattr(page, "web", False)),
         )
         if files:
             await _on_file_result("import", files=files)

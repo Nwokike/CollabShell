@@ -105,7 +105,14 @@ def build_history_view(
             await state.ad_service.show_interstitial()
 
         fmt = state.default_log_format or "ipynb"
-        export_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        if page.platform in [
+            ft.PagePlatform.ANDROID,
+            ft.PagePlatform.ANDROID_TV,
+            ft.PagePlatform.IOS,
+        ]:
+            export_dir = "/storage/emulated/0/Download"
+        else:
+            export_dir = os.path.join(os.path.expanduser("~"), "Downloads")
         os.makedirs(export_dir, exist_ok=True)
         output_path = os.path.join(export_dir, f"{sess}_log.{fmt}")
 
