@@ -140,6 +140,12 @@ def build_files_view(
                 bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
             )
 
+            status_text = ft.Text(
+                f"Downloading...{size_str}",
+                size=tokens.FONT_XS,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
+
             download_dialog = ft.AlertDialog(
                 title=ft.Text(
                     f"Downloading {default_name}",
@@ -149,17 +155,20 @@ def build_files_view(
                 content=ft.Column(
                     [
                         prog_bar,
-                        ft.Text(
-                            f"Downloading...{size_str}",
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
+                        status_text,
                     ],
                     spacing=tokens.SPACE_SM,
                     tight=True,
                 ),
             )
             page.show_dialog(download_dialog)
+
+            def _on_status(msg: str):
+                status_text.value = msg
+                try:
+                    status_text.update()
+                except Exception:
+                    pass
 
             try:
                 if is_dir:
@@ -168,6 +177,7 @@ def build_files_view(
                         local_zip_path=local_path,
                         session_name=session_name,
                         auth_method=state.auth_method,
+                        on_status=_on_status,
                     )
                 else:
                     await colab_service.download(
@@ -183,7 +193,10 @@ def build_files_view(
                     snack(f"❌ {ex}")
             finally:
                 download_dialog.open = False
-                page.update()
+                try:
+                    page.update()
+                except Exception:
+                    pass
 
         # Clear selection after download
         selected_files.clear()
@@ -304,7 +317,7 @@ def build_files_view(
                 bottom_right=0,
             ),
             shadow=ft.BoxShadow(
-                spread_radius=1, blur_radius=10, color=ft.Colors.BLACK12
+                spread_radius=1, blur_radius=10, color=ft.Colors.BLACK_12
             ),
             content=ft.Row(
                 controls=[

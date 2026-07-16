@@ -553,6 +553,22 @@ class ColabService:
             )
             try:
                 runtime.restart()
+            except Exception as e:
+                err_str = str(e)
+                if (
+                    hasattr(e, "response")
+                    and getattr(e.response, "status_code", None) == 404
+                    or "404" in err_str
+                    or "Not Found" in err_str
+                ):
+                    logger.warning(
+                        f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+                    )
+                    st.store.remove(session_name)
+                    raise RuntimeError(
+                        "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
+                    ) from e
+                raise
             finally:
                 runtime.stop()
             return True
@@ -785,9 +801,26 @@ class ColabService:
                     },
                 )
                 return outputs
+            except Exception as e:
+                err_str = str(e)
+                if (
+                    hasattr(e, "response")
+                    and getattr(e.response, "status_code", None) == 404
+                    or "404" in err_str
+                    or "Not Found" in err_str
+                ):
+                    logger.warning(
+                        f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+                    )
+                    st.store.remove(session_name)
+                    raise RuntimeError(
+                        "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
+                    ) from e
+                raise
             finally:
                 s.running = None
-                st.store.add(s)
+                if st.store.get(session_name):
+                    st.store.add(s)
                 runtime.stop()
 
         return await asyncio.to_thread(_exec)
@@ -937,46 +970,97 @@ class ColabService:
         local_zip_path: str,
         session_name: str = None,
         auth_method: str = "oauth2",
+        on_status: Optional[Callable[[str], None]] = None,
     ) -> bool:
         """Download a remote directory as a zip file to a local path."""
         import posixpath
 
-        remote_dir_path = posixpath.normpath(remote_dir_path)
-        base_name = posixpath.basename(remote_dir_path)
+        norm_dir = posixpath.normpath(remote_dir_path)
+        if norm_dir.startswith("/content/") or norm_dir == "/content":
+            vm_target_dir = norm_dir
+        else:
+            clean_rel = norm_dir.lstrip("/")
+            vm_target_dir = (
+                posixpath.join("/content", clean_rel) if clean_rel else "/content"
+            )
+
+        base_name = posixpath.basename(vm_target_dir)
         if not base_name:
             base_name = "folder"
 
-        parent_dir = posixpath.dirname(remote_dir_path)
-        zip_remote_path = posixpath.join(parent_dir, f"{base_name}_temp.zip")
+        parent_dir = posixpath.dirname(vm_target_dir)
+        vm_zip_base = posixpath.join(parent_dir, f"{base_name}_temp")
+        vm_zip_path = f"{vm_zip_base}.zip"
 
         code = f"""
-import shutil
-shutil.make_archive('{zip_remote_path[:-4]}', 'zip', '{remote_dir_path}')
+import subprocess, shutil, os
+try:
+    if shutil.which('zip'):
+        subprocess.run(['zip', '-q', '-r', '{vm_zip_base}.zip', '.'], cwd='{vm_target_dir}', check=True, capture_output=True, text=True)
+    else:
+        shutil.make_archive('{vm_zip_base}', 'zip', '{vm_target_dir}')
+except Exception as e:
+    shutil.make_archive('{vm_zip_base}', 'zip', '{vm_target_dir}')
 """
+        api_path = vm_zip_path
+
+        logger.info(
+            f"[colab_service] Zipping remote folder '{vm_target_dir}' on Colab VM into '{vm_zip_path}'..."
+        )
+        if on_status:
+            on_status(f"Zipping {base_name} on VM...")
+
         try:
-            await self.exec_code(
+            outputs = await self.exec_code(
                 code=code,
                 session_name=session_name,
                 auth_method=auth_method,
-                timeout=60.0,
+                timeout=120.0,
             )
+            if outputs:
+                for out in outputs:
+                    if out.get("output_type") == "error":
+                        ename = out.get("ename", "Error")
+                        evalue = out.get("evalue", "")
+                        logger.error(
+                            f"[colab_service] VM zipping failed: {ename}: {evalue}"
+                        )
+                        raise RuntimeError(
+                            f"Failed to zip folder on VM ({ename}): {evalue}"
+                        )
+
+            logger.info(
+                f"[colab_service] Zipping completed. Downloading '{api_path}' to '{local_zip_path}' over HTTP..."
+            )
+            if on_status:
+                on_status(f"Downloading {api_path} over HTTP...")
 
             await self.download(
-                remote_path=zip_remote_path,
+                remote_path=api_path,
                 local_path=local_zip_path,
                 session_name=session_name,
                 auth_method=auth_method,
             )
+            logger.info(
+                f"[colab_service] Download completed successfully to '{local_zip_path}'. Cleaning up temporary file '{api_path}' on VM..."
+            )
+            if on_status:
+                on_status("Cleaning up temporary zip on VM...")
             return True
         finally:
             try:
                 await self.rm(
-                    path=zip_remote_path,
+                    path=api_path,
                     session_name=session_name,
                     auth_method=auth_method,
                 )
-            except Exception:
-                pass
+                logger.info(
+                    f"[colab_service] Temporary file '{api_path}' removed from VM."
+                )
+            except Exception as ex:
+                logger.warning(
+                    f"[colab_service] Failed to remove temporary file '{api_path}': {ex}"
+                )
 
     async def rm(
         self, path: str, session_name: str = None, auth_method: str = "oauth2"
