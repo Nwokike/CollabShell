@@ -45,7 +45,7 @@ def xterm_page(ws_url: str) -> str:
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
   <title>Colab Terminal</title>
   <link href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0"></script>
@@ -57,15 +57,58 @@ def xterm_page(ws_url: str) -> str:
               z-index: 10; display: flex; justify-content: space-between; }}
     #status.error {{ color: #f44; background: #3d2020; }}
     #status.ok {{ color: #4a4; background: #203d20; }}
-    #term {{ padding-top: 24px; height: 100%; }}
+    #extra-keys {{ position: fixed; bottom: 0; left: 0; right: 0; height: 40px;
+                  background: #2d2d2d; display: flex; flex-direction: row;
+                  overflow-x: auto; white-space: nowrap; padding: 4px; z-index: 20; gap: 4px; }}
+    #extra-keys::-webkit-scrollbar {{ display: none; }}
+    #extra-keys button {{ flex: 0 0 auto; min-width: 36px; padding: 0 8px; font-size: 13px;
+                          font-family: monospace; font-weight: bold; border-radius: 4px;
+                          border: 1px solid #444; background: #3d3d3d; color: #eee; cursor: pointer; }}
+    #extra-keys button:active {{ background: #555; }}
+    #extra-keys button.active {{ background: #1e90ff; border-color: #1c86ee; color: #fff; }}
+    #term {{ padding-top: 24px; padding-bottom: 40px; height: 100%; }}
   </style>
 </head>
 <body>
   <div id="status">Connecting…</div>
   <div id="term"></div>
+  <div id="extra-keys">
+    <button onclick="window.sendKey('\\x1b')">ESC</button>
+    <button onclick="window.sendKey('\\x09')">TAB</button>
+    <button id="btn-ctrl" onclick="window.toggleCtrl()">CTRL</button>
+    <button id="btn-alt" onclick="window.toggleAlt()">ALT</button>
+    <button onclick="window.sendKey('\\x1b[A')">▲</button>
+    <button onclick="window.sendKey('\\x1b[B')">▼</button>
+    <button onclick="window.sendKey('\\x1b[D')">◀</button>
+    <button onclick="window.sendKey('\\x1b[C')">▶</button>
+    <button onclick="window.sendKey('-')">-</button>
+    <button onclick="window.sendKey('/')">/</button>
+    <button onclick="window.sendKey('|')">|</button>
+  </div>
   <script>
     (function() {{
       var term, ws, statusEl;
+      var ctrlActive = false;
+      var altActive = false;
+
+      window.toggleCtrl = function() {{
+        ctrlActive = !ctrlActive;
+        document.getElementById('btn-ctrl').className = ctrlActive ? 'active' : '';
+        if(term) term.focus();
+      }};
+      
+      window.toggleAlt = function() {{
+        altActive = !altActive;
+        document.getElementById('btn-alt').className = altActive ? 'active' : '';
+        if(term) term.focus();
+      }};
+
+      window.sendKey = function(key) {{
+        if (ws && ws.readyState === WebSocket.OPEN) {{
+          ws.send(JSON.stringify(["stdin", key]));
+        }}
+        if(term) term.focus();
+      }};
 
       function init() {{
         statusEl = document.getElementById('status');
@@ -80,6 +123,19 @@ def xterm_page(ws_url: str) -> str:
 
         term.onData(function(data) {{
           if (ws && ws.readyState === WebSocket.OPEN) {{
+            if (ctrlActive && data.length === 1) {{
+              var code = data.charCodeAt(0);
+              if (code >= 97 && code <= 122) {{ // a-z
+                data = String.fromCharCode(code - 96);
+              }} else if (code >= 65 && code <= 90) {{ // A-Z
+                data = String.fromCharCode(code - 64);
+              }}
+              window.toggleCtrl();
+            }}
+            if (altActive) {{
+              data = '\\x1b' + data;
+              window.toggleAlt();
+            }}
             ws.send(JSON.stringify(["stdin", data]));
           }}
         }});
