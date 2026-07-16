@@ -1,7 +1,7 @@
 """Application-wide constants."""
 
 APP_NAME = "Colab Shell: Notebook & TTY"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 # ── Storage keys ──────────────────────────────────────────────────────────────
 STORAGE_THEME = "colab_theme"
