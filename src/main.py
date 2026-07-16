@@ -179,7 +179,27 @@ async def main(page: ft.Page):
         return nav_bar
 
     # ── New Session Sheet ─────────────────────────────────────────────────────
-    def _show_new_session_sheet():
+    def _show_new_session_sheet(ignore_warning=False):
+        def _on_proceed(e):
+            page.pop_dialog()
+            _show_new_session_sheet(ignore_warning=True)
+
+        if not ignore_warning and len(state.active_sessions) >= 3:
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text("Session Limit", weight=ft.FontWeight.BOLD),
+                    content=ft.Text(
+                        "You already have 3 active sessions. Creating another session might fail with a quota error unless you have a Google Colab Pro subscription.\n\nDo you want to proceed?"
+                    ),
+                    actions=[
+                        ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                        ft.TextButton("Proceed", on_click=_on_proceed),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+            )
+            return
+
         from components.hardware_picker import build_hardware_picker
 
         name_ref = ft.Ref[ft.TextField]()
