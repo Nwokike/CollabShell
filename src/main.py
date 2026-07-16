@@ -179,14 +179,14 @@ async def main(page: ft.Page):
         return nav_bar
 
     # ── New Session Sheet ─────────────────────────────────────────────────────
-    def _show_new_session_sheet(ignore_warning=False):
+    def _show_new_session_sheet(mode=None, ignore_warning=False):
         def _close_limit_dialog(e=None):
             limit_dialog.open = False
             page.update()
             
         def _on_proceed(e):
             _close_limit_dialog()
-            _show_new_session_sheet(ignore_warning=True)
+            _show_new_session_sheet(mode=mode, ignore_warning=True)
 
         if not ignore_warning and len(state.active_sessions) >= 3:
             limit_dialog = ft.AlertDialog(
@@ -317,7 +317,18 @@ async def main(page: ft.Page):
                     auth_method=state.auth_method,
                 )
                 state.active_sessions = sessions
-                await route_change()
+                
+                if mode:
+                    import urllib.parse
+                    encoded_session = urllib.parse.quote(result['name'])
+                    if mode == "notebook":
+                        page.go(f"/session?session={encoded_session}")
+                    elif mode == "terminal":
+                        page.go(f"/session?session={encoded_session}&tab=terminal")
+                    elif mode == "files":
+                        page.go(f"/files?session={encoded_session}")
+                else:
+                    await route_change()
             except Exception as ex:
                 logger.error(f"Failed to create session: {ex}", exc_info=True)
                 loading_dialog.open = False
@@ -406,7 +417,7 @@ async def main(page: ft.Page):
                 page=page,
                 colab_service=colab_service,
                 state=state,
-                on_new_session=lambda e: _show_new_session_sheet(),
+                on_new_session=lambda mode: _show_new_session_sheet(mode=mode),
                 on_session_tap=lambda name: page.run_task(
                     navigate, f"/session?session={name}"
                 ),

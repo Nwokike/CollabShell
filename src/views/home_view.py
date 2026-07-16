@@ -125,7 +125,7 @@ def build_home_view(
                 dialog.open = False
                 page.update()
                 if on_new_session:
-                    on_new_session(e)
+                    on_new_session(mode)
             page.run_task(_do_new)
 
         def make_on_select(session_name):

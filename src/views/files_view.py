@@ -114,25 +114,51 @@ def build_files_view(
             is_dir = item.get("type") == "directory"
             remote_path = posixpath.normpath(posixpath.join(current_path, name))
             
+            size_bytes = item.get("size")
+            size_str = ""
+            if size_bytes is not None:
+                if size_bytes < 1024:
+                    size_str = f" ({size_bytes} B)"
+                elif size_bytes < 1024 * 1024:
+                    size_str = f" ({size_bytes / 1024:.1f} KB)"
+                else:
+                    size_str = f" ({size_bytes / (1024 * 1024):.1f} MB)"
+            elif is_dir:
+                size_str = " (folder)"
+
+            default_name = f"{name}.zip" if is_dir else name
+            
+            local_path = await page.file_picker.save_file(
+                dialog_title=f"Save {default_name}",
+                file_name=default_name,
+            )
+            if not local_path:
+                continue
+                
+            prog_bar = ft.ProgressBar(
+                color=ft.Colors.PRIMARY,
+                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+            )
+            
             download_dialog = ft.AlertDialog(
-                title=ft.Text("Downloading", weight=ft.FontWeight.BOLD),
-                content=ft.Row(
+                title=ft.Text(f"Downloading {default_name}", size=tokens.FONT_SM, font_family="Outfit"),
+                content=ft.Column(
                     [
-                        ft.ProgressRing(),
-                        ft.Text(f"Downloading {name}..."),
+                        prog_bar,
+                        ft.Text(
+                            f"Downloading...{size_str}",
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                     ],
-                    spacing=tokens.SPACE_MD,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
                 ),
             )
             page.show_dialog(download_dialog)
             
             try:
-                local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-                os.makedirs(local_dir, exist_ok=True)
-                
                 if is_dir:
-                    local_path = os.path.join(local_dir, f"{name}.zip")
                     await colab_service.download_folder(
                         remote_dir_path=remote_path,
                         local_zip_path=local_path,
@@ -140,7 +166,6 @@ def build_files_view(
                         auth_method=state.auth_method,
                     )
                 else:
-                    local_path = os.path.join(local_dir, name)
                     await colab_service.download(
                         remote_path,
                         local_path,
@@ -230,7 +255,7 @@ def build_files_view(
         num_selected = len(selected_files)
         
         can_open = num_selected == 1 and selected_items[0].get("type") == "directory"
-        can_download = all(item.get("type") != "directory" for item in selected_items)
+        can_download = True
         
         actions = []
         if can_open:
@@ -288,6 +313,8 @@ def build_files_view(
         if not picked_files:
             return
         picked = picked_files[0]
+        remote_path = posixpath.normpath(posixpath.join(current_path, picked.name))
+        
         if picked.bytes is not None:
             # Android: content URI — write bytes to a temp file for the SDK
             tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
@@ -295,29 +322,46 @@ def build_files_view(
             tmp_path = os.path.join(tmp_dir, picked.name)
             with open(tmp_path, "wb") as f:
                 f.write(picked.bytes)
-            remote_path = posixpath.normpath(posixpath.join(current_path, picked.name))
             try:
-                await _do_upload(tmp_path, remote_path)
+                await _do_upload(tmp_path, remote_path, len(picked.bytes))
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
+        elif picked.path is not None:
+            # Desktop/Linux Native Path
+            file_size = os.path.getsize(picked.path)
+            await _do_upload(picked.path, remote_path, file_size)
         else:
             if snack:
                 snack("Could not read file — picker did not return content.")
             return
 
-    async def _do_upload(local_path: str, remote_path: str):
+    async def _do_upload(local_path: str, remote_path: str, file_size: int = None):
         state.is_uploading = True
         
+        size_str = ""
+        if file_size is not None:
+            if file_size < 1024:
+                size_str = f" ({file_size} B)"
+            elif file_size < 1024 * 1024:
+                size_str = f" ({file_size / 1024:.1f} KB)"
+            else:
+                size_str = f" ({file_size / (1024 * 1024):.1f} MB)"
+                
+        prog_bar = ft.ProgressBar(
+            color=ft.Colors.PRIMARY,
+            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+        )
+        
         upload_dialog = ft.AlertDialog(
-            title=ft.Text("Uploading", weight=ft.FontWeight.BOLD),
-            content=ft.Row(
+            title=ft.Text(f"Uploading {os.path.basename(local_path)}", size=tokens.FONT_SM, font_family="Outfit"),
+            content=ft.Column(
                 [
-                    ft.ProgressRing(),
-                    ft.Text(f"Uploading {os.path.basename(local_path)}..."),
+                    prog_bar,
+                    ft.Text(f"Uploading...{size_str}", size=tokens.FONT_XS, color=ft.Colors.ON_SURFACE_VARIANT),
                 ],
-                spacing=tokens.SPACE_MD,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=tokens.SPACE_SM,
+                tight=True,
             ),
         )
         page.show_dialog(upload_dialog)
