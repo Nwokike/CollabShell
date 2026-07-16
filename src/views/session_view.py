@@ -1190,17 +1190,29 @@ def build_session_view(
             expand=True,
             spacing=0,
             controls=[
-                ft.TabBar(
-                    tabs=[
-                        ft.Tab(
-                            label="Notebook",
-                            icon=ft.Icons.EDIT_NOTE_ROUNDED,
+                ft.Row(
+                    controls=[
+                        ft.TabBar(
+                            expand=True,
+                            tabs=[
+                                ft.Tab(
+                                    label="Notebook",
+                                    icon=ft.Icons.EDIT_NOTE_ROUNDED,
+                                ),
+                                ft.Tab(
+                                    label="Real Terminal",
+                                    icon=ft.Icons.TERMINAL_ROUNDED,
+                                ),
+                            ],
                         ),
-                        ft.Tab(
-                            label="Real Terminal",
-                            icon=ft.Icons.TERMINAL_ROUNDED,
+                        ft.IconButton(
+                            icon=ft.Icons.REFRESH_ROUNDED,
+                            tooltip="Refresh Terminal",
+                            icon_size=20,
+                            on_click=lambda e: page.run_task(terminal_init_func),
                         ),
-                    ]
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.TabBarView(
                     expand=True,
