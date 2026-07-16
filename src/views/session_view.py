@@ -164,22 +164,25 @@ def build_session_view(
         if not await _check_session():
             return
 
+        def _close_dialog(e=None):
+            dialog.open = False
+            page.update()
+
         def _close_and_restart(ev):
-            page.pop_dialog()
+            _close_dialog()
             page.run_task(_do_restart)
 
-        page.show_dialog(
-            ft.AlertDialog(
-                title=ft.Text("Restart Kernel?"),
-                content=ft.Text(
-                    "This will restart the Python kernel. All variables will be lost."
-                ),
-                actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
-                    ft.FilledButton("Restart", on_click=_close_and_restart),
-                ],
-            )
+        dialog = ft.AlertDialog(
+            title=ft.Text("Restart Kernel?"),
+            content=ft.Text(
+                "This will restart the Python kernel. All variables will be lost."
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=_close_dialog),
+                ft.FilledButton("Restart", on_click=_close_and_restart),
+            ],
         )
+        page.show_dialog(dialog)
 
     async def _do_restart():
         if snack:
@@ -198,22 +201,25 @@ def build_session_view(
         if not await _check_session():
             return
 
+        def _close_dialog(e=None):
+            dialog.open = False
+            page.update()
+
         def _close_and_stop(ev):
-            page.pop_dialog()
+            _close_dialog()
             page.run_task(_do_stop)
 
-        page.show_dialog(
-            ft.AlertDialog(
-                title=ft.Text("Stop Session?"),
-                content=ft.Text(
-                    "This will terminate the session and release all resources."
-                ),
-                actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
-                    ft.FilledButton("Stop", on_click=_close_and_stop),
-                ],
-            )
+        dialog = ft.AlertDialog(
+            title=ft.Text("Stop Session?"),
+            content=ft.Text(
+                "This will terminate the session and release all resources."
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=_close_dialog),
+                ft.FilledButton("Stop", on_click=_close_and_stop),
+            ],
         )
+        page.show_dialog(dialog)
 
     async def _do_stop():
         if snack:
@@ -653,7 +659,7 @@ def build_session_view(
         def _submit_input(e):
             user_input["value"] = dialog_field.value or ""
             logger.info("[stdin_hook] User submitted input via dialog")
-            page.pop_dialog()
+            dialog.open = False
             page.update()
             input_event.set()
 

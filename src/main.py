@@ -180,24 +180,27 @@ async def main(page: ft.Page):
 
     # ── New Session Sheet ─────────────────────────────────────────────────────
     def _show_new_session_sheet(ignore_warning=False):
+        def _close_limit_dialog(e=None):
+            limit_dialog.open = False
+            page.update()
+            
         def _on_proceed(e):
-            page.pop_dialog()
+            _close_limit_dialog()
             _show_new_session_sheet(ignore_warning=True)
 
         if not ignore_warning and len(state.active_sessions) >= 3:
-            page.show_dialog(
-                ft.AlertDialog(
-                    title=ft.Text("Session Limit", weight=ft.FontWeight.BOLD),
-                    content=ft.Text(
-                        "You already have 3 active sessions. Creating another session might fail with a quota error unless you have a Google Colab Pro subscription.\n\nDo you want to proceed?"
-                    ),
-                    actions=[
-                        ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
-                        ft.TextButton("Proceed", on_click=_on_proceed),
-                    ],
-                    actions_alignment=ft.MainAxisAlignment.END,
-                )
+            limit_dialog = ft.AlertDialog(
+                title=ft.Text("Session Limit", weight=ft.FontWeight.BOLD),
+                content=ft.Text(
+                    "You already have 3 active sessions. Creating another session might fail with a quota error unless you have a Google Colab Pro subscription.\n\nDo you want to proceed?"
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=_close_limit_dialog),
+                    ft.TextButton("Proceed", on_click=_on_proceed),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
             )
+            page.show_dialog(limit_dialog)
             return
 
         from components.hardware_picker import build_hardware_picker
@@ -230,6 +233,11 @@ async def main(page: ft.Page):
 
             paid_gpus = {"L4", "G4", "A100", "H100"}
             if gpu in paid_gpus:
+                def _close_confirm(data):
+                    confirm_dialog.data = data
+                    confirm_dialog.open = False
+                    page.update()
+
                 confirm_dialog = ft.AlertDialog(
                     modal=True,
                     title=ft.Text("Paid Accelerator Selected"),
@@ -239,17 +247,11 @@ async def main(page: ft.Page):
                     actions=[
                         ft.TextButton(
                             "Cancel",
-                            on_click=lambda e: (
-                                setattr(confirm_dialog, "data", "cancel")
-                                or page.close_dialog()
-                            ),
+                            on_click=lambda e: _close_confirm("cancel"),
                         ),
                         ft.FilledButton(
                             "Continue",
-                            on_click=lambda e: (
-                                setattr(confirm_dialog, "data", "continue")
-                                or page.close_dialog()
-                            ),
+                            on_click=lambda e: _close_confirm("continue"),
                         ),
                     ],
                 )
@@ -260,7 +262,8 @@ async def main(page: ft.Page):
                 if confirm_dialog.data == "cancel":
                     return
 
-            page.pop_dialog()  # Close hardware picker
+            hw_dialog.open = False
+            page.update()
             await ad_service.show_interstitial()
 
             loading_dialog = ft.AlertDialog(
@@ -305,7 +308,8 @@ async def main(page: ft.Page):
                     keep_alive=state.keep_alive_enabled,
                 )
                 logger.info("Session created successfully: %s", result)
-                page.pop_dialog()  # Dismiss spinner
+                loading_dialog.open = False
+                page.update()
 
                 _snack(f"✅ Session '{result['name']}' created!")
 
@@ -316,7 +320,8 @@ async def main(page: ft.Page):
                 await route_change()
             except Exception as ex:
                 logger.error(f"Failed to create session: {ex}", exc_info=True)
-                page.pop_dialog()  # Dismiss spinner
+                loading_dialog.open = False
+                page.update()
                 _snack(f"❌ {ex}")
             state.is_provisioning = False
             page.update()
@@ -329,12 +334,12 @@ async def main(page: ft.Page):
             hardware_type_ref=hardware_type_ref,
         )
 
-        dialog = ft.AlertDialog(
+        hw_dialog = ft.AlertDialog(
             title=ft.Text("New Session", weight=ft.FontWeight.W_700),
             content=picker,
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.show_dialog(dialog)
+        page.show_dialog(hw_dialog)
 
     # ── Route change handler ──────────────────────────────────────────────────
     import urllib.parse

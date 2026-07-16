@@ -143,7 +143,8 @@ def build_files_view(
                 if snack:
                     snack(f"❌ {ex}")
             finally:
-                page.pop_dialog()
+                download_dialog.open = False
+                page.update()
                 
         # Clear selection after download
         selected_files.clear()
@@ -165,12 +166,16 @@ def build_files_view(
         names = [f["name"] for f in selected_items]
         names_str = ", ".join(names)
 
+        def _close_confirm(e=None):
+            confirm.open = False
+            page.update()
+
         confirm = ft.AlertDialog(
             title=ft.Text(f"Delete {len(names)} item(s)?"),
             content=ft.Text(f"Are you sure you want to delete:\n{names_str}\n\nThis cannot be undone."),
             actions=[
                 ft.TextButton(
-                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                    content=ft.Text("Cancel"), on_click=_close_confirm
                 ),
                 ft.FilledButton(
                     "Delete",
@@ -180,7 +185,7 @@ def build_files_view(
         )
 
         async def _confirm_delete(names_to_delete):
-            page.pop_dialog()
+            _close_confirm()
             for name in names_to_delete:
                 remote_path = posixpath.normpath(posixpath.join(current_path, name))
                 if snack:
@@ -321,7 +326,8 @@ def build_files_view(
             if snack:
                 snack(f"❌ {ex}")
         finally:
-            page.pop_dialog()
+            upload_dialog.open = False
+            page.update()
             state.is_uploading = False
 
     # ── Breadcrumb ────────────────────────────────────────────────────────────

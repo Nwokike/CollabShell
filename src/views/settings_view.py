@@ -197,10 +197,14 @@ def build_settings_view(
         else:
             msg = "Not authenticated"
 
+        def _close_info(e=None):
+            info_dialog.open = False
+            page.update()
+
         info_dialog = ft.AlertDialog(
             title=ft.Text("Who Am I"),
             content=ft.Text(msg),
-            actions=[ft.TextButton("OK", on_click=lambda e: page.pop_dialog())],
+            actions=[ft.TextButton("OK", on_click=_close_info)],
         )
         page.show_dialog(info_dialog)
 

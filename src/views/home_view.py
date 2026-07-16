@@ -122,7 +122,8 @@ def build_home_view(
             async def _do_new():
                 import asyncio
                 await asyncio.sleep(0.2)
-                page.pop_dialog()
+                dialog.open = False
+                page.update()
                 if on_new_session:
                     on_new_session(e)
             page.run_task(_do_new)
@@ -147,15 +148,18 @@ def build_home_view(
 
                 async def _do_navigate():
                     import asyncio
+                    import urllib.parse
                     await asyncio.sleep(0.2)
-                    page.pop_dialog()
+                    dialog.open = False
+                    page.update()
                     if navigate:
+                        encoded_session = urllib.parse.quote(session_name)
                         if mode == "notebook":
-                            await navigate(f"/session?session={session_name}")
+                            await navigate(f"/session?session={encoded_session}")
                         elif mode == "terminal":
-                            await navigate(f"/session?session={session_name}&tab=terminal")
+                            await navigate(f"/session?session={encoded_session}&tab=terminal")
                         elif mode == "files":
-                            await navigate(f"/files?session={session_name}")
+                            await navigate(f"/files?session={encoded_session}")
                 page.run_task(_do_navigate)
             return handler
 
