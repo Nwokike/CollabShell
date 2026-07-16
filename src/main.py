@@ -322,11 +322,11 @@ async def main(page: ft.Page):
                     import urllib.parse
                     encoded_session = urllib.parse.quote(result['name'])
                     if mode == "notebook":
-                        page.go(f"/session?session={encoded_session}")
+                        await navigate(f"/session?session={encoded_session}")
                     elif mode == "terminal":
-                        page.go(f"/session?session={encoded_session}&tab=terminal")
+                        await navigate(f"/session?session={encoded_session}&tab=terminal")
                     elif mode == "files":
-                        page.go(f"/files?session={encoded_session}")
+                        await navigate(f"/files?session={encoded_session}")
                 else:
                     await route_change()
             except Exception as ex:
