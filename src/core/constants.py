@@ -1,6 +1,6 @@
 """Application-wide constants."""
 
-APP_NAME = "Collab Shell"
+APP_NAME = "Colab Shell: Notebook & TTY"
 APP_VERSION = "1.0.0"
 
 # ── Storage keys ──────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ LBL_DOWNLOAD = "Download"
 LBL_INSTALL = "Install Packages"
 LBL_MOUNT_DRIVE = "Mount Drive"
 LBL_AUTH_GCP = "Auth GCP"
-LBL_OPEN_BROWSER = "Open in Browser"
+LBL_OPEN_BROWSER = "Colab Web"
 LBL_EXPORT_LOG = "Export Log"
 LBL_MANAGE_COMPUTE = "Manage Compute"
 LBL_SIGN_IN = "Sign in to Google"

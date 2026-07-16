@@ -135,10 +135,23 @@ def apply_storage_patches():
 
     colab_cli.common.State.__init__ = patched_state_init
 
-    # Override HistoryLogger default path
-    colab_cli.history.HistoryLogger.__init__.__defaults__ = (
-        os.path.join(storage_dir, "history"),
-    )
+    # Override HistoryLogger init so all logs go to canonical storage/history directory
+    original_history_init = colab_cli.history.HistoryLogger.__init__
+    canonical_history_dir = os.path.join(storage_dir, "history")
+    os.makedirs(canonical_history_dir, exist_ok=True)
+
+    def patched_history_init(
+        self, log_dir: str = "~/.config/colab-cli/history", *args, **kwargs
+    ):
+        if (
+            not log_dir
+            or log_dir == "~/.config/colab-cli/history"
+            or log_dir == os.path.expanduser("~/.config/colab-cli/history")
+        ):
+            log_dir = canonical_history_dir
+        original_history_init(self, log_dir, *args, **kwargs)
+
+    colab_cli.history.HistoryLogger.__init__ = patched_history_init
 
     # Override SettingsStore and StateStore default paths
     colab_cli.state.SettingsStore.__init__.__defaults__ = (

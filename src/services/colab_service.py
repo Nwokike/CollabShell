@@ -781,9 +781,14 @@ class ColabService:
         await self._ensure_online()
 
         def _ls():
+            import posixpath
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
             from colab_cli.contents import ContentsClient
+
+            norm_path = posixpath.normpath(path) if path else ""
+            if norm_path == "." or norm_path == "/":
+                norm_path = ""
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
             st = State()
@@ -794,8 +799,10 @@ class ColabService:
                 raise ValueError(f"Session '{name}' not found")
 
             client = ContentsClient(s)
-            data = client.list_dir(path)
-            st.history.log_event(name, "file_operation", {"op": "ls", "path": path})
+            data = client.list_dir(norm_path)
+            st.history.log_event(
+                name, "file_operation", {"op": "ls", "path": norm_path}
+            )
 
             if data.get("type") == "directory":
                 items = data.get("content", [])
@@ -830,9 +837,12 @@ class ColabService:
         """Upload a local file to the remote session."""
 
         def _upload():
+            import posixpath
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
             from colab_cli.contents import ContentsClient
+
+            norm_remote = posixpath.normpath(remote_path)
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
             st = State()
@@ -843,14 +853,14 @@ class ColabService:
                 raise ValueError(f"Session '{name}' not found")
 
             client = ContentsClient(s)
-            client.upload(local_path, remote_path)
+            client.upload(local_path, norm_remote)
             st.history.log_event(
                 name,
                 "file_operation",
                 {
                     "op": "upload",
                     "local": local_path,
-                    "remote": remote_path,
+                    "remote": norm_remote,
                 },
             )
             return True
@@ -868,9 +878,12 @@ class ColabService:
         await self._ensure_online()
 
         def _download():
+            import posixpath
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
             from colab_cli.contents import ContentsClient
+
+            norm_remote = posixpath.normpath(remote_path)
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
             st = State()
@@ -881,13 +894,13 @@ class ColabService:
                 raise ValueError(f"Session '{name}' not found")
 
             client = ContentsClient(s)
-            client.download(remote_path, local_path)
+            client.download(norm_remote, local_path)
             st.history.log_event(
                 name,
                 "file_operation",
                 {
                     "op": "download",
-                    "remote": remote_path,
+                    "remote": norm_remote,
                     "local": local_path,
                 },
             )
@@ -901,9 +914,12 @@ class ColabService:
         """Delete a remote file."""
 
         def _rm():
+            import posixpath
             from colab_cli.auth import AuthProvider
             from colab_cli.common import State
             from colab_cli.contents import ContentsClient
+
+            norm_path = posixpath.normpath(path)
 
             provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
             st = State()
@@ -914,8 +930,10 @@ class ColabService:
                 raise ValueError(f"Session '{name}' not found")
 
             client = ContentsClient(s)
-            client.rm(path)
-            st.history.log_event(name, "file_operation", {"op": "rm", "path": path})
+            client.rm(norm_path)
+            st.history.log_event(
+                name, "file_operation", {"op": "rm", "path": norm_path}
+            )
             return True
 
         return await asyncio.to_thread(_rm)
@@ -1035,9 +1053,11 @@ except:
         """Get session history logs."""
 
         def _log():
+            import os
+            from core.storage_patch import resolve_storage_dir
             from colab_cli.history import HistoryLogger
 
-            h = HistoryLogger()
+            h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
             events = h.get_history(session_name)
             if event_type:
                 events = [e for e in events if e.get("event_type") == event_type]
@@ -1051,9 +1071,11 @@ except:
         """List session names that have history logs."""
 
         def _list():
+            import os
+            from core.storage_patch import resolve_storage_dir
             from colab_cli.history import HistoryLogger
 
-            h = HistoryLogger()
+            h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
             return h.list_sessions()
 
         return await asyncio.to_thread(_list)
@@ -1062,10 +1084,12 @@ except:
         """Export session history to a file."""
 
         def _export():
+            import os
+            from core.storage_patch import resolve_storage_dir
             from colab_cli.history import HistoryLogger
             from colab_cli.converter import export_history
 
-            h = HistoryLogger()
+            h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
             events = h.get_history(session_name)
             if not events:
                 return False

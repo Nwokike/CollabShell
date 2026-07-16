@@ -386,6 +386,18 @@ async def main(page: ft.Page):
                     navigate, f"/session?session={name}"
                 ),
                 on_quick_run=lambda e: page.run_task(navigate, "/run"),
+                on_quick_terminal=lambda e: page.run_task(
+                    navigate,
+                    f"/session?session={state.active_sessions[0]['name']}"
+                    if state.active_sessions
+                    else "/run",
+                ),
+                on_cloud_files=lambda e: page.run_task(
+                    navigate,
+                    f"/files?session={state.active_sessions[0]['name']}"
+                    if state.active_sessions
+                    else "/files",
+                ),
                 storage=storage,
             )
             page.views.append(view)

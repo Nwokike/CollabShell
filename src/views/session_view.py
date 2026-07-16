@@ -232,15 +232,30 @@ def build_session_view(
             if snack:
                 snack(f"❌ {ex}")
 
+    def _action_output(prefix: str):
+        def _handler(out):
+            if not snack:
+                return
+            msg = out if isinstance(out, str) else out.get("text", "")
+            msg = msg.strip()
+            if msg:
+                line = msg.split("\n")[-1] if "\n" in msg else msg
+                page.loop.call_soon_threadsafe(snack, f"{prefix}: {line[:120]}")
+
+        return _handler
+
     async def _on_mount_drive(e):
         if snack:
             snack("Mounting Google Drive...")
         try:
             await colab_service.mount_drive(
-                session_name, path=state.drive_mount_path, auth_method=state.auth_method
+                session_name,
+                path=state.drive_mount_path,
+                auth_method=state.auth_method,
+                on_output=_action_output("Drive"),
             )
             if snack:
-                snack("✅ Drive mounted")
+                snack(f"✅ Drive mounted at {state.drive_mount_path}")
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
@@ -250,7 +265,9 @@ def build_session_view(
             snack("Authenticating with GCP on VM...")
         try:
             await colab_service.auth_gcp_on_vm(
-                session_name, auth_method=state.auth_method
+                session_name,
+                auth_method=state.auth_method,
+                on_output=_action_output("Auth GCP"),
             )
             if snack:
                 snack("✅ GCP auth complete")
@@ -369,7 +386,7 @@ def build_session_view(
                 ),
                 _action_chip(
                     ft.Icons.OPEN_IN_BROWSER_ROUNDED,
-                    "Browser",
+                    constants.LBL_OPEN_BROWSER,
                     lambda e: page.run_task(_on_open_browser, e),
                     AppColors.BADGE_TPU,
                 ),

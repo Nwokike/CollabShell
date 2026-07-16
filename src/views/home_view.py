@@ -19,6 +19,8 @@ def build_home_view(
     on_new_session=None,
     on_session_tap=None,
     on_quick_run=None,
+    on_quick_terminal=None,
+    on_cloud_files=None,
     on_refresh=None,
     storage=None,
 ) -> ft.View:
@@ -101,21 +103,22 @@ def build_home_view(
         content=ft.Row(
             controls=[
                 _action_button(
-                    ft.Icons.ROCKET_LAUNCH_ROUNDED, "New\nSession", on_new_session
+                    ft.Icons.NOTEBOOK_ROUNDED,
+                    "New\nNotebook",
+                    on_new_session,
                 ),
                 _action_button(
-                    ft.Icons.BOLT_ROUNDED,
-                    "Quick\nRun",
-                    on_quick_run,
+                    ft.Icons.TERMINAL_ROUNDED,
+                    "Quick\nTerminal",
+                    on_quick_terminal
+                    if on_quick_terminal
+                    else (on_quick_run if on_quick_run else on_new_session),
                     AppColors.BADGE_TPU,
                 ),
                 _action_button(
-                    ft.Icons.CREDIT_CARD_ROUNDED,
-                    "Manage\nCompute",
-                    lambda e: page.run_task(
-                        ft.UrlLauncher().launch_url,
-                        "https://colab.research.google.com/signup",
-                    ),
+                    ft.Icons.FOLDER_ROUNDED,
+                    "Cloud\nFiles",
+                    on_cloud_files,
                     AppColors.BADGE_GPU,
                 ),
             ],

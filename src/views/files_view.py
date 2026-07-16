@@ -52,18 +52,15 @@ def build_files_view(
 
     def _on_file_tap(file_info):
         if file_info.get("type") == "directory":
-            raw_path = f"{current_path}/{file_info['name']}"
-            safe_path = posixpath.normpath(raw_path)
-            if not safe_path.startswith("/content"):
-                safe_path = "/content"
-            new_path = safe_path
+            raw_path = posixpath.join(current_path, file_info["name"])
+            new_path = posixpath.normpath(raw_path)
             page.run_task(_load_files, new_path)
         else:
             _show_file_actions(file_info)
 
     def _show_file_actions(file_info):
         name = file_info.get("name", "")
-        remote_path = f"{current_path}/{name}"
+        remote_path = posixpath.normpath(posixpath.join(current_path, name))
 
         async def _do_download(e):
             page.pop_dialog()
@@ -115,10 +112,11 @@ def build_files_view(
                     )
                     if snack:
                         snack(f"✅ Deleted {name}")
-                    await _load_files()
+                    await _load_files(current_path)
                 except Exception as ex:
                     if snack:
                         snack(f"❌ {ex}")
+                page.update()
 
             page.show_dialog(confirm)
 
@@ -174,7 +172,7 @@ def build_files_view(
             tmp_path = os.path.join(tmp_dir, picked.name)
             with open(tmp_path, "wb") as f:
                 f.write(picked.bytes)
-            remote_path = f"{current_path}/{picked.name}"
+            remote_path = posixpath.normpath(posixpath.join(current_path, picked.name))
             try:
                 await _do_upload(tmp_path, remote_path)
             finally:
@@ -198,7 +196,7 @@ def build_files_view(
             )
             if snack:
                 snack(f"✅ Uploaded to {remote_path}")
-            await _load_files()
+            await _load_files(current_path)
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
@@ -207,11 +205,27 @@ def build_files_view(
 
     # ── Breadcrumb ────────────────────────────────────────────────────────────
     def _build_breadcrumb():
-        parts = current_path.split("/")
+        clean_path = posixpath.normpath(current_path)
+        if clean_path == "." or not clean_path:
+            clean_path = "/"
+        parts = [p for p in clean_path.split("/") if p]
         controls = []
+        controls.append(
+            ft.TextButton(
+                "/",
+                style=ft.ButtonStyle(
+                    color=ft.Colors.PRIMARY if parts else ft.Colors.ON_SURFACE,
+                    padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
+                ),
+                on_click=(lambda e: page.run_task(_load_files, "/")) if parts else None,
+            )
+        )
         for i, part in enumerate(parts):
-            path_so_far = "/".join(parts[: i + 1])
+            path_so_far = "/" + "/".join(parts[: i + 1])
             is_last = i == len(parts) - 1
+            controls.append(
+                ft.Text("/", size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE_VARIANT)
+            )
             controls.append(
                 ft.TextButton(
                     part,
@@ -226,18 +240,13 @@ def build_files_view(
                     else None,
                 )
             )
-            if not is_last:
-                controls.append(
-                    ft.Text(
-                        "/", size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE_VARIANT
-                    )
-                )
         return ft.Row(controls=controls, spacing=0, wrap=True)
 
     def _on_navigate_up(e):
-        parts = current_path.split("/")
-        if len(parts) > 1:
-            parent = "/".join(parts[:-1])
+        if current_path and current_path != "/":
+            parent = posixpath.dirname(posixpath.normpath(current_path))
+            if not parent or parent == ".":
+                parent = "/"
             page.run_task(_load_files, parent)
 
     # ── Build file list ───────────────────────────────────────────────────────
