@@ -8,7 +8,6 @@ import posixpath
 
 from core import tokens
 from core.styles import build_banner_ad
-from core.theme import AppColors
 from components.file_item import build_file_item
 
 
@@ -26,8 +25,24 @@ def build_files_view(
     current_path = state.current_path or "/content"
     files = []
     is_loading = False
+    selected_files = set()
 
     file_picker = getattr(page, "file_picker", None)
+
+    file_list_container = ft.Container(
+        padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
+        expand=True,
+    )
+    breadcrumb_container = ft.Container(
+        expand=True,
+    )
+    action_bar_container = ft.Container()
+
+    upload_fab = ft.FloatingActionButton(
+        "Upload",
+        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
+        on_click=lambda e: page.run_task(_on_upload_click, e),
+    )
 
     async def _load_files(path=None):
         nonlocal current_path, files, is_loading
@@ -35,7 +50,22 @@ def build_files_view(
             current_path = path
             state.current_path = path
         is_loading = True
-        page.update()
+        
+        selected_files.clear()
+        action_bar_container.content = _build_action_bar()
+        upload_fab.visible = True
+        try:
+            action_bar_container.update()
+            upload_fab.update()
+        except Exception:
+            pass
+            
+        file_list_container.content = _build_file_list()
+        try:
+            file_list_container.update()
+        except Exception:
+            pass
+
         try:
             files = await colab_service.ls(
                 path=current_path,
@@ -48,26 +78,56 @@ def build_files_view(
                 snack(f"Error: {ex}")
             files = []
         is_loading = False
-        page.update()
+        
+        file_list_container.content = _build_file_list()
+        breadcrumb_container.content = _build_breadcrumb()
+        try:
+            file_list_container.update()
+            breadcrumb_container.update()
+        except Exception:
+            pass
 
     def _on_file_tap(file_info):
-        if file_info.get("type") == "directory":
-            raw_path = posixpath.join(current_path, file_info["name"])
-            new_path = posixpath.normpath(raw_path)
-            page.run_task(_load_files, new_path)
+        name = file_info.get("name")
+        if name in selected_files:
+            selected_files.remove(name)
         else:
-            _show_file_actions(file_info)
+            selected_files.add(name)
+            
+        file_list_container.content = _build_file_list()
+        action_bar_container.content = _build_action_bar()
+        upload_fab.visible = len(selected_files) == 0
+        try:
+            file_list_container.update()
+            action_bar_container.update()
+            upload_fab.update()
+        except Exception:
+            pass
 
-    def _show_file_actions(file_info):
-        name = file_info.get("name", "")
-        remote_path = posixpath.normpath(posixpath.join(current_path, name))
-
-        async def _do_download(e):
-            page.pop_dialog()
-            if snack:
-                snack(f"Downloading {name}...")
+    async def _do_download_selected(e):
+        selected_items = [f for f in files if f["name"] in selected_files]
+        file_items = [f for f in selected_items if f.get("type") != "directory"]
+        if not file_items:
+            return
+            
+        for item in file_items:
+            name = item["name"]
+            remote_path = posixpath.normpath(posixpath.join(current_path, name))
+            
+            download_dialog = ft.AlertDialog(
+                title=ft.Text("Downloading", weight=ft.FontWeight.BOLD),
+                content=ft.Row(
+                    [
+                        ft.ProgressRing(),
+                        ft.Text(f"Downloading {name}..."),
+                    ],
+                    spacing=tokens.SPACE_MD,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            )
+            page.show_dialog(download_dialog)
+            
             try:
-                # Save to a temp directory accessible on Android
                 local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
                 os.makedirs(local_dir, exist_ok=True)
                 local_path = os.path.join(local_dir, name)
@@ -82,26 +142,47 @@ def build_files_view(
             except Exception as ex:
                 if snack:
                     snack(f"❌ {ex}")
-
-        async def _do_delete(e):
-            page.pop_dialog()
-
-            confirm = ft.AlertDialog(
-                title=ft.Text(f"Delete {name}?"),
-                content=ft.Text("This cannot be undone."),
-                actions=[
-                    ft.TextButton(
-                        content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
-                    ),
-                    ft.FilledButton(
-                        "Delete",
-                        on_click=lambda e: page.run_task(_confirm_delete, e),
-                    ),
-                ],
-            )
-
-            async def _confirm_delete(e):
+            finally:
                 page.pop_dialog()
+                
+        # Clear selection after download
+        selected_files.clear()
+        file_list_container.content = _build_file_list()
+        action_bar_container.content = _build_action_bar()
+        upload_fab.visible = True
+        try:
+            file_list_container.update()
+            action_bar_container.update()
+            upload_fab.update()
+        except Exception:
+            pass
+
+    async def _do_delete_selected(e):
+        selected_items = [f for f in files if f["name"] in selected_files]
+        if not selected_items:
+            return
+            
+        names = [f["name"] for f in selected_items]
+        names_str = ", ".join(names)
+
+        confirm = ft.AlertDialog(
+            title=ft.Text(f"Delete {len(names)} item(s)?"),
+            content=ft.Text(f"Are you sure you want to delete:\n{names_str}\n\nThis cannot be undone."),
+            actions=[
+                ft.TextButton(
+                    content=ft.Text("Cancel"), on_click=lambda e: page.pop_dialog()
+                ),
+                ft.FilledButton(
+                    "Delete",
+                    on_click=lambda e: page.run_task(_confirm_delete, names),
+                ),
+            ],
+        )
+
+        async def _confirm_delete(names_to_delete):
+            page.pop_dialog()
+            for name in names_to_delete:
+                remote_path = posixpath.normpath(posixpath.join(current_path, name))
                 if snack:
                     snack(f"Deleting {name}...")
                 try:
@@ -112,59 +193,86 @@ def build_files_view(
                     )
                     if snack:
                         snack(f"✅ Deleted {name}")
-                    await _load_files(current_path)
                 except Exception as ex:
                     if snack:
                         snack(f"❌ {ex}")
-                page.update()
+            
+            selected_files.clear()
+            upload_fab.visible = True
+            try:
+                upload_fab.update()
+            except Exception:
+                pass
+            await _load_files(current_path)
 
-            page.show_dialog(confirm)
+        page.show_dialog(confirm)
 
-        action_sheet = ft.BottomSheet(
-            content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text(name, size=tokens.FONT_LG, weight=ft.FontWeight.W_600),
-                        ft.Text(
-                            remote_path,
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        ft.Divider(),
-                        ft.ListTile(
-                            leading=ft.Icon(ft.Icons.DOWNLOAD_ROUNDED),
-                            title=ft.Text("Download"),
-                            on_click=lambda e: page.run_task(_do_download, e),
-                        ),
-                        ft.ListTile(
-                            leading=ft.Icon(
-                                ft.Icons.DELETE_ROUNDED, color=AppColors.ERROR
-                            ),
-                            title=ft.Text("Delete", color=AppColors.ERROR),
-                            on_click=lambda e: page.run_task(_do_delete, e),
-                        ),
-                    ],
-                    tight=True,
-                    spacing=tokens.SPACE_SM,
-                ),
-                padding=ft.Padding(
-                    tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XL, tokens.SPACE_XXL
-                ),
-            ),
+    def _build_action_bar():
+        if not selected_files:
+            return ft.Container()
+
+        selected_items = [f for f in files if f["name"] in selected_files]
+        num_selected = len(selected_files)
+        
+        can_open = num_selected == 1 and selected_items[0].get("type") == "directory"
+        can_download = all(item.get("type") != "directory" for item in selected_items)
+        
+        actions = []
+        if can_open:
+            item = selected_items[0]
+            raw_path = posixpath.join(current_path, item["name"])
+            new_path = posixpath.normpath(raw_path)
+            actions.append(
+                ft.FilledButton(
+                    "Open",
+                    icon=ft.Icons.FOLDER_OPEN_ROUNDED,
+                    on_click=lambda e: page.run_task(_load_files, new_path)
+                )
+            )
+        
+        if can_download:
+            actions.append(
+                ft.FilledTonalButton(
+                    "Download",
+                    icon=ft.Icons.DOWNLOAD_ROUNDED,
+                    on_click=lambda e: page.run_task(_do_download_selected)
+                )
+            )
+            
+        actions.append(
+            ft.TextButton(
+                "Delete",
+                icon=ft.Icons.DELETE_ROUNDED,
+                style=ft.ButtonStyle(color=ft.Colors.ERROR),
+                on_click=lambda e: page.run_task(_do_delete_selected)
+            )
         )
-        page.show_dialog(action_sheet)
+        
+        return ft.Container(
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+            padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD, tokens.SPACE_MD),
+            border_radius=ft.border_radius.only(top_left=tokens.RADIUS_LG, top_right=tokens.RADIUS_LG),
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=10, color=ft.Colors.BLACK12),
+            content=ft.Row(
+                controls=[
+                    ft.Text(f"{num_selected} selected", weight=ft.FontWeight.BOLD, expand=True),
+                    *actions
+                ],
+                alignment=ft.MainAxisAlignment.END,
+            )
+        )
 
     # ── Upload ────────────────────────────────────────────────────────────────
     async def _on_upload_click(e):
         if not file_picker:
             return
-        files = await file_picker.pick_files(
+        picked_files = await file_picker.pick_files(
             dialog_title="Select file to upload",
             with_data=True,
         )
-        if not files:
+        if not picked_files:
             return
-        picked = files[0]
+        picked = picked_files[0]
         if picked.bytes is not None:
             # Android: content URI — write bytes to a temp file for the SDK
             tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
@@ -185,8 +293,20 @@ def build_files_view(
 
     async def _do_upload(local_path: str, remote_path: str):
         state.is_uploading = True
-        if snack:
-            snack(f"Uploading {os.path.basename(local_path)}...")
+        
+        upload_dialog = ft.AlertDialog(
+            title=ft.Text("Uploading", weight=ft.FontWeight.BOLD),
+            content=ft.Row(
+                [
+                    ft.ProgressRing(),
+                    ft.Text(f"Uploading {os.path.basename(local_path)}..."),
+                ],
+                spacing=tokens.SPACE_MD,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+        page.show_dialog(upload_dialog)
+        
         try:
             await colab_service.upload(
                 local_path,
@@ -200,8 +320,9 @@ def build_files_view(
         except Exception as ex:
             if snack:
                 snack(f"❌ {ex}")
-        state.is_uploading = False
-        page.update()
+        finally:
+            page.pop_dialog()
+            state.is_uploading = False
 
     # ── Breadcrumb ────────────────────────────────────────────────────────────
     def _build_breadcrumb():
@@ -284,6 +405,7 @@ def build_files_view(
             controls=[
                 build_file_item(
                     file_info=f,
+                    selected=f.get("name") in selected_files,
                     on_click=lambda e, fi=f: _on_file_tap(fi),
                 )
                 for f in files
@@ -303,78 +425,54 @@ def build_files_view(
     if theme_btn:
         appbar_actions.append(theme_btn)
 
-    # ── FAB ───────────────────────────────────────────────────────────────────
-    upload_fab = ft.FloatingActionButton(
-        "Upload",
-        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
-        on_click=lambda e: page.run_task(_on_upload_click, e),
-    )
 
     # Load files on view creation
     page.run_task(_load_files)
 
     from components.brand_header import build_brand_header
 
-    view_content = ft.Stack(
+    view_content = ft.Column(
         controls=[
+            build_brand_header(),
             ft.Column(
                 controls=[
-                    build_brand_header(),
-                    ft.Column(
-                        controls=[
-                            # Breadcrumb + Up button
-                            ft.Container(
-                                content=ft.Row(
-                                    controls=[
-                                        ft.IconButton(
-                                            icon=ft.Icons.ARROW_UPWARD_ROUNDED,
-                                            icon_size=tokens.ICON_MD,
-                                            on_click=_on_navigate_up,
-                                            tooltip="Go up",
-                                        ),
-                                        ft.Container(
-                                            content=_build_breadcrumb(),
-                                            expand=True,
-                                        ),
-                                    ],
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                    spacing=tokens.SPACE_XS,
+                    # Breadcrumb + Up button
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.IconButton(
+                                    icon=ft.Icons.ARROW_UPWARD_ROUNDED,
+                                    icon_size=tokens.ICON_MD,
+                                    on_click=_on_navigate_up,
+                                    tooltip="Go up",
                                 ),
-                                padding=ft.Padding(
-                                    tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
-                                ),
-                            ),
-                            ft.Divider(height=1),
-                            # File list
-                            ft.Container(
-                                content=_build_file_list(),
-                                padding=ft.Padding(
-                                    tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
-                                ),
-                                expand=True,
-                            ),
-                            build_banner_ad(page),
-                        ],
-                        spacing=0,
-                        scroll=ft.ScrollMode.AUTO,
-                        expand=True,
+                                breadcrumb_container,
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_XS,
+                        ),
+                        padding=ft.Padding(
+                            tokens.SPACE_SM, 0, tokens.SPACE_SM, 0
+                        ),
                     ),
+                    ft.Divider(height=1),
+                    # File list
+                    file_list_container,
+                    build_banner_ad(page),
                 ],
-                expand=True,
                 spacing=0,
-            ),
-            ft.Container(
-                content=upload_fab,
-                alignment=ft.Alignment(1, 1),
-                padding=ft.Padding(0, 0, tokens.SPACE_LG, tokens.SPACE_LG),
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
             ),
         ],
         expand=True,
+        spacing=0,
     )
 
     return ft.View(
         route=f"/files?session={session_name}",
-        controls=[view_content],
+        controls=[view_content, action_bar_container],
+        floating_action_button=upload_fab,
         padding=0,
         appbar=ft.AppBar(
             leading=ft.Container(

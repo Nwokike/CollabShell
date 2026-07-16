@@ -46,6 +46,7 @@ def _format_size(size_bytes) -> str:
 
 def build_file_item(
     file_info: dict,
+    selected: bool = False,
     on_click=None,
 ) -> ft.Container:
     """Build a file browser list item.
@@ -57,8 +58,12 @@ def build_file_item(
     size = file_info.get("size", 0)
 
     icon = _file_icon(name, is_dir)
+    
+    trailing_icon = ft.Icons.CHECK_CIRCLE_ROUNDED if selected else ft.Icons.RADIO_BUTTON_UNCHECKED
 
     return ft.Container(
+        bgcolor=ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT,
+        border_radius=tokens.RADIUS_MD,
         content=ft.Row(
             controls=[
                 ft.Icon(
@@ -87,11 +92,9 @@ def build_file_item(
                     expand=True,
                 ),
                 ft.Icon(
-                    ft.Icons.CHEVRON_RIGHT_ROUNDED
-                    if is_dir
-                    else ft.Icons.MORE_VERT_ROUNDED,
+                    trailing_icon,
                     size=tokens.ICON_MD,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    color=ft.Colors.PRIMARY if selected else ft.Colors.ON_SURFACE_VARIANT,
                 ),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,

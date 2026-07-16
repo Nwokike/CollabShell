@@ -456,7 +456,7 @@ async def main(page: ft.Page):
                 state=state,
                 session_name=session_name,
                 on_back=lambda e: page.run_task(
-                    navigate, f"/session?session={session_name}"
+                    navigate, f"/session?session={urllib.parse.quote(session_name)}"
                 ),
                 snack=_snack,
                 theme_btn=theme_btn,
