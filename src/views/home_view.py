@@ -103,7 +103,7 @@ def build_home_view(
         content=ft.Row(
             controls=[
                 _action_button(
-                    ft.Icons.NOTEBOOK_ROUNDED,
+                    ft.Icons.NOTE_ADD_ROUNDED,
                     "New\nNotebook",
                     on_new_session,
                 ),
