@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import atexit
 import logging
-import threading
 
 from core.storage_patch import apply_storage_patches
 
@@ -17,10 +16,10 @@ apply_storage_patches()
 
 import flet as ft
 
-from core import constants, tokens
+from core import constants
 from core.state import state
 from core.theme import AppTheme
-from services.colab_service import ColabService
+from services.colab import ColabService
 from services.storage_service import StorageService
 from services.ad_service import AdService
 
@@ -76,177 +75,9 @@ async def main(page: ft.Page):
     page.services.append(file_picker)
     page.file_picker = file_picker
 
-    def _global_stdin_hook(prompt, *args, **kwargs):
-        """Universal interactive dialog for kernel/GCP OAuth stdin requests."""
-        input_event = threading.Event()
-        user_input = {"value": ""}
+    from core.stdin_hook import setup_global_stdin_hook
 
-        if isinstance(prompt, dict):
-            content_dict = prompt.get("content", {})
-            prompt_str = content_dict.get("prompt", str(prompt))
-            is_password = content_dict.get("password", False)
-        else:
-            prompt_str = str(prompt) if prompt else "Input required"
-            is_password = any(
-                kw in prompt_str.lower()
-                for kw in ("password", "token", "secret", "hf_", "api_key", "getpass")
-            )
-
-        logger.info("[global_stdin_hook] Prompt requested: %s", prompt_str)
-
-        extracted_url = None
-        for word in prompt_str.split():
-            if word.startswith("http://") or word.startswith("https://"):
-                extracted_url = word.strip("'\"),;:")
-                break
-
-        is_ephemeral_drive_oauth = bool(
-            extracted_url and "authorize-for-drive-credentials-ephem" in extracted_url
-        )
-
-        dialog_field = ft.TextField(
-            label="Verification Code (Paste code here and click Submit)"
-            if extracted_url
-            else "Verification Code / Input",
-            autofocus=True,
-            password=is_password and not bool(extracted_url),
-            can_reveal_password=is_password and not bool(extracted_url),
-        )
-
-        def _close_dialog(success=True, message=None):
-            if not dialog.open:
-                return
-            dialog.open = False
-            page.update()
-            if _snack and success and is_ephemeral_drive_oauth:
-                _snack("✅ Google Drive authorized successfully!")
-            elif _snack and not success and message:
-                _snack(f"❌ {message}")
-
-        on_complete = kwargs.get("on_complete")
-        if isinstance(on_complete, dict):
-            on_complete["fn"] = _close_dialog
-
-        def _submit_input(e=None):
-            if not dialog.open:
-                return
-            user_input["value"] = dialog_field.value or ""
-            if is_ephemeral_drive_oauth:
-                dialog.title = ft.Text("Verifying Authorization...")
-                dialog.content = ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.ProgressRing(width=24, height=24, stroke_width=3),
-                                ft.Text(
-                                    "Checking credentials with Google servers...",
-                                    size=tokens.FONT_SM,
-                                    weight=ft.FontWeight.BOLD,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_MD,
-                        ),
-                        ft.Text(
-                            "Please wait up to 20 seconds while Google syncs your authorization across their backend...",
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ],
-                    tight=True,
-                    spacing=tokens.SPACE_SM,
-                )
-                dialog.actions = [
-                    ft.TextButton(
-                        "Cancel",
-                        on_click=lambda e: _close_dialog(
-                            False, "Authorization cancelled"
-                        ),
-                    )
-                ]
-                dialog.update()
-            else:
-                dialog.open = False
-                page.update()
-            input_event.set()
-
-        dialog_field.on_submit = _submit_input
-
-        display_text = prompt_str
-        if extracted_url and len(extracted_url) > 60:
-            display_text = display_text.replace(extracted_url, "").strip()
-            if (
-                not display_text
-                or "Google Drive Authorization Required" in display_text
-            ):
-                if is_ephemeral_drive_oauth:
-                    display_text = (
-                        "Google Drive Authorization Required.\n\n"
-                        "1. Click '🌐 Open Link in Browser' below and choose your Google account.\n"
-                        "2. Click 'Allow' on the Google permission page.\n\n"
-                        "Once the web page says 'Please close this window', return here and click 'Confirm & Continue' below!"
-                    )
-                else:
-                    display_text = (
-                        "GCP / Google Cloud Authorization Required.\n\n"
-                        "1. Click '🌐 Open Link in Browser' below and sign into your Google account.\n"
-                        "2. Click 'Allow' to grant credentials access.\n"
-                        "3. Copy the verification code (`4/0AX...`), paste it into the box below, and click 'Submit'!"
-                    )
-
-        content_controls = [ft.Text(display_text, size=tokens.FONT_SM, selectable=True)]
-        if extracted_url:
-
-            async def _launch_url_task(e=None):
-                await ft.UrlLauncher().launch_url(extracted_url)
-
-            async def _copy_url_task(e=None):
-                await ft.Clipboard().set(extracted_url)
-                _snack("Copied URL to clipboard!")
-
-            content_controls.append(
-                ft.Row(
-                    [
-                        ft.FilledButton(
-                            "🌐 Open Link in Browser",
-                            on_click=lambda e: page.run_task(_launch_url_task, e),
-                        ),
-                        ft.IconButton(
-                            ft.Icons.COPY_ROUNDED,
-                            tooltip="Copy URL",
-                            on_click=lambda e: page.run_task(_copy_url_task, e),
-                        ),
-                    ],
-                    wrap=True,
-                )
-            )
-        if not is_ephemeral_drive_oauth:
-            content_controls.append(dialog_field)
-
-        dialog = ft.AlertDialog(
-            title=ft.Text("Authentication / Input Required"),
-            content=ft.Column(
-                controls=content_controls, tight=True, spacing=tokens.SPACE_MD
-            ),
-            actions=[
-                ft.TextButton("Cancel", on_click=lambda e: _submit_input()),
-                ft.FilledButton(
-                    "Confirm & Continue" if is_ephemeral_drive_oauth else "Submit",
-                    on_click=_submit_input,
-                ),
-            ],
-            modal=True,
-        )
-
-        async def _show():
-            page.show_dialog(dialog)
-            await asyncio.sleep(0)
-            page.update()
-
-        page.run_task(_show)
-        input_event.wait(timeout=300)
-        return user_input["value"]
-
-    colab_service.default_stdin_hook = _global_stdin_hook
+    setup_global_stdin_hook(page, colab_service, lambda m: _snack(m))
 
     # ── Load saved settings ───────────────────────────────────────────────────
     try:
@@ -352,401 +183,34 @@ async def main(page: ft.Page):
 
     # ── New Session Sheet ─────────────────────────────────────────────────────
     def _show_new_session_sheet(mode=None, ignore_warning=False):
-        def _close_limit_dialog(e=None):
-            limit_dialog.open = False
-            page.update()
+        from components.new_session_sheet import show_new_session_sheet
 
-        def _on_proceed(e):
-            _close_limit_dialog()
-            _show_new_session_sheet(mode=mode, ignore_warning=True)
-
-        if not ignore_warning and len(state.active_sessions) >= 3:
-            limit_dialog = ft.AlertDialog(
-                title=ft.Text("Session Limit", weight=ft.FontWeight.BOLD),
-                content=ft.Text(
-                    "You already have 3 active sessions. Creating another session might fail with a quota error unless you have a Google Colab Pro subscription.\n\nDo you want to proceed?"
-                ),
-                actions=[
-                    ft.TextButton("Cancel", on_click=_close_limit_dialog),
-                    ft.TextButton("Proceed", on_click=_on_proceed),
-                ],
-                actions_alignment=ft.MainAxisAlignment.END,
-            )
-            page.show_dialog(limit_dialog)
-            return
-
-        from components.hardware_picker import build_hardware_picker
-
-        name_ref = ft.Ref[ft.TextField]()
-        gpu_ref = ft.Ref[ft.Dropdown]()
-        tpu_ref = ft.Ref[ft.Dropdown]()
-        hardware_type_ref = ft.Ref[ft.SegmentedButton]()
-
-        async def _on_create(e):
-            name = name_ref.current.value.strip() if name_ref.current else ""
-
-            # Read hardware selection
-            selected_hw = (
-                list(hardware_type_ref.current.selected)[0]
-                if hardware_type_ref.current and hardware_type_ref.current.selected
-                else "CPU"
-            )
-
-            gpu = (
-                gpu_ref.current.value
-                if (gpu_ref.current and selected_hw == "GPU")
-                else None
-            )
-            tpu = (
-                tpu_ref.current.value
-                if (tpu_ref.current and selected_hw == "TPU")
-                else None
-            )
-
-            paid_gpus = {"L4", "G4", "A100", "H100"}
-            if gpu in paid_gpus:
-
-                def _close_confirm(data):
-                    confirm_dialog.data = data
-                    confirm_dialog.open = False
-                    page.update()
-
-                confirm_dialog = ft.AlertDialog(
-                    modal=True,
-                    on_dismiss=lambda e: _close_confirm("cancel"),
-                    title=ft.Text("Paid Runtime Warning"),
-                    content=ft.Text(
-                        f"{gpu} requires Colab Pro or Pay As You Go and may incur charges. Continue?"
-                    ),
-                    actions=[
-                        ft.TextButton(
-                            "Cancel",
-                            on_click=lambda e: _close_confirm("cancel"),
-                        ),
-                        ft.FilledButton(
-                            "Continue",
-                            on_click=lambda e: _close_confirm("continue"),
-                        ),
-                    ],
-                )
-                page.show_dialog(confirm_dialog)
-                # Wait for user to make a choice
-                while getattr(confirm_dialog, "data", None) is None:
-                    await asyncio.sleep(0.1)
-                if confirm_dialog.data == "cancel":
-                    return
-
-            hw_dialog.open = False
-            page.update()
-            await ad_service.show_interstitial()
-
-            loading_dialog = ft.AlertDialog(
-                modal=True,
-                content=ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.ProgressRing(
-                                width=24,
-                                height=24,
-                                stroke_width=3,
-                            ),
-                            ft.Text(
-                                "Creating session...",
-                                size=tokens.FONT_SM,
-                                weight=ft.FontWeight.W_500,
-                            ),
-                        ],
-                        spacing=12,
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    ),
-                    padding=ft.Padding(
-                        tokens.SPACE_XL,
-                        tokens.SPACE_LG,
-                        tokens.SPACE_XL,
-                        tokens.SPACE_LG,
-                    ),
-                ),
-            )
-            page.show_dialog(loading_dialog)
-            state.is_provisioning = True
-
-            try:
-                logger.info(
-                    "Attempting to create session: %s (GPU=%s, TPU=%s)", name, gpu, tpu
-                )
-                result = await colab_service.new_session(
-                    name=name or None,
-                    gpu=gpu if gpu else None,
-                    tpu=tpu if tpu else None,
-                    auth_method=state.auth_method,
-                    keep_alive=state.keep_alive_enabled,
-                )
-                logger.info("Session created successfully: %s", result)
-                loading_dialog.open = False
-                page.update()
-
-                _snack(f"✅ Session '{result['name']}' created!")
-
-                sessions = await colab_service.list_sessions(
-                    auth_method=state.auth_method,
-                )
-                state.active_sessions = sessions
-
-                if mode:
-                    import urllib.parse
-
-                    encoded_session = urllib.parse.quote(result["name"])
-                    if mode == "notebook":
-                        await navigate(f"/session?session={encoded_session}")
-                    elif mode == "terminal":
-                        await navigate(
-                            f"/session?session={encoded_session}&tab=terminal"
-                        )
-                    elif mode == "files":
-                        await navigate(f"/files?session={encoded_session}")
-                else:
-                    await route_change()
-            except Exception as ex:
-                logger.error("Failed to create session: %s", ex, exc_info=True)
-                loading_dialog.open = False
-                page.update()
-                _snack(f"❌ {ex}")
-            state.is_provisioning = False
-            page.update()
-
-        picker = build_hardware_picker(
-            on_create=lambda e: page.run_task(_on_create, e),
-            name_ref=name_ref,
-            gpu_ref=gpu_ref,
-            tpu_ref=tpu_ref,
-            hardware_type_ref=hardware_type_ref,
+        show_new_session_sheet(
+            page=page,
+            state=state,
+            colab_service=colab_service,
+            ad_service=ad_service,
+            navigate=navigate,
+            route_change=route_change,
+            snack_func=_snack,
+            mode=mode,
+            ignore_warning=ignore_warning,
         )
-
-        hw_dialog = ft.AlertDialog(
-            title=ft.Text("New Session", weight=ft.FontWeight.W_700),
-            content=picker,
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        page.show_dialog(hw_dialog)
 
     # ── Route change handler ──────────────────────────────────────────────────
-    import urllib.parse
 
     async def route_change(e=None):
-        page.views.clear()
-        route = page.route
-        parsed = urllib.parse.urlparse(route)
-        route = parsed.path
-        query_params = dict(urllib.parse.parse_qsl(parsed.query))
+        from core.router import route_change_impl
 
-        async def _global_toggle_theme(e=None):
-            is_dark = page.theme_mode == ft.ThemeMode.DARK or (
-                page.theme_mode == ft.ThemeMode.SYSTEM
-                and page.platform_brightness == ft.Brightness.DARK
-            )
-            page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
-            state.theme_mode = page.theme_mode
-            await storage.set(
-                constants.STORAGE_THEME,
-                "light" if page.theme_mode == ft.ThemeMode.LIGHT else "dark",
-            )
-            theme_btn.icon = (
-                ft.Icons.LIGHT_MODE_ROUNDED
-                if page.theme_mode == ft.ThemeMode.DARK
-                else ft.Icons.DARK_MODE_ROUNDED
-            )
-            page.update()
-
-        theme_btn = ft.IconButton(
-            icon=ft.Icons.LIGHT_MODE_ROUNDED
-            if page.theme_mode == ft.ThemeMode.DARK
-            else ft.Icons.DARK_MODE_ROUNDED,
-            tooltip="Toggle Theme",
-            on_click=lambda e: page.run_task(_global_toggle_theme),
+        await route_change_impl(
+            page=page,
+            colab_service=colab_service,
+            state=state,
+            storage=storage,
+            navigate=navigate,
+            show_new_session_sheet=_show_new_session_sheet,
+            snack=_snack,
         )
-        logger.info("Route: %s", route)
-
-        page.views.clear()
-
-        # Onboarding gate
-        if not state.onboarding_done and route != "/onboarding":
-            page.route = "/onboarding"
-            await route_change()
-            return
-
-        if route == "/onboarding":
-            from views.onboarding_view import build_onboarding_view
-
-            view = build_onboarding_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                storage=storage,
-                on_complete=lambda: page.run_task(navigate, "/home"),
-                snack=_snack,
-            )
-            page.views.append(view)
-
-        elif route == "/home" or route == "/":
-            from views.home_view import build_home_view
-
-            view = build_home_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                on_new_session=lambda mode: _show_new_session_sheet(mode=mode),
-                on_session_tap=lambda name: page.run_task(
-                    navigate, f"/session?session={name}"
-                ),
-                navigate=navigate,
-                on_refresh=lambda e: page.run_task(
-                    colab_service.list_sessions, "oauth2"
-                ),
-                storage=storage,
-            )
-            page.views.append(view)
-
-        elif route == "/session":
-            from views.session_view import build_session_view
-
-            session_name = query_params.get("session", "")
-            initial_tab = query_params.get("tab", "notebook")
-
-            view = build_session_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                session_name=session_name,
-                initial_tab=initial_tab,
-                on_back=lambda e: page.run_task(navigate, "/home"),
-                navigate=navigate,
-                snack=_snack,
-                theme_btn=theme_btn,
-                storage=storage,
-            )
-            page.views.append(view)
-
-        elif route == "/run":
-            from views.run_view import build_run_view
-
-            view = build_run_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                on_back=lambda e: page.run_task(navigate, "/home"),
-                snack=_snack,
-                theme_btn=theme_btn,
-            )
-            page.views.append(view)
-
-        elif route == "/files":
-            from views.files_view import build_files_view
-
-            session_name = query_params.get("session", "")
-            view = build_files_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                session_name=session_name,
-                on_back=lambda e: page.run_task(
-                    navigate, f"/session?session={urllib.parse.quote(session_name)}"
-                ),
-                snack=_snack,
-                theme_btn=theme_btn,
-            )
-            page.views.append(view)
-
-        elif route == "/terminal":
-            from views.terminal_view import build_terminal_view
-
-            session_name = query_params.get("session", "")
-            view = build_terminal_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                session_name=session_name,
-                on_back=lambda e: page.run_task(
-                    navigate, f"/session?session={session_name}"
-                ),
-                snack=_snack,
-                theme_btn=theme_btn,
-            )
-            page.views.append(view)
-
-        elif route == "/history":
-            from views.history_view import build_history_view
-
-            preselected = query_params.get("session", None)
-            view = build_history_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                preselected_session=preselected,
-                snack=_snack,
-                theme_btn=theme_btn,
-            )
-            page.views.append(view)
-
-        elif route == "/settings":
-            from views.settings_view import build_settings_view
-
-            view = build_settings_view(
-                page=page,
-                colab_service=colab_service,
-                state=state,
-                storage=storage,
-            )
-            page.views.append(view)
-
-        else:
-            page.route = "/home"
-            await route_change()
-            return
-
-        # Attach nav bar to tabbed views
-        if page.views and route in ("/home", "/", "/history", "/settings"):
-            page.views[-1].navigation_bar = _build_nav_bar(route)
-
-        # Attach appbar to tabbed views
-        if page.views and route in ("/home", "/", "/history", "/settings"):
-            top_view = page.views[-1]
-
-            # Define root routes that get the custom Page Tag leading widget
-            root_routes = {"/home", "/", "/history", "/settings"}
-
-            if route in root_routes:
-                page_tags = {
-                    "/home": "Home",
-                    "/": "Home",
-                    "/history": "History",
-                    "/settings": "Settings",
-                }
-                tag_text = page_tags.get(route, "Collab Shell")
-
-                page_tag = ft.Container(
-                    content=ft.Text(
-                        tag_text,
-                        size=tokens.FONT_LG,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.ON_SURFACE,
-                    ),
-                    padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
-                    alignment=ft.Alignment.CENTER_LEFT,
-                )
-
-                if not top_view.appbar:
-                    top_view.appbar = ft.AppBar()
-                top_view.appbar.leading = page_tag
-                top_view.appbar.leading_width = 100
-                top_view.appbar.title = ft.Container()
-                top_view.appbar.center_title = True
-                top_view.appbar.actions = [theme_btn]
-                top_view.appbar.bgcolor = ft.Colors.TRANSPARENT
-            else:
-                # Sub-views handle their own appbars natively
-                pass
-
-        page.update()
 
     # ── Disconnect handler (auto-stop) ────────────────────────────────────────
     def _cleanup_sessions():

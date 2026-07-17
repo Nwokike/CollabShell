@@ -1,8 +1,8 @@
 import flet as ft
-
 from core import tokens
 from core.theme import AppColors
-from components.ansi_parser import parse_ansi_to_flet_text
+from components.notebook_cell.actions import make_actions_row, copy_output
+from components.notebook_cell.output import parse_outputs_to_controls
 
 
 def build_notebook_cell(
@@ -22,14 +22,12 @@ def build_notebook_cell(
     Returns (container, refs_dict) where refs_dict holds Ref objects
     for mutable parts of the cell (play_btn, stop_row, output).
     """
-
     cell_type = cell.get("type", "code")
     source = cell.get("source", "")
     outputs = cell.get("outputs", [])
     is_running = cell.get("is_running", False)
 
     editor_ref = ft.Ref[ft.TextField]()
-
     play_btn_ref = ft.Ref[ft.IconButton]()
     stop_row_ref = ft.Ref[ft.Row]()
     output_ref = ft.Ref[ft.ListView]()
@@ -48,54 +46,13 @@ def build_notebook_cell(
                 on_change()
 
     async def _copy_output(e):
-        text_to_copy = ""
-        for out in outputs:
-            if out.get("type") == "stream":
-                text_to_copy += out.get("text", "") + "\n"
-            elif out.get("type") == "error":
-                text_to_copy += "\n".join(out.get("traceback", [])) + "\n"
-            elif out.get("type") in ["execute_result", "display_data"]:
-                data = out.get("data", {})
-                if "text/plain" in data:
-                    text_to_copy += data["text/plain"] + "\n"
-        if text_to_copy:
-            await ft.Clipboard().set(text_to_copy.strip())
-            page.show_dialog(ft.SnackBar(ft.Text("Output copied to clipboard!")))
+        await copy_output(page, outputs)
 
-    # ── Cell Actions ──
-    # A Flutter control can only have a single parent, so build a fresh
-    # instance wherever the actions are needed (markdown edit, markdown
-    # render, and code cells would otherwise attempt to share one control).
     def _make_actions_row():
-        return ft.Row(
-            controls=[
-                ft.IconButton(
-                    ft.Icons.ARROW_UPWARD_ROUNDED,
-                    icon_size=tokens.ICON_SM,
-                    tooltip="Move Up",
-                    on_click=lambda e: on_move_up() if on_move_up else None,
-                ),
-                ft.IconButton(
-                    ft.Icons.ARROW_DOWNWARD_ROUNDED,
-                    icon_size=tokens.ICON_SM,
-                    tooltip="Move Down",
-                    on_click=lambda e: on_move_down() if on_move_down else None,
-                ),
-                ft.IconButton(
-                    ft.Icons.DELETE_OUTLINE_ROUNDED,
-                    icon_size=tokens.ICON_SM,
-                    icon_color=AppColors.ERROR,
-                    tooltip="Delete Cell",
-                    on_click=lambda e: on_delete() if on_delete else None,
-                ),
-            ],
-            spacing=0,
-        )
+        return make_actions_row(on_move_up, on_move_down, on_delete)
 
     if cell_type == "markdown":
-        # ── Markdown Cell (unchanged) ──
         is_editing_initial = cell.get("is_editing", not bool(source.strip()))
-
         edit_container = ft.Container(visible=is_editing_initial)
         render_container = ft.Container(visible=not is_editing_initial)
         markdown_ref = ft.Ref[ft.Markdown]()
@@ -131,7 +88,7 @@ def build_notebook_cell(
                             value=source,
                             multiline=True,
                             min_lines=2,
-                            max_lines=15,
+                            max_lines=8,
                             text_size=tokens.FONT_SM,
                             border_color=ft.Colors.TRANSPARENT,
                             bgcolor=ft.Colors.TRANSPARENT,
@@ -166,7 +123,7 @@ def build_notebook_cell(
                             "Render",
                             icon=ft.Icons.CHECK_ROUNDED,
                             on_click=_render,
-                            height=28,
+                            height=tokens.SPACE_LG * 2,
                             style=ft.ButtonStyle(padding=ft.Padding(12, 0, 12, 0)),
                         ),
                         _make_actions_row(),
@@ -230,50 +187,7 @@ def build_notebook_cell(
         ), refs
 
     # ── Code Cell ──
-    output_controls = []
-    for out in outputs:
-        if len(output_controls) >= 1000:
-            break
-        if out.get("type") == "stream":
-            is_err = out.get("name") == "stderr"
-            text = out.get("text", "")
-            output_controls.append(
-                parse_ansi_to_flet_text(
-                    raw_text=text, default_size=tokens.FONT_SM, is_error=is_err
-                )
-            )
-        elif out.get("type") == "error":
-            traceback = "\n".join(out.get("traceback", []))
-            output_controls.append(
-                parse_ansi_to_flet_text(
-                    raw_text=traceback,
-                    default_size=tokens.FONT_SM,
-                    is_error=True,
-                )
-            )
-        elif out.get("type") in ["execute_result", "display_data"]:
-            data = out.get("data", {})
-            if "image/png" in data:
-                try:
-                    b64_img = data["image/png"]
-                    b64_img = b64_img.replace("\n", "").replace("\r", "")
-                    output_controls.append(
-                        ft.Container(
-                            content=ft.Image(src_base64=b64_img, fit=ft.BoxFit.CONTAIN),
-                            margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
-                        )
-                    )
-                except Exception as e:
-                    output_controls.append(
-                        ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
-                    )
-            elif "text/plain" in data:
-                output_controls.append(
-                    parse_ansi_to_flet_text(
-                        raw_text=data["text/plain"],
-                        default_size=tokens.FONT_SM,
-                    )
-                )
+    output_controls = parse_outputs_to_controls(outputs)
 
     output_actions = ft.Row(
         controls=[
@@ -322,7 +236,7 @@ def build_notebook_cell(
                     controls=output_controls,
                     spacing=tokens.SPACE_XXS,
                     auto_scroll=True,
-                    height=320,
+                    height=tokens.SPACE_XXXL * 8,
                     expand=False,
                 ),
                 output_actions,
@@ -376,7 +290,7 @@ def build_notebook_cell(
                             value=source,
                             multiline=True,
                             min_lines=1,
-                            max_lines=25,
+                            max_lines=10,
                             text_style=ft.TextStyle(
                                 font_family="RobotoMono", size=tokens.FONT_SM
                             ),
