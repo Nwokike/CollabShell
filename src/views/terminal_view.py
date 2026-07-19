@@ -210,7 +210,7 @@ def build_terminal_panel(
             page.update()
 
         for _ in range(40):
-            if mt.page and getattr(mt, "uid", None):
+            if mt.page is not None:
                 break
             await asyncio.sleep(0.05)
 
@@ -232,7 +232,7 @@ def build_terminal_panel(
                     mt.write(text)
 
             def _on_stdout(text: str):
-                if entry["ready"] and mt.page and getattr(mt, "uid", None):
+                if entry["ready"] and mt.page is not None:
                     try:
                         _write_to_terminal(text)
                         return
@@ -255,6 +255,13 @@ def build_terminal_panel(
             client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
             entry["client"] = client
 
+            def _safe_run_task(task_fn, *args):
+                try:
+                    if getattr(page, "_session", getattr(page, "session", None)):
+                        page.run_task(task_fn, *args)
+                except RuntimeError:
+                    pass
+
             def _on_bytes(payload: bytes | str):
                 if entry.get("client"):
                     data = (
@@ -262,7 +269,7 @@ def build_terminal_panel(
                         if isinstance(payload, bytes)
                         else payload.encode("utf-8", errors="ignore")
                     )
-                    page.run_task(entry["client"].send_input, data)
+                    _safe_run_task(entry["client"].send_input, data)
 
             mt.set_on_bytes(_on_bytes)
             mt.on_data = lambda e: _on_bytes(
@@ -273,7 +280,7 @@ def build_terminal_panel(
                 if entry.get("client") and ev.data:
                     try:
                         info = json.loads(ev.data)
-                        page.run_task(
+                        _safe_run_task(
                             entry["client"].set_size,
                             info.get("rows", 24),
                             info.get("cols", 80),
@@ -285,7 +292,7 @@ def build_terminal_panel(
             await client.connect()
             entry["ready"] = True
 
-            if entry["pending_stdout"] and mt.page and getattr(mt, "uid", None):
+            if entry["pending_stdout"] and mt.page is not None:
                 for chunk in entry["pending_stdout"]:
                     try:
                         _write_to_terminal(chunk)
@@ -294,7 +301,7 @@ def build_terminal_panel(
                 entry["pending_stdout"].clear()
 
             if entry.get("client"):
-                page.run_task(entry["client"].send_input, "\r")
+                _safe_run_task(entry["client"].send_input, "\r")
 
         except Exception as ex:
             logger.error("Terminal %s init failed: %s", new_id, ex)

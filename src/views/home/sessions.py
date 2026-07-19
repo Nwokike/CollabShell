@@ -115,6 +115,10 @@ def build_sessions_section(
         ),
     )
 
-    page.run_task(load_sessions)
+    try:
+        if getattr(page, "_session", getattr(page, "session", None)):
+            page.run_task(load_sessions)
+    except RuntimeError:
+        pass
 
     return sessions_section_header, sessions_list, load_sessions

@@ -205,3 +205,37 @@ def apply_storage_patches():
                 logger.addHandler(stream_handler)
 
     colab_cli.common.setup_logging = patched_setup_logging
+
+    # 3. Defensive patches to eliminate write() str vs bytes TypeErrors when streams or files
+    # are wrapped by rich.file_proxy.FileProxy or colab_cli _LockedFileStore.
+    try:
+        from rich.file_proxy import FileProxy
+
+        _orig_fp_write = FileProxy.write
+
+        def patched_fp_write(self, text):
+            if isinstance(text, bytes):
+                text = text.decode("utf-8", errors="ignore")
+            elif not isinstance(text, str):
+                text = str(text)
+            return _orig_fp_write(self, text)
+
+        FileProxy.write = patched_fp_write
+    except ImportError:
+        pass
+
+    try:
+        from colab_cli.state import _LockedFileStore
+
+        _orig_write_data = _LockedFileStore._write_data
+
+        def patched_write_data(self, f, data):
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="ignore")
+            elif not isinstance(data, str):
+                data = str(data)
+            return _orig_write_data(self, f, data)
+
+        _LockedFileStore._write_data = patched_write_data
+    except Exception:
+        pass

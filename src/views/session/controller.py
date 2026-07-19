@@ -46,9 +46,15 @@ class SessionController:
         self.page.update()
 
     def save_notebook(self):
-        self.page.run_task(
-            self.storage.save_notebook, self.session_name, self.state.notebook_cells
-        )
+        try:
+            if getattr(self.page, "_session", getattr(self.page, "session", None)):
+                self.page.run_task(
+                    self.storage.save_notebook,
+                    self.session_name,
+                    self.state.notebook_cells,
+                )
+        except RuntimeError:
+            pass
 
     def debounced_save(self):
         if self.save_debounce_handle is not None:

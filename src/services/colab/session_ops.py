@@ -197,7 +197,7 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
     try:
         return await asyncio.to_thread(_list)
     except Exception as e:
-        logger.error("list_sessions failed: %s", e)
+        logger.exception("list_sessions failed: %s", e)
         return []
 
 
