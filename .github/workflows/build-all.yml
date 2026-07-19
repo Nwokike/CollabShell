@@ -1,4 +1,4 @@
-name: Build Collab Shell (Android)
+name: Build Multi-Platform & Create Release
 
 on:
   pull_request:
@@ -13,6 +13,9 @@ on:
         required: true
         default: "2"
 
+permissions:
+  contents: write
+
 env:
   PYTHONUTF8: "1"
   FLET_CLI_NO_RICH_OUTPUT: "1"
@@ -21,8 +24,46 @@ env:
   BUILD_NUMBER: ${{ inputs.build_number || '2' }}
 
 jobs:
+  # ─── 0. Create Release Tag & Placeholder ───────────────
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      TAG_NAME: ${{ steps.tag_info.outputs.TAG_NAME }}
+      RELEASE_NAME: ${{ steps.tag_info.outputs.RELEASE_NAME }}
+      IS_PRERELEASE: ${{ steps.tag_info.outputs.IS_PRERELEASE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Release Tag & Name
+        id: tag_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Collab Shell ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "TAG_NAME=build-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Automated Build (${SHORT_SHA})" >> $GITHUB_OUTPUT
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          fi
+      - name: Create GitHub Release Placeholder
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
+          name: ${{ steps.tag_info.outputs.RELEASE_NAME }}
+          prerelease: ${{ steps.tag_info.outputs.IS_PRERELEASE }}
+          make_latest: true
+          body: |
+            Automated multi-platform build generated from commit `${{ github.sha }}`.
+
+            *This is a pre-release placeholder. Feel free to edit this title and description with your release notes right from the GitHub Releases UI.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ─── Android APK (split per ABI) ───────────────────────
   build-apk-split:
+    needs: [prepare-release]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +92,18 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
-      - uses: actions/upload-artifact@v5.0.0
+      - name: Upload directly to GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: collabshell-split-apk
-          path: build/apk/*.apk
+          tag_name: ${{ needs.prepare-release.outputs.TAG_NAME }}
+          files: build/apk/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ─── Android AAB (Play Store) ──────────────────────────
   build-aab:
+    needs: [prepare-release]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +132,177 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
-      - uses: actions/upload-artifact@v5.0.0
+      - name: Upload directly to GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: collabshell.aab
-          path: build/aab/
+          tag_name: ${{ needs.prepare-release.outputs.TAG_NAME }}
+          files: build/aab/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Windows (Automated .exe Setup Installer) ──────────────
+  build-windows:
+    needs: [prepare-release]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build Windows Portable
+        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+
+      - name: Generate Icon for Installer
+        run: |
+          uv pip install pillow
+          uv run python -c "from PIL import Image; Image.open('src/assets/icon.png').save('src/assets/icon.ico', format='ICO', sizes=[(256, 256)])"
+
+      - name: Build Windows Installer (Inno Setup)
+        run: |
+          $IssContent = @"
+          [Setup]
+          AppId={{A38F4129-8472-4D91-8C31-18294B183621}}
+          AppName=Collab Shell
+          AppVersion=${{ env.BUILD_VERSION }}
+          AppPublisher=Kiri
+          AppPublisherURL=https://kiri.ng
+          AppSupportURL=https://kiri.ng/support
+          AppUpdatesURL=https://kiri.ng/updates
+          AppCopyright=Copyright (C) 2026 Kiri
+          DefaultDirName={autopf}\Collab Shell
+          DefaultGroupName=Collab Shell
+          OutputDir=.\build\installer
+          OutputBaseFilename=CollabShell_Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          ArchitecturesAllowed=x64
+          ArchitecturesInstallIn64BitMode=x64
+          PrivilegesRequired=lowest
+          SetupIconFile=.\src\assets\icon.ico
+          UninstallDisplayIcon={app}\collabshell.exe
+          CloseApplications=yes
+          AppMutex=CollabShell_Mutex
+
+          [Files]
+          Source: "build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\Collab Shell"; Filename: "{app}\collabshell.exe"
+          Name: "{autodesktop}\Collab Shell"; Filename: "{app}\collabshell.exe"; Tasks: desktopicon
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+          "@
+          Set-Content -Path "installer.iss" -Value $IssContent -Encoding UTF8
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Upload directly to GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.TAG_NAME }}
+          files: build/installer/CollabShell_Setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Linux (.deb, .rpm & Universal .tar.gz) ────────────────
+  build-linux:
+    needs: [prepare-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Linux Build Dependencies & Packaging Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev rpm ruby ruby-dev
+          sudo gem install --no-document fpm
+      - name: Build Linux Bundle
+        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+      - name: Create Linux Packages (.deb, .rpm, .tar.gz)
+        run: |
+          mkdir -p build/dist
+
+          # 1. Universal Portable .tar.gz
+          tar -czf build/dist/CollabShell_${{ env.BUILD_VERSION }}_linux_x86_64.tar.gz -C build/linux .
+
+          # 2. Stage filesystem tree for rich .deb and .rpm packages
+          mkdir -p pkg_root/usr/lib/collabshell pkg_root/usr/bin pkg_root/usr/share/applications pkg_root/usr/share/icons/hicolor/256x256/apps pkg_root/usr/share/pixmaps pkg_root/usr/share/metainfo
+          cp -a build/linux/* pkg_root/usr/lib/collabshell/
+          chmod +x pkg_root/usr/lib/collabshell/collabshell
+          ln -s /usr/lib/collabshell/collabshell pkg_root/usr/bin/collabshell
+
+          # Icons (both hicolor and pixmaps ensure instant icon display when opening .deb file in Ubuntu App Center before installation)
+          cp src/assets/icon.png pkg_root/usr/share/icons/hicolor/256x256/apps/collabshell.png
+          cp src/assets/icon.png pkg_root/usr/share/pixmaps/collabshell.png
+
+          # Desktop entry
+          cat <<EOF > pkg_root/usr/share/applications/collabshell.desktop
+          [Desktop Entry]
+          Version=1.0
+          Name=Collab Shell
+          GenericName=Colab & Terminal Client
+          Comment=Run cloud notebooks, interactive terminals & manage files natively
+          Exec=/usr/bin/collabshell
+          Icon=collabshell
+          Terminal=false
+          Type=Application
+          Categories=Utility;Development;Network;
+          Keywords=Colab;Jupyter;Terminal;SSH;Python;Cloud;
+          StartupNotify=true
+          StartupWMClass=collabshell
+          EOF
+
+          # AppStream / AppData metainfo XML (rich preview information in Ubuntu App Center & GNOME Software)
+          cat <<EOF > pkg_root/usr/share/metainfo/ng.kiri.collabshell.metainfo.xml
+          <?xml version="1.0" encoding="UTF-8"?>
+          <component type="desktop-application">
+            <id>ng.kiri.collabshell</id>
+            <metadata_license>MIT</metadata_license>
+            <project_license>MIT</project_license>
+            <name>Collab Shell</name>
+            <summary>Run cloud notebooks, interactive terminals &amp; manage files natively</summary>
+            <description>
+              <p>Collab Shell connects directly to Google Colab runtimes, providing:</p>
+              <ul>
+                <li>Interactive GPU-accelerated PTY web terminals via Colab WebSockets</li>
+                <li>Full Jupyter notebook cell execution and rich Markdown editing</li>
+                <li>Session provisioning across CPU, GPU (T4), and TPU v5e/v6e tiers</li>
+                <li>Native OS file pickers, folder zip archives, and Google Drive mounting</li>
+              </ul>
+            </description>
+            <launchable type="desktop-id">collabshell.desktop</launchable>
+            <url type="homepage">https://kiri.ng</url>
+            <developer_name>Kiri</developer_name>
+          </component>
+          EOF
+
+          # Build rich .deb using fpm
+          fpm -s dir -t deb -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
+              --architecture amd64 \
+              --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
+              --maintainer "Kiri <support@kiri.ng>" \
+              --url "https://kiri.ng" \
+              --category "utils" \
+              -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_amd64.deb \
+              -C pkg_root .
+
+          # Build rich .rpm using fpm
+          fpm -s dir -t rpm -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
+              --architecture x86_64 \
+              --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
+              --maintainer "Kiri <support@kiri.ng>" \
+              --url "https://kiri.ng" \
+              --category "Utility" \
+              -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_x86_64.rpm \
+              -C pkg_root .
+
+      - name: Upload directly to GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.TAG_NAME }}
+          files: build/dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
