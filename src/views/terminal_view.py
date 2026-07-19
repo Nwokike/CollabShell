@@ -221,10 +221,20 @@ def build_terminal_panel(
                 _session_info["token"],
             )
 
+            def _write_to_terminal(text: str):
+                if (
+                    getattr(mt._terminal, "_channel", None) is not None
+                    and getattr(mt._terminal, "_channel_ready", False)
+                    and getattr(mt._terminal, "_dart_ready", False)
+                ):
+                    mt.send_bytes(text.encode("utf-8", errors="ignore"))
+                else:
+                    mt.write(text)
+
             def _on_stdout(text: str):
                 if entry["ready"] and mt.page and getattr(mt, "uid", None):
                     try:
-                        mt.write(text)
+                        _write_to_terminal(text)
                         return
                     except Exception as ex:
                         logger.debug("Buffering stdout: %s", ex)
@@ -245,11 +255,19 @@ def build_terminal_panel(
             client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
             entry["client"] = client
 
-            def _on_bytes(payload: bytes):
+            def _on_bytes(payload: bytes | str):
                 if entry.get("client"):
-                    page.run_task(entry["client"].send_input, payload)
+                    data = (
+                        payload
+                        if isinstance(payload, bytes)
+                        else payload.encode("utf-8", errors="ignore")
+                    )
+                    page.run_task(entry["client"].send_input, data)
 
             mt.set_on_bytes(_on_bytes)
+            mt.on_data = lambda e: _on_bytes(
+                e.data if isinstance(e.data, str) else str(e.data)
+            )
 
             def _on_resize(ev):
                 if entry.get("client") and ev.data:
@@ -270,10 +288,13 @@ def build_terminal_panel(
             if entry["pending_stdout"] and mt.page and getattr(mt, "uid", None):
                 for chunk in entry["pending_stdout"]:
                     try:
-                        mt.write(chunk)
+                        _write_to_terminal(chunk)
                     except Exception:
                         pass
                 entry["pending_stdout"].clear()
+
+            if entry.get("client"):
+                page.run_task(entry["client"].send_input, "\r")
 
         except Exception as ex:
             logger.error("Terminal %s init failed: %s", new_id, ex)

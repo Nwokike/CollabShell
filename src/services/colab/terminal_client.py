@@ -105,14 +105,21 @@ class ColabTerminalClient:
                     m = json.loads(msg)
                     if isinstance(m, list):
                         if m[0] == "stdout" and len(m) > 1:
+                            logger.debug(
+                                "Received Colab stdout chunk (%d chars)", len(m[1])
+                            )
                             self.on_stdout(m[1])
                         elif m[0] == "setup":
                             logger.info("Colab TTY setup complete.")
+                            asyncio.create_task(self.set_size(24, 80))
                         elif m[0] == "disconnect":
                             logger.warning("Colab TTY disconnected by server.")
                             if self.on_status:
                                 self.on_status("Disconnected", False)
                     elif isinstance(m, dict) and "data" in m:
+                        logger.debug(
+                            "Received Colab dict data chunk (%d chars)", len(m["data"])
+                        )
                         self.on_stdout(m["data"])
                 except Exception as ex:
                     logger.error(
@@ -138,6 +145,9 @@ class ColabTerminalClient:
             )
             msg = json.dumps(["stdin", payload])
             await self.ws.write_message(msg)
+            logger.debug(
+                "Sent stdin to Colab (%d chars): %s", len(payload), repr(payload)
+            )
         except Exception as e:
             logger.error("Failed to send terminal input: %s", e)
 

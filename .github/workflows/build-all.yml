@@ -1,17 +1,19 @@
 name: Build Multi-Platform & Create Release
 
 on:
+  push:
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
       build_version:
         description: "Build version"
         required: true
-        default: "1.1.0"
+        default: "1.2.0"
       build_number:
         description: "Build number"
         required: true
-        default: "2"
+        default: "3"
 
 permissions:
   contents: write
@@ -20,8 +22,8 @@ env:
   PYTHONUTF8: "1"
   FLET_CLI_NO_RICH_OUTPUT: "1"
   UV_PYTHON: "3.12"
-  BUILD_VERSION: ${{ inputs.build_version || '1.1.0' }}
-  BUILD_NUMBER: ${{ inputs.build_number || '2' }}
+  BUILD_VERSION: ${{ inputs.build_version || '1.2.0' }}
+  BUILD_NUMBER: ${{ inputs.build_number || '3' }}
 
 jobs:
   # ─── 0. Create Release Tag & Placeholder ───────────────
@@ -38,7 +40,7 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "RELEASE_NAME=Collab Shell ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Colab Shell ${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
           else
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)

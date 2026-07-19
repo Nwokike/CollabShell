@@ -1,21 +1,21 @@
 [project]
 name = "collabshell"
-version = "1.1.0"
+version = "1.2.0"
 description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "flet>=0.85.3",
     "flet-ads>=0.85.0",
-    "flet-terminal>=0.2.0",
+    "flet-terminal>=0.2.1",
     "google-colab-cli>=0.6.0",
     "rich>=15.0.0",
 ]
 
 [tool.flet]
 org = "ng.kiri"
-product = "Collab Shell"
-build_number = 2
+product = "Colab Shell"
+build_number = 3
 
 [tool.flet.app]
 path = "src"

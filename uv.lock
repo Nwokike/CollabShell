@@ -215,7 +215,7 @@ wheels = [
 
 [[package]]
 name = "collabshell"
-version = "1.1.0"
+version = "1.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "flet" },
@@ -234,7 +234,7 @@ dev = [
 requires-dist = [
     { name = "flet", specifier = ">=0.85.3" },
     { name = "flet-ads", specifier = ">=0.85.0" },
-    { name = "flet-terminal", specifier = ">=0.2.0" },
+    { name = "flet-terminal", specifier = ">=0.2.1" },
     { name = "google-colab-cli", specifier = ">=0.6.0" },
     { name = "rich", specifier = ">=15.0.0" },
 ]
@@ -348,14 +348,14 @@ wheels = [
 
 [[package]]
 name = "flet-terminal"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/d3/15aef12cd0bf47b59530d8792bbd953d15620b788345aea6c008fe4dffa1/flet_terminal-0.2.0.tar.gz", hash = "sha256:310b2d292e114f8ce075de6a8412bd41fd5102871940420a43b386b4330a6b8c", size = 18727, upload-time = "2026-07-19T11:43:04.329Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2a/fd/503318350cd6a29e0fe1062756a6df28369df203c3ce578754b300cf14c8/flet_terminal-0.2.1.tar.gz", hash = "sha256:8c3e0e524fabbef764dad33d5400bfaff5d038d7ae57ff40722ed9ee8a243262", size = 20103, upload-time = "2026-07-19T13:28:06.41Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/f1/e5cb3cadfe5a266f24841e3b61e1405700cc78e9599019e79425a1210b5c/flet_terminal-0.2.0-py3-none-any.whl", hash = "sha256:5bfd8921b67d61a9ab49b9283adfa895c6b179b151fcb3ae0e36ace121c86038", size = 19928, upload-time = "2026-07-19T11:43:03.15Z" },
+    { url = "https://files.pythonhosted.org/packages/05/73/2e535776dba5c1895a8c86105b76c405cb196e5637945725e8154b043b9e/flet_terminal-0.2.1-py3-none-any.whl", hash = "sha256:69c8db9bdb80abc1298f58146fd7650c65ae881cff0771a3334b2c5a5a36fe7e", size = 21391, upload-time = "2026-07-19T13:28:05.316Z" },
 ]
 
 [[package]]
