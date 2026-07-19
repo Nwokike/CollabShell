@@ -2,8 +2,7 @@
 
 Uses `flet_terminal.MobileTerminal` (powered by `xterm.dart` and `DataChannel`)
 connected directly to remote Colab WebSockets, featuring a horizontal pill switcher
-bar that avoids swipe conflicts and lets you open multiple persistent terminals
-(`+ New Terminal`) without disconnecting active tabs in the background.
+bar that avoids swipe conflicts and lets you open multiple persistent terminals.
 """
 
 from __future__ import annotations
@@ -29,12 +28,12 @@ def build_terminal_panel(
     snack: Optional[Callable[[str], None]] = None,
 ) -> tuple[ft.Container, Callable[[], None]]:
     """Build native multi-tab terminal panel and return (container, init_task)."""
-    _spinner_ref = ft.Ref[ft.ProgressRing]()
-    _status_ref = ft.Ref[ft.Text]()
+    _spinner = ft.Ref[ft.ProgressRing]()
+    _status = ft.Ref[ft.Text]()
     _session_info = None
 
     _terminals: list[dict] = []
-    _active_tab_id = 0
+    _active_id = 0
 
     _switcher_row = ft.Row(
         controls=[],
@@ -42,26 +41,21 @@ def build_terminal_panel(
         scroll=ft.ScrollMode.AUTO,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
-
-    _switcher_container = ft.Container(
+    _switcher_box = ft.Container(
         content=_switcher_row,
         padding=ft.Padding(
             tokens.SPACE_MD, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS
         ),
         bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
     )
+    _stack = ft.Stack(controls=[], expand=True)
 
-    _terminal_stack = ft.Stack(
-        controls=[],
-        expand=True,
-    )
-
-    status = ft.Container(
+    status_bar = ft.Container(
         content=ft.Row(
             controls=[
-                ft.ProgressRing(ref=_spinner_ref, width=16, height=16, stroke_width=2),
+                ft.ProgressRing(ref=_spinner, width=16, height=16, stroke_width=2),
                 ft.Text(
-                    ref=_status_ref,
+                    ref=_status,
                     value="Loading session…",
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
@@ -76,119 +70,103 @@ def build_terminal_panel(
     )
 
     def _refresh_switcher():
-        controls = []
+        ctrls = []
         for t in _terminals:
             tid = t["id"]
-            is_active = tid == _active_tab_id
-
-            tab_pill = ft.Container(
-                content=ft.Row(
-                    controls=[
-                        ft.Text(
-                            f"Terminal {tid}",
-                            size=tokens.FONT_SM,
-                            weight=ft.FontWeight.BOLD
-                            if is_active
-                            else ft.FontWeight.NORMAL,
-                            color=AppColors.PRIMARY
-                            if is_active
-                            else ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE_ROUNDED,
-                            icon_size=14,
-                            style=ft.ButtonStyle(
-                                padding=2,
-                                visual_density=ft.VisualDensity.COMPACT,
-                                color=AppColors.ERROR
-                                if is_active
-                                else ft.Colors.ON_SURFACE_VARIANT,
-                            ),
-                            tooltip="Close terminal",
-                            on_click=lambda e, id_val=tid: _close_terminal(id_val),
-                        ),
-                    ],
-                    spacing=2,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                padding=ft.Padding(10, 4, 6, 4),
-                border_radius=16,
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
-                if is_active
-                else ft.Colors.TRANSPARENT,
-                border=ft.Border(
-                    left=ft.BorderSide(
-                        1, AppColors.PRIMARY if is_active else ft.Colors.OUTLINE_VARIANT
-                    ),
-                    top=ft.BorderSide(
-                        1, AppColors.PRIMARY if is_active else ft.Colors.OUTLINE_VARIANT
-                    ),
-                    right=ft.BorderSide(
-                        1, AppColors.PRIMARY if is_active else ft.Colors.OUTLINE_VARIANT
-                    ),
-                    bottom=ft.BorderSide(
-                        1, AppColors.PRIMARY if is_active else ft.Colors.OUTLINE_VARIANT
-                    ),
-                ),
-                ink=True,
-                on_click=lambda e, id_val=tid: _select_terminal(id_val),
+            active = tid == _active_id
+            c = ft.Colors.PRIMARY if active else ft.Colors.ON_SURFACE_VARIANT
+            border = ft.BorderSide(
+                1, ft.Colors.PRIMARY if active else ft.Colors.OUTLINE_VARIANT
             )
-            controls.append(tab_pill)
-
-        controls.append(
+            ctrls.append(
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Text(
+                                f"Terminal {tid}",
+                                size=tokens.FONT_SM,
+                                weight=ft.FontWeight.BOLD
+                                if active
+                                else ft.FontWeight.NORMAL,
+                                color=c,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.CLOSE_ROUNDED,
+                                icon_size=14,
+                                style=ft.ButtonStyle(
+                                    padding=2,
+                                    visual_density=ft.VisualDensity.COMPACT,
+                                    color=AppColors.ERROR if active else c,
+                                ),
+                                tooltip="Close terminal",
+                                on_click=lambda e, id_val=tid: _close_terminal(id_val),
+                            ),
+                        ],
+                        spacing=2,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(10, 4, 6, 4),
+                    border_radius=16,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
+                    if active
+                    else ft.Colors.TRANSPARENT,
+                    border=ft.Border(
+                        left=border, top=border, right=border, bottom=border
+                    ),
+                    ink=True,
+                    on_click=lambda e, id_val=tid: _select_terminal(id_val),
+                )
+            )
+        ctrls.append(
             ft.IconButton(
                 icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
                 tooltip="New Terminal Tab",
                 icon_size=20,
-                icon_color=AppColors.PRIMARY,
-                on_click=lambda e: page.run_task(_create_and_connect_terminal),
+                icon_color=ft.Colors.PRIMARY,
+                on_click=lambda e: page.run_task(_create_terminal),
             )
         )
-        _switcher_row.controls = controls
+        _switcher_row.controls = ctrls
         if page:
             page.update()
 
     def _select_terminal(tid: int):
-        nonlocal _active_tab_id
-        _active_tab_id = tid
+        nonlocal _active_id
+        _active_id = tid
         for t in _terminals:
-            t["mt"].visible = t["id"] == _active_tab_id
+            t["mt"].visible = t["id"] == _active_id
         _refresh_switcher()
 
     def _close_terminal(tid: int):
-        nonlocal _active_tab_id
-        target = None
-        for i, t in enumerate(_terminals):
-            if t["id"] == tid:
-                target = _terminals.pop(i)
-                break
-
+        nonlocal _active_id
+        target = next((t for t in _terminals if t["id"] == tid), None)
         if target:
+            _terminals.remove(target)
             if target.get("client"):
                 try:
                     target["client"].close()
                 except Exception:
                     pass
-            if target.get("mt") in _terminal_stack.controls:
-                _terminal_stack.controls.remove(target["mt"])
+            if target.get("mt") in _stack.controls:
+                _stack.controls.remove(target["mt"])
 
         if not _terminals:
-            page.run_task(_create_and_connect_terminal)
-        elif _active_tab_id == tid:
+            page.run_task(_create_terminal)
+        elif _active_id == tid:
             _select_terminal(_terminals[-1]["id"])
         else:
             _refresh_switcher()
 
-    async def _create_and_connect_terminal(e=None):
-        nonlocal _session_info, _active_tab_id
+    async def _create_terminal(e=None):
+        nonlocal _session_info, _active_id
         if not _session_info:
             _session_info = await _get_terminal_session(colab_service, session_name)
             if not _session_info:
-                if _status_ref.current:
-                    _status_ref.current.value = "Session not found"
-                    _status_ref.current.color = AppColors.ERROR
-                if _spinner_ref.current:
-                    _spinner_ref.current.visible = False
+                if _status.current:
+                    _status.current.value = "Session not found"
+                    _status.current.color = AppColors.ERROR
+                if _spinner.current:
+                    _spinner.current.visible = False
                 if page:
                     page.update()
                 if snack:
@@ -196,8 +174,7 @@ def build_terminal_panel(
                 return
 
         new_id = max([t["id"] for t in _terminals], default=0) + 1
-        _active_tab_id = new_id
-
+        _active_id = new_id
         for t in _terminals:
             t["mt"].visible = False
 
@@ -210,129 +187,124 @@ def build_terminal_panel(
             font_size=13.0,
             theme=BUILTIN_THEMES.get("JetBrains Dark", None),
             expand=True,
-            visible=True,
         )
+        mt.visible = True
 
-        term_entry = {
+        entry = {
             "id": new_id,
             "mt": mt,
             "client": None,
             "pending_stdout": [],
             "ready": False,
         }
-        _terminals.append(term_entry)
-        _terminal_stack.controls.append(mt)
+        _terminals.append(entry)
+        _stack.controls.append(mt)
         _refresh_switcher()
 
-        if _status_ref.current:
-            _status_ref.current.value = f"Connecting Terminal {new_id}…"
-            _status_ref.current.color = ft.Colors.ON_SURFACE_VARIANT
-        if _spinner_ref.current:
-            _spinner_ref.current.visible = True
+        if _status.current:
+            _status.current.value = f"Connecting Terminal {new_id}…"
+            _status.current.color = ft.Colors.ON_SURFACE_VARIANT
+        if _spinner.current:
+            _spinner.current.visible = True
         if page:
             page.update()
 
-        # Wait until Flet assigns a UID to mt so mt.write() won't throw error 201
         for _ in range(40):
             if mt.page and getattr(mt, "uid", None):
                 break
             await asyncio.sleep(0.05)
 
         try:
-            colab_ws_url = await asyncio.to_thread(
+            ws_url = await asyncio.to_thread(
                 colab_service.create_terminal_ws_url,
                 _session_info["url"],
                 _session_info["token"],
             )
 
             def _on_stdout(text: str):
-                if term_entry["ready"] and mt.page and getattr(mt, "uid", None):
+                if entry["ready"] and mt.page and getattr(mt, "uid", None):
                     try:
                         mt.write(text)
                         return
                     except Exception as ex:
                         logger.debug("Buffering stdout: %s", ex)
-                term_entry["pending_stdout"].append(text)
+                entry["pending_stdout"].append(text)
 
             def _on_status(msg: str, ok: bool):
-                if _active_tab_id == term_entry["id"]:
-                    if _status_ref.current:
-                        _status_ref.current.value = msg
-                        _status_ref.current.color = (
+                if _active_id == entry["id"]:
+                    if _status.current:
+                        _status.current.value = msg
+                        _status.current.color = (
                             AppColors.SUCCESS if ok else ft.Colors.ON_SURFACE_VARIANT
                         )
-                    if _spinner_ref.current:
-                        _spinner_ref.current.visible = not ok
+                    if _spinner.current:
+                        _spinner.current.visible = not ok
                     if page:
                         page.update()
 
-            client = colab_service.get_terminal_client(
-                colab_ws_url, _on_stdout, _on_status
-            )
-            term_entry["client"] = client
+            client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
+            entry["client"] = client
 
-            def _on_terminal_bytes(payload: bytes):
-                if term_entry.get("client"):
-                    page.run_task(term_entry["client"].send_input, payload)
+            def _on_bytes(payload: bytes):
+                if entry.get("client"):
+                    page.run_task(entry["client"].send_input, payload)
 
-            mt.set_on_bytes(_on_terminal_bytes)
+            mt.set_on_bytes(_on_bytes)
 
-            def _on_terminal_resize(ev):
-                if term_entry.get("client") and ev.data:
+            def _on_resize(ev):
+                if entry.get("client") and ev.data:
                     try:
                         info = json.loads(ev.data)
-                        cols = info.get("cols", 80)
-                        rows = info.get("rows", 24)
-                        page.run_task(term_entry["client"].set_size, rows, cols)
+                        page.run_task(
+                            entry["client"].set_size,
+                            info.get("rows", 24),
+                            info.get("cols", 80),
+                        )
                     except Exception as ex:
                         logger.debug("Error handling terminal resize: %s", ex)
 
-            mt.on_resize = _on_terminal_resize
+            mt.on_resize = _on_resize
             await client.connect()
+            entry["ready"] = True
 
-            term_entry["ready"] = True
-            if term_entry["pending_stdout"] and mt.page and getattr(mt, "uid", None):
-                for chunk in term_entry["pending_stdout"]:
+            if entry["pending_stdout"] and mt.page and getattr(mt, "uid", None):
+                for chunk in entry["pending_stdout"]:
                     try:
                         mt.write(chunk)
                     except Exception:
                         pass
-                term_entry["pending_stdout"].clear()
+                entry["pending_stdout"].clear()
 
         except Exception as ex:
             logger.error("Terminal %s init failed: %s", new_id, ex)
-            if _active_tab_id == new_id:
-                if _status_ref.current:
-                    _status_ref.current.value = f"Error: {ex}"
-                    _status_ref.current.color = AppColors.ERROR
-                if _spinner_ref.current:
-                    _spinner_ref.current.visible = False
+            if _active_id == new_id:
+                if _status.current:
+                    _status.current.value = f"Error: {ex}"
+                    _status.current.color = AppColors.ERROR
+                if _spinner.current:
+                    _spinner.current.visible = False
                 if page:
                     page.update()
             if snack:
                 snack(f"Terminal {new_id} error: {ex}")
 
     async def _init_panel():
-        if _terminals:
-            for t in _terminals:
-                if t.get("client"):
-                    try:
-                        t["client"].close()
-                    except Exception:
-                        pass
-            _terminals.clear()
-            _terminal_stack.controls.clear()
-        await _create_and_connect_terminal()
+        for t in _terminals:
+            if t.get("client"):
+                try:
+                    t["client"].close()
+                except Exception:
+                    pass
+        _terminals.clear()
+        _stack.controls.clear()
+        await _create_terminal()
 
     panel = ft.Container(
         content=ft.Column(
-            controls=[status, _switcher_container, _terminal_stack],
-            spacing=0,
-            expand=True,
+            controls=[status_bar, _switcher_box, _stack], spacing=0, expand=True
         ),
         expand=True,
     )
-
     return panel, _init_panel
 
 
@@ -355,11 +327,11 @@ def build_terminal_view(
         icon_size=tokens.ICON_MD,
         on_click=lambda e: page.run_task(init_func, e),
     )
-    appbar_actions = [refresh_btn]
+    actions = [refresh_btn]
     if theme_btn:
-        appbar_actions.append(theme_btn)
+        actions.append(theme_btn)
 
-    view = ft.View(
+    return ft.View(
         route=f"/terminal?session={session_name}",
         controls=[panel],
         padding=0,
@@ -377,14 +349,9 @@ def build_terminal_view(
             title=ft.Text("Terminal", size=tokens.FONT_LG, weight=ft.FontWeight.W_700),
             center_title=True,
             bgcolor=ft.Colors.TRANSPARENT,
-            actions=appbar_actions,
+            actions=actions,
         ),
     )
-
-    return view
-
-
-# ── Shared helpers ────────────────────────────────────────────────────────────
 
 
 async def _get_terminal_session(colab_service, session_name: str):

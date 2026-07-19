@@ -50,9 +50,6 @@ key_alias = "upload"
 [dependency-groups]
 dev = [
     "ruff",
-    "pywebview>=6.2.1",
-    "qtpy>=2.4.3",
-    "pyqt6-webengine>=6.11.0",
 ]
 
 

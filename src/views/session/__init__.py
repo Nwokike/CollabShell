@@ -210,7 +210,18 @@ def build_session_view(
 
     notebook_container = ft.Container(
         ref=notebook_container_ref,
-        content=notebook_body,
+        content=ft.Stack(
+            controls=[
+                notebook_body,
+                ft.Container(
+                    content=toolbar,
+                    bottom=0,
+                    left=0,
+                    right=0,
+                ),
+            ],
+            expand=True,
+        ),
         expand=True,
         visible=initial_tab == "notebook",
     )
@@ -230,13 +241,6 @@ def build_session_view(
         controls=[
             notebook_container,
             terminal_container,
-            ft.Container(
-                content=toolbar,
-                alignment=ft.Alignment.BOTTOM_CENTER,
-                padding=ft.Padding(
-                    tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_LG
-                ),
-            ),
         ],
         expand=True,
     )
@@ -246,26 +250,50 @@ def build_session_view(
         length=2,
         selected_index=0 if initial_tab == "notebook" else 1,
         on_change=_on_tab_change,
+        expand=False,
         content=ft.Column(
             controls=[
                 ft.TabBar(
+                    height=48,
+                    label_padding=ft.Padding(16, 0, 16, 0),
+                    divider_color=ft.Colors.TRANSPARENT,
                     tabs=[
-                        ft.Tab(label="Notebook", icon=ft.Icons.MENU_BOOK_ROUNDED),
-                        ft.Tab(label="Terminal", icon=ft.Icons.TERMINAL_ROUNDED),
+                        ft.Tab(
+                            label=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, size=20),
+                                    ft.Text(
+                                        "Notebook", size=14, weight=ft.FontWeight.W_500
+                                    ),
+                                ],
+                                spacing=8,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                            )
+                        ),
+                        ft.Tab(
+                            label=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=20),
+                                    ft.Text(
+                                        "Terminal", size=14, weight=ft.FontWeight.W_500
+                                    ),
+                                ],
+                                spacing=8,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                            )
+                        ),
                     ],
                 ),
-                stacked_content,
             ],
             spacing=0,
-            expand=True,
         ),
-        expand=True,
     )
 
     main_layout = ft.Column(
         controls=[
             status_header,
             app_tabs,
+            stacked_content,
         ],
         spacing=0,
         expand=True,
