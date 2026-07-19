@@ -112,6 +112,21 @@ class ColabService:
             stdin_hook,
         )
 
+    def create_terminal_ws_url(self, raw_url: str, token: str) -> str:
+        from services.colab.terminal_client import create_terminal_ws_url as _create
+
+        return _create(raw_url, token)
+
+    def get_terminal_client(
+        self,
+        ws_url: str,
+        on_stdout: Callable[[str], None],
+        on_status: Callable[[str, bool], None] | None = None,
+    ):
+        from services.colab.terminal_client import ColabTerminalClient
+
+        return ColabTerminalClient(ws_url, on_stdout, on_status)
+
     async def ls(
         self,
         path: str = "content",

@@ -232,7 +232,7 @@ def build_session_view(
             terminal_container,
             ft.Container(
                 content=toolbar,
-                alignment=ft.alignment.bottom_center,
+                alignment=ft.Alignment.BOTTOM_CENTER,
                 padding=ft.Padding(
                     tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_LG
                 ),
@@ -243,20 +243,29 @@ def build_session_view(
 
     app_tabs = ft.Tabs(
         ref=tabs_ref,
+        length=2,
         selected_index=0 if initial_tab == "notebook" else 1,
-        tabs=[
-            ft.Tab(text="Notebook", icon=ft.Icons.MENU_BOOK_ROUNDED),
-            ft.Tab(text="Terminal", icon=ft.Icons.TERMINAL_ROUNDED),
-        ],
         on_change=_on_tab_change,
-        expand=False,
+        content=ft.Column(
+            controls=[
+                ft.TabBar(
+                    tabs=[
+                        ft.Tab(label="Notebook", icon=ft.Icons.MENU_BOOK_ROUNDED),
+                        ft.Tab(label="Terminal", icon=ft.Icons.TERMINAL_ROUNDED),
+                    ],
+                ),
+                stacked_content,
+            ],
+            spacing=0,
+            expand=True,
+        ),
+        expand=True,
     )
 
     main_layout = ft.Column(
         controls=[
             status_header,
             app_tabs,
-            stacked_content,
         ],
         spacing=0,
         expand=True,

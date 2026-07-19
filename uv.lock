@@ -241,7 +241,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "flet" },
     { name = "flet-ads" },
-    { name = "flet-webview" },
+    { name = "flet-terminal" },
     { name = "google-colab-cli" },
     { name = "rich" },
 ]
@@ -258,7 +258,7 @@ dev = [
 requires-dist = [
     { name = "flet", specifier = ">=0.85.3" },
     { name = "flet-ads", specifier = ">=0.85.0" },
-    { name = "flet-webview", specifier = ">=0.86.0" },
+    { name = "flet-terminal", specifier = ">=0.2.0" },
     { name = "google-colab-cli", specifier = ">=0.6.0" },
     { name = "rich", specifier = ">=15.0.0" },
 ]
@@ -376,15 +376,15 @@ wheels = [
 ]
 
 [[package]]
-name = "flet-webview"
-version = "0.86.0"
+name = "flet-terminal"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/9b/c83ccdb5d70503b3679c25bd472d9ba3c055e0d877bda147847225244af1/flet_webview-0.86.0.tar.gz", hash = "sha256:b429e46929cb317566968bb0a274bc71ce084f992bdf5f52f7a666a5cf41f691", size = 13000, upload-time = "2026-07-14T21:51:43.436Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/d3/15aef12cd0bf47b59530d8792bbd953d15620b788345aea6c008fe4dffa1/flet_terminal-0.2.0.tar.gz", hash = "sha256:310b2d292e114f8ce075de6a8412bd41fd5102871940420a43b386b4330a6b8c", size = 18727, upload-time = "2026-07-19T11:43:04.329Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/c3/c18374b0dc07c99be0e99d5c2c9ed68e0bb767877912c65b2ecb9438b247/flet_webview-0.86.0-py3-none-any.whl", hash = "sha256:d82b325339dded3d6ea2170acdda598b839ba6f2d02a2310a6bd473608fa0a2b", size = 16226, upload-time = "2026-07-14T21:51:42.483Z" },
+    { url = "https://files.pythonhosted.org/packages/04/f1/e5cb3cadfe5a266f24841e3b61e1405700cc78e9599019e79425a1210b5c/flet_terminal-0.2.0-py3-none-any.whl", hash = "sha256:5bfd8921b67d61a9ab49b9283adfa895c6b179b151fcb3ae0e36ace121c86038", size = 19928, upload-time = "2026-07-19T11:43:03.15Z" },
 ]
 
 [[package]]
