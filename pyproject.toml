@@ -15,7 +15,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-company = "Kiri"
+company = "Kiri Research Labs"
 build_number = 3
 
 [tool.flet.app]

@@ -93,7 +93,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
+        run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
       - uses: actions/upload-artifact@v5.0.0
         with:
           name: collabshell-apks
@@ -137,7 +137,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - uses: actions/upload-artifact@v5.0.0
         with:
           name: collabshell-aab
@@ -160,7 +160,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Build Windows Portable
-        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
 
       - name: Generate Icon for Installer
         run: |
@@ -175,11 +175,11 @@ jobs:
           AppId={{A38F4129-8472-4D91-8C31-18294B183621}}
           AppName=Collab Shell
           AppVersion=${{ env.BUILD_VERSION }}
-          AppPublisher=Kiri
+          AppPublisher=Kiri Research Labs
           AppPublisherURL=https://kiri.ng
           AppSupportURL=https://kiri.ng/support
           AppUpdatesURL=https://kiri.ng/updates
-          AppCopyright=Copyright (C) 2026 Kiri
+          AppCopyright=Copyright (C) 2026 Kiri Research Labs
           DefaultDirName={autopf}\Collab Shell
           DefaultGroupName=Collab Shell
           OutputDir=.\build\installer
@@ -236,7 +236,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev rpm ruby ruby-dev
           sudo gem install --no-document fpm
       - name: Build Linux Bundle
-        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - name: Create Linux Packages (.deb, .rpm, .tar.gz)
         run: |
           mkdir -p build/dist
@@ -291,7 +291,7 @@ jobs:
             </description>
             <launchable type="desktop-id">collabshell.desktop</launchable>
             <url type="homepage">https://kiri.ng</url>
-            <developer_name>Kiri</developer_name>
+            <developer_name>Kiri Research Labs</developer_name>
           </component>
           EOF
 
@@ -299,7 +299,7 @@ jobs:
           fpm -s dir -t deb -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
               --architecture amd64 \
               --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
-              --maintainer "Kiri <support@kiri.ng>" \
+              --maintainer "Kiri Research Labs <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "utils" \
               -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_amd64.deb \
@@ -309,7 +309,7 @@ jobs:
           fpm -s dir -t rpm -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
               --architecture x86_64 \
               --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
-              --maintainer "Kiri <support@kiri.ng>" \
+              --maintainer "Kiri Research Labs <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "Utility" \
               -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_x86_64.rpm \
