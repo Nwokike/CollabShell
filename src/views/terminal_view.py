@@ -26,6 +26,7 @@ def build_terminal_panel(
     session_name: str,
     colab_service,
     snack: Optional[Callable[[str], None]] = None,
+    on_fullscreen_change: Optional[Callable[[bool], None]] = None,
 ) -> tuple[ft.Container, Callable[[], None]]:
     """Build native multi-tab terminal panel and return (container, init_task)."""
     _spinner = ft.Ref[ft.ProgressRing]()
@@ -34,6 +35,7 @@ def build_terminal_panel(
 
     _terminals: list[dict] = []
     _active_id = 0
+    _is_fullscreen = {"value": False}
 
     _switcher_row = ft.Row(
         controls=[],
@@ -49,6 +51,38 @@ def build_terminal_panel(
         bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
     )
     _stack = ft.Stack(controls=[], expand=True)
+
+    restore_btn_box = ft.Container(visible=False, right=12, top=8)
+
+    def _set_fullscreen(val: bool):
+        _is_fullscreen["value"] = val
+        status_bar.visible = not val
+        _switcher_box.visible = not val
+        restore_btn_box.visible = val
+        if on_fullscreen_change:
+            try:
+                on_fullscreen_change(val)
+            except Exception:
+                pass
+        if page:
+            try:
+                page.update()
+            except RuntimeError:
+                pass
+
+    restore_btn = ft.IconButton(
+        icon=ft.Icons.UNFOLD_LESS_ROUNDED,
+        icon_size=18,
+        tooltip="Restore headers & tabs",
+        style=ft.ButtonStyle(
+            padding=4,
+            bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.SURFACE_CONTAINER_HIGHEST),
+            color=ft.Colors.PRIMARY,
+        ),
+        on_click=lambda e: _set_fullscreen(False),
+    )
+    restore_btn_box.content = restore_btn
+    _stack.controls.append(restore_btn_box)
 
     status_bar = ft.Container(
         content=ft.Row(
@@ -180,12 +214,13 @@ def build_terminal_panel(
 
         mt = MobileTerminal(
             show_extra_keys=True,
-            show_search=True,
+            show_search=False,
             show_settings=True,
             scrollback=10000,
             font_family="JetBrains Mono",
-            font_size=13.0,
+            font_size=11.0,
             theme=BUILTIN_THEMES.get("JetBrains Dark", None),
+            auto_focus=False,
             expand=True,
         )
         mt.visible = True
@@ -263,6 +298,8 @@ def build_terminal_panel(
                     pass
 
             def _on_bytes(payload: bytes | str):
+                if not _is_fullscreen["value"] and payload:
+                    _set_fullscreen(True)
                 if entry.get("client"):
                     data = (
                         payload
@@ -316,7 +353,8 @@ def build_terminal_panel(
             if snack:
                 snack(f"Terminal {new_id} error: {ex}")
 
-    async def _init_panel():
+    async def _init_panel(e=None):
+        _set_fullscreen(False)
         for t in _terminals:
             if t.get("client"):
                 try:
@@ -325,6 +363,7 @@ def build_terminal_panel(
                     pass
         _terminals.clear()
         _stack.controls.clear()
+        _stack.controls.append(restore_btn_box)
         await _create_terminal()
 
     panel = ft.Container(

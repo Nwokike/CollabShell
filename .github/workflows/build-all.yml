@@ -93,11 +93,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
-      - uses: actions/upload-artifact@v5.0.0
-        with:
-          name: collabshell-apks
-          path: build/apk/*.apk
+        run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -137,11 +133,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
-      - uses: actions/upload-artifact@v5.0.0
-        with:
-          name: collabshell-aab
-          path: build/aab/*.aab
+        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -160,13 +152,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Build Windows Portable
-        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
 
       - name: Generate Icon for Installer
         run: |
           uv pip install pillow
           uv run python -c "from PIL import Image; Image.open('src/assets/icon.png').save('src/assets/icon.ico', format='ICO', sizes=[(256, 256)])"
-          uv run python -c "from PIL import Image; Image.open('src/assets/icon.png').resize((55, 55)).convert('RGB').save('src/assets/wizard_small.bmp', 'BMP'); icon = Image.open('src/assets/icon.png'); bg = Image.new('RGB', (164, 314), (255, 255, 255)); icon_resized = icon.resize((64, 64)); bg.paste(icon_resized, (50, 60), icon_resized if icon_resized.mode == 'RGBA' else None); bg.save('src/assets/wizard.bmp', 'BMP')"
 
       - name: Build Windows Installer (Inno Setup)
         run: |
@@ -175,11 +166,11 @@ jobs:
           AppId={{A38F4129-8472-4D91-8C31-18294B183621}}
           AppName=Collab Shell
           AppVersion=${{ env.BUILD_VERSION }}
-          AppPublisher=Kiri Research Labs
+          AppPublisher=Kiri
           AppPublisherURL=https://kiri.ng
           AppSupportURL=https://kiri.ng/support
           AppUpdatesURL=https://kiri.ng/updates
-          AppCopyright=Copyright (C) 2026 Kiri Research Labs
+          AppCopyright=Copyright (C) 2026 Kiri
           DefaultDirName={autopf}\Collab Shell
           DefaultGroupName=Collab Shell
           OutputDir=.\build\installer
@@ -191,8 +182,6 @@ jobs:
           ArchitecturesInstallIn64BitMode=x64
           PrivilegesRequired=lowest
           SetupIconFile=.\src\assets\icon.ico
-          WizardImageFile=.\src\assets\wizard.bmp
-          WizardSmallImageFile=.\src\assets\wizard_small.bmp
           UninstallDisplayIcon={app}\collabshell.exe
           CloseApplications=yes
           AppMutex=CollabShell_Mutex
@@ -210,10 +199,6 @@ jobs:
           Set-Content -Path "installer.iss" -Value $IssContent -Encoding UTF8
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-      - uses: actions/upload-artifact@v5.0.0
-        with:
-          name: CollabShell_Setup.exe
-          path: build/installer/CollabShell_Setup.exe
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -236,7 +221,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev rpm ruby ruby-dev
           sudo gem install --no-document fpm
       - name: Build Linux Bundle
-        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --company "Kiri Research Labs" --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - name: Create Linux Packages (.deb, .rpm, .tar.gz)
         run: |
           mkdir -p build/dist
@@ -291,7 +276,7 @@ jobs:
             </description>
             <launchable type="desktop-id">collabshell.desktop</launchable>
             <url type="homepage">https://kiri.ng</url>
-            <developer_name>Kiri Research Labs</developer_name>
+            <developer_name>Kiri</developer_name>
           </component>
           EOF
 
@@ -299,7 +284,7 @@ jobs:
           fpm -s dir -t deb -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
               --architecture amd64 \
               --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
-              --maintainer "Kiri Research Labs <support@kiri.ng>" \
+              --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "utils" \
               -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_amd64.deb \
@@ -309,16 +294,12 @@ jobs:
           fpm -s dir -t rpm -n collabshell -v ${{ env.BUILD_VERSION }} --iteration ${{ env.BUILD_NUMBER }} \
               --architecture x86_64 \
               --description "Run cloud notebooks, interactive terminals & manage files natively on your desktop and phone." \
-              --maintainer "Kiri Research Labs <support@kiri.ng>" \
+              --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "Utility" \
               -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_x86_64.rpm \
               -C pkg_root .
 
-      - uses: actions/upload-artifact@v5.0.0
-        with:
-          name: collabshell-linux-packages
-          path: build/dist/*
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2

@@ -100,8 +100,18 @@ def build_session_view(
 
     from views.terminal_view import build_terminal_panel
 
+    def _on_terminal_fullscreen_change(is_fullscreen: bool):
+        if status_header:
+            status_header.visible = not is_fullscreen
+        if app_tabs:
+            app_tabs.visible = not is_fullscreen
+
     terminal_panel, terminal_init_func = build_terminal_panel(
-        page, session_name, colab_service, snack
+        page,
+        session_name,
+        colab_service,
+        snack,
+        on_fullscreen_change=_on_terminal_fullscreen_change,
     )
     _terminal_initialized = {"value": False}
     tabs_ref = ft.Ref[ft.Tabs]()
@@ -261,24 +271,24 @@ def build_session_view(
                         ft.Tab(
                             label=ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, size=20),
+                                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, size=tokens.ICON_MD),
                                     ft.Text(
-                                        "Notebook", size=14, weight=ft.FontWeight.W_500
+                                        "Notebook", size=tokens.FONT_MD, weight=ft.FontWeight.W_500
                                     ),
                                 ],
-                                spacing=8,
+                                spacing=tokens.SPACE_SM,
                                 alignment=ft.MainAxisAlignment.CENTER,
                             )
                         ),
                         ft.Tab(
                             label=ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=20),
+                                    ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=tokens.ICON_MD),
                                     ft.Text(
-                                        "Terminal", size=14, weight=ft.FontWeight.W_500
+                                        "Terminal", size=tokens.FONT_MD, weight=ft.FontWeight.W_500
                                     ),
                                 ],
-                                spacing=8,
+                                spacing=tokens.SPACE_SM,
                                 alignment=ft.MainAxisAlignment.CENTER,
                             )
                         ),
