@@ -46,7 +46,7 @@ Collab Shell is engineered around three foundational pillars for remote cloud co
 - **Rich Markdown Editing & Live Rendering**: Write documentation with LaTeX math equations, code blocks, and formatted text. Render live Markdown with a single tap.
 - **Keep-Alive Service**: Maintain active execution sessions without losing state when switching apps.
 
-### 2. 💻 Real-Time PTY Web Terminal (TTY)
+### 2. 💻 Real-Time PTY Interactive Terminal (TTY)
 - **Colab WebSocket Tunnels**: Direct low-latency PTY connection via Google Colab's `/api/terminals` WebSocket endpoints.
 - **Full LLM & TUI Support**: Run local AI models (`ollama run llama3`), AI coding assistants (`opencode`), and full interactive terminal TUIs directly in your cloud runtimes.
 - **Multi-Tab & Theme Customization**: Open multiple concurrent terminal tabs, customize themes (Matrix Green, Dracula, JetBrains Dark), cursor styles, and search terminal output.
@@ -112,7 +112,7 @@ Collab Shell is engineered around three foundational pillars for remote cloud co
   </tr>
 </table>
 
-### 3. 💻 PTY Web Terminal & AI TUI Execution
+### 3. 💻 Interactive PTY Terminal & AI TUI Execution
 <table>
   <tr>
     <td width="50%"><img src="screenshots/session_ollama_terminal_dark.png" width="100%" alt="Ollama LLM Terminal" /></td>
