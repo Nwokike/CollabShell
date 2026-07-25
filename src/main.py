@@ -132,7 +132,7 @@ async def main(page: ft.Page):
 
         log_raw = await storage.get(constants.STORAGE_LOGTOSTDERR)
         if log_raw is not None:
-            state.logtostderr = log_raw == "true"
+            state.logtostderr = str(log_raw).lower() == "true"
     except Exception as e:
         logger.warning("Settings load failed: %s", e)
 

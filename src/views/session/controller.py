@@ -178,10 +178,12 @@ class SessionController:
             )
             self.cells_list.controls.append(container)
             self.cell_refs.append(refs)
-            if (i + 1) % 3 == 0:
-                from core.styles import build_banner_ad
+            if (i + 1) % 2 == 0:
+                from core.styles import build_native_ad
 
-                self.cells_list.controls.append(build_banner_ad(self.page))
+                self.cells_list.controls.append(
+                    build_native_ad(self.page, size="small")
+                )
         self.page.run_task(self.deferred_update)
 
     def stop_cell(self, idx):

@@ -23,8 +23,13 @@ async def on_upload_click_impl(ctrl, e=None):
         tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
         os.makedirs(tmp_dir, exist_ok=True)
         tmp_path = os.path.join(tmp_dir, picked.name)
-        with open(tmp_path, "wb") as f:
-            f.write(picked.bytes)
+        import asyncio
+
+        def _write():
+            with open(tmp_path, "wb") as f:
+                f.write(picked.bytes)
+
+        await asyncio.to_thread(_write)
         try:
             await do_upload_impl(ctrl, tmp_path, remote_path, len(picked.bytes))
         finally:
@@ -39,7 +44,7 @@ async def on_upload_click_impl(ctrl, e=None):
 
 
 async def do_upload_impl(
-    ctrl, local_path: str, remote_path: str, file_size: int = None
+    ctrl, local_path: str, remote_path: str, file_size: int | None = None
 ):
     ctrl.state.is_uploading = True
     size_str = ""
@@ -191,7 +196,7 @@ async def do_download_selected_impl(ctrl, e=None):
         )
         ctrl.page.show_dialog(download_dialog)
 
-        def _on_status(msg: str):
+        def _on_status(msg: str, status_text=status_text):
             status_text.value = msg
             try:
                 status_text.update()

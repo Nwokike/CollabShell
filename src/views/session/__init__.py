@@ -30,7 +30,7 @@ def build_session_view(
     navigate=None,
     snack=None,
     theme_btn=None,
-    storage: StorageService = None,
+    storage: StorageService | None = None,
 ) -> ft.View:
     if storage is None:
         storage = StorageService(page)

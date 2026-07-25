@@ -24,27 +24,39 @@ async def route_change_impl(
     query_params = dict(urllib.parse.parse_qsl(parsed.query))
 
     async def _global_toggle_theme(e=None):
-        is_dark = page.theme_mode == ft.ThemeMode.DARK or (
-            page.theme_mode == ft.ThemeMode.SYSTEM
-            and page.platform_brightness == ft.Brightness.DARK
-        )
-        page.theme_mode = ft.ThemeMode.LIGHT if is_dark else ft.ThemeMode.DARK
+        if page.theme_mode == ft.ThemeMode.SYSTEM:
+            page.theme_mode = ft.ThemeMode.LIGHT
+        elif page.theme_mode == ft.ThemeMode.LIGHT:
+            page.theme_mode = ft.ThemeMode.DARK
+        else:
+            page.theme_mode = ft.ThemeMode.SYSTEM
+
         state.theme_mode = page.theme_mode
         await storage.set(
             constants.STORAGE_THEME,
-            "light" if page.theme_mode == ft.ThemeMode.LIGHT else "dark",
+            page.theme_mode.value,
         )
-        theme_btn.icon = (
-            ft.Icons.LIGHT_MODE_ROUNDED
-            if page.theme_mode == ft.ThemeMode.DARK
-            else ft.Icons.DARK_MODE_ROUNDED
-        )
+
+        if page.theme_mode == ft.ThemeMode.SYSTEM:
+            theme_btn.icon = ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+        elif page.theme_mode == ft.ThemeMode.LIGHT:
+            theme_btn.icon = ft.Icons.LIGHT_MODE_ROUNDED
+        else:
+            theme_btn.icon = ft.Icons.DARK_MODE_ROUNDED
+
         page.update()
 
+    current_theme = getattr(state, "theme_mode", ft.ThemeMode.SYSTEM)
+    if isinstance(current_theme, str):
+        current_theme = ft.ThemeMode(current_theme)
+    theme_btn_icon = ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+    if current_theme == ft.ThemeMode.LIGHT:
+        theme_btn_icon = ft.Icons.LIGHT_MODE_ROUNDED
+    elif current_theme == ft.ThemeMode.DARK:
+        theme_btn_icon = ft.Icons.DARK_MODE_ROUNDED
+
     theme_btn = ft.IconButton(
-        icon=ft.Icons.LIGHT_MODE_ROUNDED
-        if page.theme_mode == ft.ThemeMode.DARK
-        else ft.Icons.DARK_MODE_ROUNDED,
+        icon=theme_btn_icon,
         tooltip="Toggle Theme",
         on_click=lambda e: page.run_task(_global_toggle_theme),
     )
@@ -87,6 +99,26 @@ async def route_change_impl(
             navigate=navigate,
             on_refresh=lambda e: page.run_task(colab_service.list_sessions, "oauth2"),
             storage=storage,
+        )
+        page.views.append(view)
+
+    elif route in ["/notebooks_tab", "/terminals_tab", "/files_tab"]:
+        from views.session_selector_view import build_session_selector_view
+
+        mode = "notebook"
+        if route == "/terminals_tab":
+            mode = "terminal"
+        elif route == "/files_tab":
+            mode = "files"
+
+        view = build_session_selector_view(
+            page=page,
+            colab_service=colab_service,
+            state=state,
+            mode=mode,
+            on_new_session=lambda m: show_new_session_sheet(mode=m),
+            navigate=navigate,
+            theme_btn=theme_btn,
         )
         page.views.append(view)
 
@@ -152,6 +184,7 @@ async def route_change_impl(
             colab_service=colab_service,
             state=state,
             preselected_session=preselected,
+            navigate=navigate,
             snack=snack,
             theme_btn=theme_btn,
         )
@@ -176,10 +209,25 @@ async def route_change_impl(
         return
 
     # Attach nav bar to tabbed views
-    if page.views and route in ("/home", "/", "/history", "/settings"):
-        routes = ["/home", "/history", "/settings"]
+    root_routes = {
+        "/home",
+        "/",
+        "/notebooks_tab",
+        "/terminals_tab",
+        "/files_tab",
+        "/settings",
+    }
+    if page.views and route in root_routes:
+        routes = [
+            "/home",
+            "/notebooks_tab",
+            "/terminals_tab",
+            "/files_tab",
+            "/settings",
+        ]
+        active_route = route if route != "/" else "/home"
         nav_bar = ft.NavigationBar(
-            selected_index=routes.index(route) if route in routes else 0,
+            selected_index=routes.index(active_route) if active_route in routes else 0,
             destinations=[
                 ft.NavigationBarDestination(
                     icon=ft.Icons.HOME_OUTLINED,
@@ -187,9 +235,19 @@ async def route_change_impl(
                     label=constants.LBL_HOME,
                 ),
                 ft.NavigationBarDestination(
-                    icon=ft.Icons.HISTORY_OUTLINED,
-                    selected_icon=ft.Icons.HISTORY_ROUNDED,
-                    label=constants.LBL_HISTORY,
+                    icon=ft.Icons.NOTE_OUTLINED,
+                    selected_icon=ft.Icons.NOTE_ROUNDED,
+                    label="Notebooks",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.TERMINAL_OUTLINED,
+                    selected_icon=ft.Icons.TERMINAL_ROUNDED,
+                    label="Terminal",
+                ),
+                ft.NavigationBarDestination(
+                    icon=ft.Icons.FOLDER_OUTLINED,
+                    selected_icon=ft.Icons.FOLDER_ROUNDED,
+                    label="Files",
                 ),
                 ft.NavigationBarDestination(
                     icon=ft.Icons.SETTINGS_OUTLINED,
@@ -210,36 +268,37 @@ async def route_change_impl(
         page.views[-1].navigation_bar = nav_bar
 
     # Attach appbar to tabbed views
-    if page.views and route in ("/home", "/", "/history", "/settings"):
+    if page.views and route in root_routes:
         top_view = page.views[-1]
-        root_routes = {"/home", "/", "/history", "/settings"}
-        if route in root_routes:
-            page_tags = {
-                "/home": "Home",
-                "/": "Home",
-                "/history": "History",
-                "/settings": "Settings",
-            }
-            tag_text = page_tags.get(route, "Collab Shell")
 
-            page_tag = ft.Container(
-                content=ft.Text(
-                    tag_text,
-                    size=tokens.FONT_LG,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
-                alignment=ft.Alignment.CENTER_LEFT,
-            )
+        page_tags = {
+            "/home": "Home",
+            "/": "Home",
+            "/notebooks_tab": "Notebooks",
+            "/terminals_tab": "Terminals",
+            "/files_tab": "Cloud Files",
+            "/settings": "Settings",
+        }
+        tag_text = page_tags.get(route, "Collab Shell")
 
-            if not top_view.appbar:
-                top_view.appbar = ft.AppBar()
-            top_view.appbar.leading = page_tag
-            top_view.appbar.leading_width = 100
-            top_view.appbar.title = ft.Container()
-            top_view.appbar.center_title = True
-            top_view.appbar.actions = [theme_btn]
-            top_view.appbar.bgcolor = ft.Colors.TRANSPARENT
+        page_tag = ft.Container(
+            content=ft.Text(
+                tag_text,
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_SURFACE,
+            ),
+            padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
+            alignment=ft.Alignment.CENTER_LEFT,
+        )
+
+        if not top_view.appbar:
+            top_view.appbar = ft.AppBar()
+        top_view.appbar.leading = page_tag
+        top_view.appbar.leading_width = 100
+        top_view.appbar.title = ft.Container()
+        top_view.appbar.center_title = True
+        top_view.appbar.actions = [theme_btn]
+        top_view.appbar.bgcolor = ft.Colors.TRANSPARENT
 
     page.update()

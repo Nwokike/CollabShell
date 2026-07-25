@@ -3,7 +3,6 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from typing import Optional
 
 logger = logging.getLogger("colab_service")
 
@@ -131,7 +130,7 @@ class ColabService:
     async def ls(
         self,
         path: str = "content",
-        session_name: str = None,
+        session_name: str | None = None,
         auth_method: str = "oauth2",
     ) -> list:
         from services.colab.files_ops import ls_impl
@@ -142,7 +141,7 @@ class ColabService:
         self,
         local_path: str,
         remote_path: str,
-        session_name: str = None,
+        session_name: str | None = None,
         auth_method: str = "oauth2",
     ) -> bool:
         from services.colab.files_ops import upload_impl
@@ -155,7 +154,7 @@ class ColabService:
         self,
         remote_path: str,
         local_path: str,
-        session_name: str = None,
+        session_name: str | None = None,
         auth_method: str = "oauth2",
     ) -> bool:
         from services.colab.files_ops import download_impl
@@ -168,7 +167,7 @@ class ColabService:
         self,
         remote_dir_path: str,
         local_zip_path: str,
-        session_name: str = None,
+        session_name: str | None = None,
         auth_method: str = "oauth2",
         on_status: Callable[[str], None] | None = None,
     ) -> bool:
@@ -179,7 +178,7 @@ class ColabService:
         )
 
     async def rm(
-        self, path: str, session_name: str = None, auth_method: str = "oauth2"
+        self, path: str, session_name: str | None = None, auth_method: str = "oauth2"
     ) -> bool:
         from services.colab.files_ops import rm_impl
 
@@ -228,8 +227,8 @@ class ColabService:
     async def get_log(
         self,
         session_name: str,
-        lines: int = None,
-        event_type: str = None,
+        lines: int | None = None,
+        event_type: str | None = None,
     ) -> list:
         from services.colab.logs import get_log_impl
 

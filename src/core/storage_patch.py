@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 """Dynamic patcher to redirect colab_cli storage paths for Android/Local consistency."""
 
 import logging
@@ -26,7 +28,7 @@ def resolve_storage_dir() -> str:
 class MemoryLogHandler(logging.Handler):
     """In-memory ring-buffer log handler for live Activity Terminal."""
 
-    _logs: list[str] = []
+    _logs: ClassVar[list[str]] = []
     _MAX_LOGS = 300
 
     def emit(self, record):
@@ -139,7 +141,6 @@ def apply_storage_patches():
 
         class MockJupyterSubprotocol(enum.Enum):
             DEFAULT = "v1.kernel.websocket.jupyter.org"
-            V1 = "v1.kernel.websocket.jupyter.org"
 
         ctx.JupyterSubprotocol = MockJupyterSubprotocol
 

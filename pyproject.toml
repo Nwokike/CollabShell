@@ -51,3 +51,7 @@ dev = [
 ]
 
 
+
+[tool.ruff]
+lint.extend-ignore = ["BLE001", "S110"]
+

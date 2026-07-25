@@ -73,7 +73,7 @@ async def exec_code_impl(
         s.last_execution = (
             "code",
             None,
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S"),
         )
         st.store.add(s)
 
@@ -255,10 +255,9 @@ async def exec_code_impl(
                         logger.info(
                             "[colab_service] Successfully sent input_reply over WebSocket from our app code."
                         )
-                except Exception as e:
-                    logger.error(
-                        f"[colab_service] Failed to send input_reply over WebSocket: {e}",
-                        exc_info=True,
+                except Exception:
+                    logger.exception(
+                        "[colab_service] Failed to send input_reply over WebSocket: %s"
                     )
                 return res
 

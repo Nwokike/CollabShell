@@ -82,7 +82,7 @@ def build_sessions_section(
             # Clean up notebook cache for deleted sessions
             if storage:
                 active_names = [s["name"] for s in state.active_sessions]
-                page.run_task(storage.cleanup_orphaned_notebooks, active_names)
+                await storage.cleanup_orphaned_notebooks(active_names)
 
             await update_sessions_ui()
         except Exception:

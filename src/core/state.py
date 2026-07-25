@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 """Observable application state."""
 
 import flet as ft
@@ -6,7 +8,7 @@ import flet as ft
 @ft.observable
 class AppState:
     # ── Session state ─────────────────────────────────────────────────────────
-    active_sessions: list = []
+    active_sessions: ClassVar[list] = []
     selected_session_name: str = ""
     is_provisioning: bool = False
     is_executing: bool = False
@@ -16,13 +18,13 @@ class AppState:
     is_mounting: bool = False
 
     # ── Execution ─────────────────────────────────────────────────────────────
-    exec_output_lines: list = []
+    exec_output_lines: ClassVar[list] = []
     current_exec_file: str = ""
-    notebook_cells: list = []
+    notebook_cells: ClassVar[list] = []
 
     # ── File browser ──────────────────────────────────────────────────────────
     current_path: str = "/content"
-    file_listing: list = []
+    file_listing: ClassVar[list] = []
     is_browsing: bool = False
 
     # ── Settings (every CLI flag exposed) ─────────────────────────────────────
@@ -49,8 +51,8 @@ class AppState:
     onboarding_done: bool = False
 
     # ── History ───────────────────────────────────────────────────────────────
-    log_session_names: list = []
-    log_events: list = []
+    log_session_names: ClassVar[list] = []
+    log_events: ClassVar[list] = []
 
     # ── Services ──────────────────────────────────────────────────────────────
     ad_service = None

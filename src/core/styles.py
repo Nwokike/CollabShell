@@ -111,28 +111,11 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
         return ft.Container(width=0, height=0)
 
     try:
-        import flet_ads as fta
-
         from services.ad_service import AdService
 
-        if not unit_id:
-            ad_service = AdService(page)
-            unit_id = ad_service.banner_id
-
-        ad = fta.BannerAd(
-            unit_id=unit_id,
-            width=320,
-            height=50,
-            on_error=lambda e: None,
-        )
-    except (
-        ValueError,
-        TypeError,
-        OSError,
-        RuntimeError,
-        ConnectionError,
-        ImportError,
-    ) as e:
+        ad_service = AdService(page)
+        ad = ad_service.get_banner_ad()
+    except Exception as e:
         logger.warning("Failed to load BannerAd: %s", e)
         return ft.Container(width=0, height=0)
 
@@ -141,7 +124,7 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
             [
                 ft.Text(
                     "SPONSORED",
-                    size=8,
+                    size=tokens.FONT_XXS,
                     weight=ft.FontWeight.W_700,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     style=ft.TextStyle(letter_spacing=1),
@@ -150,6 +133,82 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_XS,
+        ),
+        alignment=ft.Alignment.CENTER,
+        padding=tokens.SPACE_SM,
+        border_radius=tokens.RADIUS_LG,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+        margin=ft.Margin(
+            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+        ),
+    )
+
+
+def build_native_ad(page: ft.Page, size: str = "medium") -> ft.Control:
+    """Build a native ad container styled to match the app's standard cards."""
+    if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
+        return ft.Container(width=0, height=0)
+
+    try:
+        from flet_ads.types import (
+            NativeAdTemplateStyle,
+            NativeAdTemplateTextStyle,
+            NativeAdTemplateType,
+        )
+
+        from services.ad_service import AdService
+
+        ad_service = AdService(page)
+
+        tpl_type = (
+            NativeAdTemplateType.MEDIUM
+            if size == "medium"
+            else NativeAdTemplateType.SMALL
+        )
+
+        style = NativeAdTemplateStyle(
+            template_type=tpl_type,
+            main_bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
+            corner_radius=tokens.RADIUS_LG,
+            call_to_action_text_style=NativeAdTemplateTextStyle(
+                bgcolor=ft.Colors.PRIMARY,
+                text_color=ft.Colors.ON_PRIMARY,
+                size=tokens.FONT_LG,
+            ),
+            primary_text_style=NativeAdTemplateTextStyle(
+                text_color=ft.Colors.ON_SURFACE,
+                size=tokens.FONT_XL,
+            ),
+            secondary_text_style=NativeAdTemplateTextStyle(
+                text_color=ft.Colors.with_opacity(0.7, ft.Colors.ON_SURFACE),
+                size=tokens.FONT_LG,
+            ),
+            tertiary_text_style=NativeAdTemplateTextStyle(
+                text_color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
+                size=tokens.FONT_MD,
+            ),
+        )
+
+        ad = ad_service.get_native_ad(template_style=style)
+    except Exception as e:
+        logger.warning("Failed to load NativeAd in styles: %s", e)
+        return ft.Container(width=0, height=0)
+
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Text(
+                    "SPONSORED",
+                    size=tokens.FONT_XXS,
+                    weight=ft.FontWeight.W_700,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    style=ft.TextStyle(letter_spacing=1),
+                ),
+                ad,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+            spacing=tokens.SPACE_XXS,
         ),
         alignment=ft.Alignment.CENTER,
         padding=tokens.SPACE_SM,
@@ -196,7 +255,7 @@ def status_dot(is_running: bool = False) -> ft.Container:
     return ft.Container(
         width=tokens.ICON_SM - 6,
         height=tokens.ICON_SM - 6,
-        border_radius=5,
+        border_radius=tokens.RADIUS_PILL,
         bgcolor=AppColors.SUCCESS if is_running else AppColors.BADGE_CPU,
     )
 

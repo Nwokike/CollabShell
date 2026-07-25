@@ -8,7 +8,7 @@ import flet as ft
 
 from components.brand_header import build_brand_header
 from core import constants, tokens
-from core.styles import build_banner_ad, glass_card, section_header
+from core.styles import build_native_ad, glass_card, section_header
 from core.theme import AppColors
 
 
@@ -16,7 +16,8 @@ def build_history_view(
     page: ft.Page,
     colab_service,
     state,
-    preselected_session: str = None,
+    preselected_session: str | None = None,
+    navigate=None,
     snack=None,
     theme_btn=None,
 ) -> ft.View:
@@ -152,9 +153,9 @@ def build_history_view(
 
         return ft.Container(
             content=ft.Icon(icon, size=tokens.ICON_SM, color=ft.Colors.WHITE),
-            width=tokens.ICON_XL - 4,
-            height=tokens.ICON_XL - 4,
-            border_radius=14,
+            width=tokens.STEP_BADGE_SIZE,
+            height=tokens.STEP_BADGE_SIZE,
+            border_radius=tokens.STEP_BADGE_RADIUS,
             bgcolor=color,
             alignment=ft.Alignment.CENTER,
         )
@@ -221,14 +222,19 @@ def build_history_view(
             ),
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
             border_radius=tokens.RADIUS_MD,
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)),
+            border=ft.Border.all(
+                tokens.DIVIDER_THICKNESS,
+                ft.Colors.with_opacity(tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE),
+            ),
             margin=ft.Margin(0, tokens.SPACE_XXS, 0, tokens.SPACE_XXS),
         )
 
     def _build_event_list():
         if is_loading:
             return ft.Container(
-                content=ft.ProgressRing(width=30, height=30),
+                content=ft.ProgressRing(
+                    width=tokens.SPINNER_LG, height=tokens.SPINNER_LG
+                ),
                 alignment=ft.Alignment.CENTER,
                 padding=tokens.SPACE_XXL,
             )
@@ -359,21 +365,27 @@ def build_history_view(
                 expand=True,
                 padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
-            build_banner_ad(page),
+            build_native_ad(page, size="small"),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,
         expand=True,
     )
 
+    appbar = ft.AppBar(
+        leading=ft.IconButton(
+            ft.Icons.ARROW_BACK_ROUNDED,
+            on_click=lambda e: page.run_task(navigate, "/home") if navigate else None,
+        ),
+        title=ft.Text(constants.LBL_HISTORY, weight=ft.FontWeight.BOLD),
+        center_title=False,
+        bgcolor=ft.Colors.SURFACE,
+        actions=[theme_btn] if theme_btn else [],
+    )
+
     return ft.View(
         route="/history",
         controls=[view_content],
         padding=0,
-        appbar=ft.AppBar(
-            title=ft.Text(constants.APP_NAME, weight=ft.FontWeight.BOLD),
-            center_title=False,
-            bgcolor=ft.Colors.SURFACE,
-            actions=[theme_btn] if theme_btn else [],
-        ),
+        appbar=appbar,
     )

@@ -5,8 +5,8 @@ import os
 async def get_log_impl(
     service,
     session_name: str,
-    lines: int = None,
-    event_type: str = None,
+    lines: int | None = None,
+    event_type: str | None = None,
 ) -> list:
     """Get session history logs."""
 

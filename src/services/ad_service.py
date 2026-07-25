@@ -15,7 +15,25 @@ import flet as ft
 logger = logging.getLogger(__name__)
 
 try:
+    import flet as ft
     import flet_ads as fta
+    from flet_ads import base_ad
+    from flet_ads.native_ad import NativeAd
+
+    class CollabBannerAd(fta.BannerAd):
+        def init(self):
+            # Bypass fta.base_ad.BaseAd.init() which has a premature page.platform check
+            super(base_ad.BaseAd, self).init()
+
+    class CollabNativeAd(NativeAd):
+        def init(self):
+            super(base_ad.BaseAd, self).init()
+            if self.factory_id is None and self.template_style is None:
+                raise ValueError("factory_id or template_style must be set")
+
+    class CollabInterstitialAd(fta.InterstitialAd):
+        def init(self):
+            super(base_ad.BaseAd, self).init()
 
     _HAS_ADS = True
 except ImportError:
@@ -32,6 +50,9 @@ class AdService:
 
     BANNER_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/8726930570"
     INTERSTITIAL_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/7258916174"
+    NATIVE_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/1634521578"
+
+    NATIVE_ID_ANDROID_TEST = "ca-app-pub-3940256099942544/2247696110"
 
     def __init__(self, page: ft.Page):
         self.page = page
@@ -51,6 +72,12 @@ class AdService:
             return self.INTERSTITIAL_ID_ANDROID_TEST
         return self.INTERSTITIAL_ID_ANDROID_PROD
 
+    @property
+    def native_id(self) -> str:
+        if self.USE_TEST_IDS:
+            return self.NATIVE_ID_ANDROID_TEST
+        return self.NATIVE_ID_ANDROID_PROD
+
     def _is_mobile(self) -> bool:
         try:
             return self.page.platform.is_mobile()
@@ -62,7 +89,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = fta.BannerAd(
+            ad = CollabBannerAd(
                 unit_id=self.banner_id,
                 width=320,
                 height=50,
@@ -84,13 +111,28 @@ class AdService:
         ):
             return ft.Container(width=0, height=0)
 
+    def get_native_ad(self, template_style=None) -> ft.Control:
+        """Return a native ad control."""
+        if not _HAS_ADS or not self._is_mobile():
+            return ft.Container(width=0, height=0)
+        try:
+            ad = CollabNativeAd(
+                unit_id=self.native_id,
+                template_style=template_style,
+                on_error=lambda e: None,
+            )
+            return ad
+        except Exception as e:
+            logger.warning("Failed to load NativeAd: %s", e)
+            return ft.Container(width=0, height=0)
+
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Pre-load an interstitial ad for later display."""
         self._on_close = on_close
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            new_ad = fta.InterstitialAd(
+            new_ad = CollabInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: None,
@@ -148,7 +190,7 @@ class AdService:
                 else:
                     on_close()
 
-            self._active_rewarded_ad = fta.InterstitialAd(
+            self._active_rewarded_ad = CollabInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),

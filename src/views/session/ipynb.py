@@ -43,7 +43,7 @@ async def on_import_ipynb(ctrl, e=None):
         await on_file_result(ctrl, "import", files=files)
 
 
-async def on_file_result(ctrl, op: str, path: str = None, files=None):
+async def on_file_result(ctrl, op: str, path: str | None = None, files=None):
     if op == "export" and path:
         try:
             ipynb = cells_to_ipynb(ctrl.state.notebook_cells)

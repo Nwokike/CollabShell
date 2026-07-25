@@ -30,7 +30,7 @@ def setup_global_stdin_hook(page: ft.Page, colab_service, snack_func):
 
         extracted_url = None
         for word in prompt_str.split():
-            if word.startswith("http://") or word.startswith("https://"):
+            if word.startswith(("http://", "https://")):
                 extracted_url = word.strip("'\"),;:")
                 break
 
@@ -71,7 +71,11 @@ def setup_global_stdin_hook(page: ft.Page, colab_service, snack_func):
                     [
                         ft.Row(
                             [
-                                ft.ProgressRing(width=24, height=24, stroke_width=3),
+                                ft.ProgressRing(
+                                    width=tokens.SPINNER_MD,
+                                    height=tokens.SPINNER_MD,
+                                    stroke_width=3,
+                                ),
                                 ft.Text(
                                     "Checking credentials with Google servers...",
                                     size=tokens.FONT_SM,

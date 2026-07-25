@@ -37,7 +37,7 @@ def build_onboarding_view(
         next_btn,
     )
 
-    build_slide, build_indicators, update_view, on_next, on_back, on_swipe = (
+    build_slide, build_indicators, _update_view, on_next, on_back, on_swipe = (
         make_slide_controller(
             page,
             state,

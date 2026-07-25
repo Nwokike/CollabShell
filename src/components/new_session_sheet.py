@@ -62,7 +62,7 @@ def show_new_session_sheet(
         name = name_ref.current.value.strip() if name_ref.current else ""
 
         selected_hw = (
-            list(hardware_type_ref.current.selected)[0]
+            next(iter(hardware_type_ref.current.selected))
             if hardware_type_ref.current and hardware_type_ref.current.selected
             else "CPU"
         )
@@ -122,8 +122,8 @@ def show_new_session_sheet(
                 content=ft.Row(
                     [
                         ft.ProgressRing(
-                            width=24,
-                            height=24,
+                            width=tokens.SPINNER_MD,
+                            height=tokens.SPINNER_MD,
                             stroke_width=3,
                         ),
                         ft.Text(
@@ -132,7 +132,7 @@ def show_new_session_sheet(
                             weight=ft.FontWeight.W_500,
                         ),
                     ],
-                    spacing=12,
+                    spacing=tokens.SPACE_MD,
                     alignment=ft.MainAxisAlignment.CENTER,
                 ),
                 padding=ft.Padding(
@@ -182,7 +182,7 @@ def show_new_session_sheet(
             else:
                 await route_change()
         except Exception as ex:
-            logger.error("Failed to create session: %s", ex, exc_info=True)
+            logger.exception("Failed to create session")
             loading_dialog.open = False
             page.update()
             if snack_func:

@@ -111,7 +111,7 @@ def build_breadcrumb_impl(ctrl):
 def build_file_list_impl(ctrl):
     if ctrl.is_loading:
         return ft.Container(
-            content=ft.ProgressRing(width=30, height=30),
+            content=ft.ProgressRing(width=tokens.SPINNER_LG, height=tokens.SPINNER_LG),
             alignment=ft.Alignment.CENTER,
             padding=tokens.SPACE_XXL,
         )

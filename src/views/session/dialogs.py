@@ -26,7 +26,7 @@ def show_interactive_stdin_dialog(ctrl, prompt, *args, **kwargs):
 
     extracted_url = None
     for word in prompt_str.split():
-        if word.startswith("http://") or word.startswith("https://"):
+        if word.startswith(("http://", "https://")):
             extracted_url = word.strip("'\"),;:")
             break
 
