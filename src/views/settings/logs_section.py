@@ -118,13 +118,14 @@ def build_logs_section(page: ft.Page) -> ft.Column:
                 ft.Text(
                     "Live Activity Terminal",
                     size=tokens.FONT_MD,
-                    weight=ft.FontWeight.W_600,
+                    weight=ft.FontWeight.W_500,
                 ),
                 ft.Text(
                     "View real-time connection activity, session logs, and diagnostic errors. Useful for troubleshooting on mobile.",
                     size=tokens.FONT_XS,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
+                ft.Container(height=tokens.SPACE_XS),
                 ft.FilledButton(
                     "Open Terminal",
                     icon=ft.Icons.TERMINAL_ROUNDED,
@@ -136,13 +137,16 @@ def build_logs_section(page: ft.Page) -> ft.Column:
                     ),
                 ),
             ],
-            spacing=tokens.SPACE_SM,
-        )
+            spacing=tokens.SPACE_XS,
+        ),
+        margin=ft.Margin(
+            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+        ),
     )
     return ft.Column(
         controls=[
             section_header("TROUBLESHOOTING & LOGS"),
             card,
         ],
-        spacing=tokens.SPACE_XS,
+        spacing=0,
     )

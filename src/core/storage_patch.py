@@ -23,6 +23,26 @@ def resolve_storage_dir() -> str:
     return storage_dir
 
 
+class MemoryLogHandler(logging.Handler):
+    """In-memory ring-buffer log handler for live Activity Terminal."""
+
+    _logs: list[str] = []
+    _MAX_LOGS = 300
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            MemoryLogHandler._logs.append(msg)
+            if len(MemoryLogHandler._logs) > MemoryLogHandler._MAX_LOGS:
+                MemoryLogHandler._logs.pop(0)
+        except Exception:
+            pass
+
+    @classmethod
+    def get_logs(cls) -> list[str]:
+        return list(cls._logs)
+
+
 def apply_storage_patches():
     # 1. Resolve storage directory — shared with StorageService
     storage_dir = resolve_storage_dir()
@@ -161,26 +181,6 @@ def apply_storage_patches():
     colab_cli.state.StateStore.__init__.__defaults__ = (
         os.path.join(storage_dir, "sessions.json"),
     )
-
-    # Override colab_cli.common.setup_logging log folder
-    class MemoryLogHandler(logging.Handler):
-        """In-memory ring-buffer log handler for live Activity Terminal."""
-
-        _logs: list[str] = []
-        _MAX_LOGS = 300
-
-        def emit(self, record):
-            try:
-                msg = self.format(record)
-                MemoryLogHandler._logs.append(msg)
-                if len(MemoryLogHandler._logs) > MemoryLogHandler._MAX_LOGS:
-                    MemoryLogHandler._logs.pop(0)
-            except Exception:
-                pass
-
-        @classmethod
-        def get_logs(cls) -> list[str]:
-            return list(cls._logs)
 
     def patched_setup_logging(log_to_stderr: bool):
         import logging
