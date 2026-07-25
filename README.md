@@ -48,7 +48,7 @@ Collab Shell is engineered around three foundational pillars for remote cloud co
 
 ### 2. 💻 Real-Time PTY Interactive Terminal (TTY)
 - **Colab WebSocket Tunnels**: Direct low-latency PTY connection via Google Colab's `/api/terminals` WebSocket endpoints.
-- **Full LLM & TUI Support**: Run local AI models (`ollama run llama3`), AI coding assistants (`opencode`), and full interactive terminal TUIs directly in your cloud runtimes.
+- **Full LLM & TUI Support**: Run local AI models (`ollama run qwen3.6`), AI coding assistants (`opencode`), and full interactive terminal TUIs directly in your cloud runtimes.
 - **Multi-Tab & Theme Customization**: Open multiple concurrent terminal tabs, customize themes (Matrix Green, Dracula, JetBrains Dark), cursor styles, and search terminal output.
 
 ### 3. 📁 Remote File Manager
@@ -144,7 +144,7 @@ Collab Shell is engineered around three foundational pillars for remote cloud co
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Flet (Flutter engine) | Cross-platform reactive UI with smooth page transitions |
+| **Frontend** | Flet | Cross-platform reactive UI with smooth page transitions |
 | **Client Service** | `google-colab-cli` SDK | Client wrapper for Google Colab session management & execution |
 | **Local Database** | Flat JSON Storage (`storage.json`) | Key-value store for app settings, theme state, and credentials |
 | **Auth Provider** | Google OAuth2 | Secure user authentication to manage personal Google Cloud instances |
