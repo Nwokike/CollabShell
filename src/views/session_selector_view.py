@@ -172,7 +172,7 @@ def build_session_selector_view(
     view_content = ft.Column(
         controls=[
             new_session_btn,
-            build_native_ad(page, size="small"),
+            build_native_ad(page, size="small", glass=False),
             section_header("ACTIVE SESSIONS"),
             ft.Column(controls=controls, spacing=0),
         ],

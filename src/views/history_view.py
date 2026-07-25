@@ -365,7 +365,7 @@ def build_history_view(
                 expand=True,
                 padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
-            build_native_ad(page, size="small"),
+            build_native_ad(page, size="small", glass=False),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,

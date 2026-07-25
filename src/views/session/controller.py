@@ -182,7 +182,7 @@ class SessionController:
                 from core.styles import build_native_ad
 
                 self.cells_list.controls.append(
-                    build_native_ad(self.page, size="small")
+                    build_native_ad(self.page, size="small", glass=False)
                 )
         self.page.run_task(self.deferred_update)
 

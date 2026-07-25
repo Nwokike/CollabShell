@@ -145,7 +145,9 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     )
 
 
-def build_native_ad(page: ft.Page, size: str = "medium") -> ft.Control:
+def build_native_ad(
+    page: ft.Page, size: str = "medium", glass: bool = False
+) -> ft.Control:
     """Build a native ad container styled to match the app's standard cards."""
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
         return ft.Container(width=0, height=0)
@@ -169,7 +171,9 @@ def build_native_ad(page: ft.Page, size: str = "medium") -> ft.Control:
 
         style = NativeAdTemplateStyle(
             template_type=tpl_type,
-            main_bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
+            main_bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE)
+            if glass
+            else ft.Colors.TRANSPARENT,
             corner_radius=tokens.RADIUS_LG,
             call_to_action_text_style=NativeAdTemplateTextStyle(
                 bgcolor=ft.Colors.PRIMARY,
@@ -195,26 +199,23 @@ def build_native_ad(page: ft.Page, size: str = "medium") -> ft.Control:
         logger.warning("Failed to load NativeAd in styles: %s", e)
         return ft.Container(width=0, height=0)
 
+    if glass:
+        return ft.Container(
+            content=ad,
+            alignment=ft.Alignment.CENTER,
+            padding=tokens.SPACE_SM,
+            border_radius=tokens.RADIUS_LG,
+            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+            margin=ft.Margin(
+                tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+            ),
+        )
+
     return ft.Container(
-        content=ft.Column(
-            [
-                ft.Text(
-                    "SPONSORED",
-                    size=tokens.FONT_XXS,
-                    weight=ft.FontWeight.W_700,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    style=ft.TextStyle(letter_spacing=1),
-                ),
-                ad,
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.START,
-            spacing=tokens.SPACE_XXS,
-        ),
+        content=ad,
         alignment=ft.Alignment.CENTER,
-        padding=tokens.SPACE_SM,
-        border_radius=tokens.RADIUS_LG,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+        padding=0,
         margin=ft.Margin(
             tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
         ),

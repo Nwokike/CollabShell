@@ -17,23 +17,6 @@ logger = logging.getLogger(__name__)
 try:
     import flet as ft
     import flet_ads as fta
-    from flet_ads import base_ad
-    from flet_ads.native_ad import NativeAd
-
-    class CollabBannerAd(fta.BannerAd):
-        def init(self):
-            # Bypass fta.base_ad.BaseAd.init() which has a premature page.platform check
-            super(base_ad.BaseAd, self).init()
-
-    class CollabNativeAd(NativeAd):
-        def init(self):
-            super(base_ad.BaseAd, self).init()
-            if self.factory_id is None and self.template_style is None:
-                raise ValueError("factory_id or template_style must be set")
-
-    class CollabInterstitialAd(fta.InterstitialAd):
-        def init(self):
-            super(base_ad.BaseAd, self).init()
 
     _HAS_ADS = True
 except ImportError:
@@ -89,7 +72,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = CollabBannerAd(
+            ad = fta.BannerAd(
                 unit_id=self.banner_id,
                 width=320,
                 height=50,
@@ -116,7 +99,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = CollabNativeAd(
+            ad = fta.NativeAd(
                 unit_id=self.native_id,
                 template_style=template_style,
                 on_error=lambda e: None,
@@ -132,22 +115,12 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            new_ad = CollabInterstitialAd(
+            self.interstitial = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: None,
                 on_close=lambda e: self.page.run_task(self._handle_close, e),
             )
-            # InterstitialAd is a Service and must be mounted on the page to be
-            # displayed. Replace any previously mounted instance so re-preloading
-            # (e.g. after an ad closes) does not leak services.
-            if (
-                self.interstitial is not None
-                and self.interstitial in self.page.services
-            ):
-                self.page.services.remove(self.interstitial)
-            self.interstitial = new_ad
-            self.page.services.append(self.interstitial)
         except Exception:
             self.interstitial = None
 
@@ -190,7 +163,7 @@ class AdService:
                 else:
                     on_close()
 
-            self._active_rewarded_ad = CollabInterstitialAd(
+            self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),
