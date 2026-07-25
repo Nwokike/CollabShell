@@ -31,11 +31,13 @@ def build_notebook_cell(
     play_btn_ref = ft.Ref[ft.IconButton]()
     stop_row_ref = ft.Ref[ft.Row]()
     output_ref = ft.Ref[ft.ListView]()
+    output_panel_ref = ft.Ref[ft.Container]()
 
     refs = {
         "play_btn": play_btn_ref,
         "stop_row": stop_row_ref,
         "output": output_ref,
+        "output_panel": output_panel_ref,
         "code_input": editor_ref,
     }
 
@@ -237,6 +239,7 @@ def build_notebook_cell(
     )
 
     output_panel = ft.Container(
+        ref=output_panel_ref,
         content=ft.Column(
             controls=[
                 ft.ListView(
@@ -254,7 +257,7 @@ def build_notebook_cell(
         padding=tokens.SPACE_SM,
         bgcolor=AppColors.TERMINAL_BG,
         border_radius=tokens.RADIUS_SM,
-        visible=bool(output_controls),
+        visible=bool(output_controls) or is_running,
         width=float("inf"),
     )
 

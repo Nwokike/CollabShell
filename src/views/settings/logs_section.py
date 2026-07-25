@@ -51,6 +51,7 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
             page.update()
         except Exception as ex:
             import logging
+
             logging.getLogger("colab").error("Copy logs failed: %s", ex)
 
     return ft.AlertDialog(

@@ -76,8 +76,13 @@ class SessionController:
         if stop:
             stop.visible = True
         out = refs["output"].current
+        out_panel = refs.get("output_panel", ft.Ref()).current
         if out:
             out.visible = True
+            if not out.height:
+                out.height = 40
+        if out_panel:
+            out_panel.visible = True
         self.page.update()
 
     def set_cell_finished(self, index):
@@ -97,6 +102,7 @@ class SessionController:
             return
         refs = self.cell_refs[index]
         out_col = refs["output"].current
+        out_panel = refs.get("output_panel", ft.Ref()).current
         if not out_col:
             return
         text = ""
@@ -127,6 +133,17 @@ class SessionController:
             )
         )
         out_col.visible = True
+        if out_panel:
+            out_panel.visible = True
+
+        # Calculate dynamic line count & expand height from 40px up to 220px
+        total_lines = 0
+        for ctrl in out_col.controls:
+            txt = getattr(ctrl, "value", "") or ""
+            total_lines += max(txt.count("\n") + 1, 1)
+
+        out_col.height = min(max(total_lines * 20 + 16, 40), 220)
+
         now = time.monotonic()
         last = self.output_update_ts.get(index, 0.0)
         if last == 0.0 or now - last >= 0.15:
@@ -138,10 +155,13 @@ class SessionController:
             return
         refs = self.cell_refs[index]
         out_col = refs["output"].current
+        out_panel = refs.get("output_panel", ft.Ref()).current
         if out_col:
             out_col.controls.clear()
             out_col.visible = False
-            self.page.run_task(self.deferred_update)
+        if out_panel:
+            out_panel.visible = False
+        self.page.run_task(self.deferred_update)
 
     def rebuild_cells(self, force=False):
         now = time.monotonic()
