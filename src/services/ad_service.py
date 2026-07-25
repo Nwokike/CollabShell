@@ -17,27 +17,15 @@ logger = logging.getLogger(__name__)
 try:
     import flet as ft
     import flet_ads as fta
-    from flet_ads.native_ad import NativeAd
+    import flet_ads.base_ad as base_ad
 
-    class SafeAdMixin:
-        def init(self):
-            try:
-                super().init()
-            except RuntimeError as e:
-                if "Control must be added to the page first" in str(e):
-                    pass
-                else:
-                    raise
+    def _patched_init(self):
+        try:
+            super(base_ad.BaseAd, self).init()
+        except Exception:
+            pass
 
-    class SafeBannerAd(SafeAdMixin, fta.BannerAd):
-        pass
-
-    class SafeInterstitialAd(SafeAdMixin, fta.InterstitialAd):
-        pass
-
-    class SafeNativeAd(SafeAdMixin, NativeAd):
-        pass
-
+    base_ad.BaseAd.init = _patched_init
     _HAS_ADS = True
 except ImportError:
     _HAS_ADS = False
@@ -92,7 +80,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = SafeBannerAd(
+            ad = fta.BannerAd(
                 unit_id=self.banner_id,
                 width=320,
                 height=50,
@@ -114,20 +102,7 @@ class AdService:
         ):
             return ft.Container(width=0, height=0)
 
-    def get_native_ad(self, template_style=None) -> ft.Control:
-        """Return a native ad control."""
-        if not _HAS_ADS or not self._is_mobile():
-            return ft.Container(width=0, height=0)
-        try:
-            ad = SafeNativeAd(
-                unit_id=self.native_id,
-                template_style=template_style,
-                on_error=lambda e: None,
-            )
-            return ad
-        except Exception as e:
-            logger.warning("Failed to load NativeAd: %s", e)
-            return ft.Container(width=0, height=0)
+
 
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Pre-load an interstitial ad for later display."""
@@ -135,14 +110,12 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            self.interstitial = SafeInterstitialAd(
+            self.interstitial = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: logger.error("Interstitial error: %s", e),
                 on_close=self._handle_close,
             )
-            self.page.overlay.append(self.interstitial)
-            self.page.update()
         except Exception as e:
             logger.error("Failed to preload interstitial: %s", e)
             self.interstitial = None
@@ -186,7 +159,7 @@ class AdService:
                 else:
                     on_close()
 
-            self._active_rewarded_ad = SafeInterstitialAd(
+            self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),
@@ -194,8 +167,6 @@ class AdService:
                     "Rewarded Interstitial error: %s", e.data
                 ),
             )
-            self.page.overlay.append(self._active_rewarded_ad)
-            self.page.update()
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)

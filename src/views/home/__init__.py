@@ -2,7 +2,7 @@ import flet as ft
 
 from components.brand_header import build_brand_header
 from core import constants, tokens
-from core.styles import build_native_ad
+from core.styles import build_banner_ad
 from core.theme import AppColors
 from views.home.actions import action_button
 from views.home.sessions import build_sessions_section
@@ -244,12 +244,12 @@ def build_home_view(
             ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
             sessions_section_header,
             sessions_list,
-            build_native_ad(page, size="medium", glass=True),
+            build_banner_ad(page),
             ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
             features_section,
-            build_native_ad(page, size="small", glass=False),
+            build_banner_ad(page),
             how_it_works,
-            build_native_ad(page, size="medium", glass=False),
+            build_banner_ad(page),
             ft.Container(height=tokens.ICON_XXXL),
         ],
         spacing=0,

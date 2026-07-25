@@ -1,7 +1,7 @@
 import flet as ft
 
 from core import tokens
-from core.styles import build_banner_ad, build_native_ad
+from core.styles import build_banner_ad
 from views.settings.advanced_section import (
     build_about_section,
     build_advanced_section,
@@ -48,7 +48,7 @@ def build_settings_view(
             hardware_section,
             execution_section,
             behavior_section,
-            build_native_ad(page, size="small", glass=False),
+            build_banner_ad(page),
             advanced_section,
             logs_section,
             build_banner_ad(page),

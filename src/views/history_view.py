@@ -8,7 +8,7 @@ import flet as ft
 
 from components.brand_header import build_brand_header
 from core import constants, tokens
-from core.styles import build_native_ad, glass_card, section_header
+from core.styles import build_banner_ad, glass_card, section_header
 from core.theme import AppColors
 
 
@@ -365,7 +365,7 @@ def build_history_view(
                 expand=True,
                 padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
-            build_native_ad(page, size="small", glass=False),
+            build_banner_ad(page),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,

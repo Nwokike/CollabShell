@@ -6,7 +6,7 @@ import flet as ft
 
 from components.session_card import build_session_card
 from core import tokens
-from core.styles import build_native_ad, section_header
+from core.styles import build_banner_ad, section_header
 
 
 def build_session_selector_view(
@@ -172,7 +172,7 @@ def build_session_selector_view(
     view_content = ft.Column(
         controls=[
             new_session_btn,
-            build_native_ad(page, size="small", glass=False),
+            build_banner_ad(page),
             section_header("ACTIVE SESSIONS"),
             ft.Column(controls=controls, spacing=0),
         ],
