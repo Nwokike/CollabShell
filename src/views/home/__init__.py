@@ -1,8 +1,9 @@
 import flet as ft
-from core import tokens, constants
+
+from components.brand_header import build_brand_header
+from core import constants, tokens
 from core.styles import build_banner_ad
 from core.theme import AppColors
-from components.brand_header import build_brand_header
 from views.home.actions import action_button, show_session_selector
 from views.home.sessions import build_sessions_section
 

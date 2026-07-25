@@ -1,7 +1,8 @@
 import flet as ft
-from core import tokens, constants
-from core.theme import AppColors
+
 from components.brand_header import build_brand_header
+from core import constants, tokens
+from core.theme import AppColors
 
 
 def feature_row(icon, title, subtitle):

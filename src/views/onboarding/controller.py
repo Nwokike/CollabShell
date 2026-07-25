@@ -1,4 +1,5 @@
 import flet as ft
+
 from core import constants
 from views.onboarding.slides import build_page_1, build_page_2, build_page_3
 

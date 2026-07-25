@@ -1,18 +1,19 @@
 import flet as ft
+
 from core import tokens
 from core.styles import build_banner_ad
-from views.settings.preferences import build_preferences_section
+from views.settings.advanced_section import (
+    build_about_section,
+    build_advanced_section,
+    build_behavior_section,
+)
 from views.settings.auth_section import build_auth_section
 from views.settings.hardware_section import (
-    build_hardware_section,
     build_execution_section,
-)
-from views.settings.advanced_section import (
-    build_behavior_section,
-    build_advanced_section,
-    build_about_section,
+    build_hardware_section,
 )
 from views.settings.logs_section import build_logs_section
+from views.settings.preferences import build_preferences_section
 
 
 def build_settings_view(

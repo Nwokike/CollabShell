@@ -1,10 +1,12 @@
 """Activity Terminal section for Settings — live activity log viewer and clipboard copy."""
 
 from __future__ import annotations
+
 import flet as ft
+
 from core import tokens
-from core.theme import AppColors
 from core.styles import glass_card, section_header
+from core.theme import AppColors
 
 
 def get_live_logs() -> str:

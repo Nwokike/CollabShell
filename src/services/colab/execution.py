@@ -3,7 +3,7 @@ import datetime
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("colab_execution")
 
@@ -17,9 +17,9 @@ async def exec_code_impl(
     session_name: str,
     timeout: float = 60.0,
     auth_method: str = "oauth2",
-    on_output: Optional[Callable] = None,
+    on_output: Callable | None = None,
     intercept_oauth: bool = True,
-    stdin_hook: Optional[Callable] = None,
+    stdin_hook: Callable | None = None,
 ) -> dict:
     """Execute Python code in a session."""
     service._cancel_event.clear()
@@ -103,6 +103,7 @@ async def exec_code_impl(
 
         if intercept_oauth:
             import json
+
             from colab_cli.auth import get_credentials
             from colab_cli.utils import get_status_code
 

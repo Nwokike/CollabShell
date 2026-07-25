@@ -11,8 +11,9 @@ async def get_log_impl(
     """Get session history logs."""
 
     def _log():
-        from core.storage_patch import resolve_storage_dir
         from colab_cli.history import HistoryLogger
+
+        from core.storage_patch import resolve_storage_dir
 
         h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
         events = h.get_history(session_name)
@@ -29,8 +30,9 @@ async def list_log_sessions_impl(service) -> list:
     """List session names that have history logs."""
 
     def _list():
-        from core.storage_patch import resolve_storage_dir
         from colab_cli.history import HistoryLogger
+
+        from core.storage_patch import resolve_storage_dir
 
         h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
         return h.list_sessions()
@@ -42,9 +44,10 @@ async def export_log_impl(service, session_name: str, output_path: str) -> bool:
     """Export session history to a file."""
 
     def _export():
-        from core.storage_patch import resolve_storage_dir
-        from colab_cli.history import HistoryLogger
         from colab_cli.converter import export_history
+        from colab_cli.history import HistoryLogger
+
+        from core.storage_patch import resolve_storage_dir
 
         h = HistoryLogger(log_dir=os.path.join(resolve_storage_dir(), "history"))
         events = h.get_history(session_name)

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("colab_vm_ops")
 
@@ -9,8 +9,8 @@ async def mount_drive_impl(
     session_name: str,
     path: str = "/content/drive",
     auth_method: str = "oauth2",
-    on_output: Optional[Callable] = None,
-    stdin_hook: Optional[Callable] = None,
+    on_output: Callable | None = None,
+    stdin_hook: Callable | None = None,
 ) -> bool:
     """Mount Google Drive at the given path."""
     code = f"from google.colab import drive\ndrive.mount('{path}')"
@@ -35,16 +35,16 @@ async def install_packages_impl(
     session_name: str,
     packages: list,
     auth_method: str = "oauth2",
-    on_output: Optional[Callable] = None,
+    on_output: Callable | None = None,
 ) -> bool:
     """Install Python packages on the VM."""
     code = f"""
 import subprocess, sys
 try:
-    subprocess.check_call(['uv', 'pip', 'install', '--system'] + {repr(packages)})
+    subprocess.check_call(['uv', 'pip', 'install', '--system'] + {packages!r})
     print('Installation Complete (via uv)!')
 except:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install'] + {repr(packages)})
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install'] + {packages!r})
     print('Installation Complete (via pip)!')
 """
     try:
@@ -65,8 +65,8 @@ async def auth_gcp_on_vm_impl(
     service,
     session_name: str,
     auth_method: str = "oauth2",
-    on_output: Optional[Callable] = None,
-    stdin_hook: Optional[Callable] = None,
+    on_output: Callable | None = None,
+    stdin_hook: Callable | None = None,
 ) -> bool:
     """Authenticate GCP on the VM."""
     await service._ensure_online()

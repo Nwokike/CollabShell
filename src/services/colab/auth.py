@@ -47,12 +47,13 @@ async def get_auth_url_impl(service) -> str:
     """Generate the OAuth2 authorization URL for the user to visit."""
 
     def _get_url():
+        from importlib import resources
+
         from colab_cli.auth import (
             PUBLIC_SCOPES,
             REMOTE_REDIRECT_URI,
             TOKEN_CONFIG_PATH,
         )
-        from importlib import resources
         from google_auth_oauthlib.flow import InstalledAppFlow
 
         config_resource = resources.files("colab_cli").joinpath("oauth_config.json")
@@ -81,14 +82,15 @@ async def authenticate_oauth2_impl(service, code: str) -> dict:
     """Complete the OAuth2 flow with the authorization code."""
 
     def _auth(code):
+        from importlib import resources
+
         from colab_cli.auth import (
             PUBLIC_SCOPES,
             REMOTE_REDIRECT_URI,
             TOKEN_CONFIG_PATH,
         )
-        from importlib import resources
-        from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
+        from google_auth_oauthlib.flow import InstalledAppFlow
 
         config_resource = resources.files("colab_cli").joinpath("oauth_config.json")
         client_config = json.loads(config_resource.read_text())
@@ -126,8 +128,8 @@ async def authenticate_oauth2_impl(service, code: str) -> dict:
             f.write(creds.to_json())
 
         creds.refresh(Request())
-        import urllib.request
         import urllib.parse
+        import urllib.request
 
         qs = urllib.parse.urlencode({"access_token": creds.token})
         url = f"https://oauth2.googleapis.com/tokeninfo?{qs}"
@@ -150,9 +152,10 @@ async def check_auth_impl(service) -> dict:
     """Check if current credentials are valid."""
 
     def _check():
-        from colab_cli.auth import TOKEN_CONFIG_PATH, get_credentials, AuthProvider
-        import urllib.request
         import urllib.parse
+        import urllib.request
+
+        from colab_cli.auth import TOKEN_CONFIG_PATH, AuthProvider, get_credentials
 
         if not os.path.exists(TOKEN_CONFIG_PATH):
             return {

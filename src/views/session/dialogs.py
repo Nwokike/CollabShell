@@ -1,7 +1,9 @@
 import asyncio
-import threading
 import logging
+import threading
+
 import flet as ft
+
 from core import tokens
 
 logger = logging.getLogger("session_dialogs")

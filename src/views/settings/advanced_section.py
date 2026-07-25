@@ -1,7 +1,8 @@
 import flet as ft
-from core import tokens, constants
-from core.styles import glass_card, section_header, tip_text
+
 from components.brand_header import build_brand_header
+from core import constants, tokens
+from core.styles import glass_card, section_header, tip_text
 
 
 def build_behavior_section(page: ft.Page, state, storage):

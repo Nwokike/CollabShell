@@ -1,10 +1,12 @@
 import asyncio
+import logging
 import time
 import uuid
-import logging
+
 import flet as ft
-from core import tokens
+
 from components.notebook_cell import build_notebook_cell
+from core import tokens
 
 logger = logging.getLogger("session_controller")
 

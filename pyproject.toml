@@ -5,8 +5,8 @@ description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "flet==0.85.3",
-    "flet-ads==0.85.3",
+    "flet>=0.86.2",
+    "flet-ads>=0.86.2",
     "flet-terminal>=0.2.2",
     "google-colab-cli>=0.6.0",
     "rich>=15.0.0",
@@ -22,12 +22,10 @@ path = "src"
 
 
 [tool.flet.app.boot_screen]
-show = true
-message = "Initializing Collab Shell..."
+startup_message = "Initializing Collab Shell..."
 
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"
-split_per_abi = true
 min_sdk_version = 24
 target_sdk_version = 35
 

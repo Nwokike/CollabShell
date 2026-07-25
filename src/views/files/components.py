@@ -1,7 +1,9 @@
-import flet as ft
 import posixpath
+
+import flet as ft
+
 from core import tokens
-from views.files.actions import do_download_selected_impl, do_delete_selected_impl
+from views.files.actions import do_delete_selected_impl, do_download_selected_impl
 
 
 def build_action_bar_impl(ctrl):

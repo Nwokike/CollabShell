@@ -1,4 +1,5 @@
 import flet as ft
+
 from core import constants
 from core.theme import AppColors
 

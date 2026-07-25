@@ -2,7 +2,8 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 logger = logging.getLogger("colab_service")
 
@@ -15,7 +16,7 @@ class ColabService:
         self._cli_state = None
         self._cancel_event = threading.Event()
         self._keep_alive_tasks: dict[str, asyncio.Task] = {}
-        self.default_stdin_hook: Optional[Callable] = None
+        self.default_stdin_hook: Callable | None = None
 
     @property
     def is_available(self) -> bool:
@@ -53,9 +54,9 @@ class ColabService:
 
     async def new_session(
         self,
-        name: Optional[str] = None,
-        gpu: Optional[str] = None,
-        tpu: Optional[str] = None,
+        name: str | None = None,
+        gpu: str | None = None,
+        tpu: str | None = None,
         auth_method: str = "oauth2",
         keep_alive: bool = True,
     ) -> dict:
@@ -95,9 +96,9 @@ class ColabService:
         session_name: str,
         timeout: float = 30.0,
         auth_method: str = "oauth2",
-        on_output: Optional[Callable] = None,
+        on_output: Callable | None = None,
         intercept_oauth: bool = False,
-        stdin_hook: Optional[Callable] = None,
+        stdin_hook: Callable | None = None,
     ) -> list:
         from services.colab.execution import exec_code_impl
 
@@ -169,7 +170,7 @@ class ColabService:
         local_zip_path: str,
         session_name: str = None,
         auth_method: str = "oauth2",
-        on_status: Optional[Callable[[str], None]] = None,
+        on_status: Callable[[str], None] | None = None,
     ) -> bool:
         from services.colab.files_ops import download_folder_impl
 
@@ -189,8 +190,8 @@ class ColabService:
         session_name: str,
         path: str = "/content/drive",
         auth_method: str = "oauth2",
-        on_output: Optional[Callable] = None,
-        stdin_hook: Optional[Callable] = None,
+        on_output: Callable | None = None,
+        stdin_hook: Callable | None = None,
     ) -> bool:
         from services.colab.vm_ops import mount_drive_impl
 
@@ -203,7 +204,7 @@ class ColabService:
         packages: list,
         session_name: str,
         auth_method: str = "oauth2",
-        on_output: Optional[Callable] = None,
+        on_output: Callable | None = None,
     ) -> bool:
         from services.colab.vm_ops import install_packages_impl
 
@@ -215,8 +216,8 @@ class ColabService:
         self,
         session_name: str,
         auth_method: str = "oauth2",
-        on_output: Optional[Callable] = None,
-        stdin_hook: Optional[Callable] = None,
+        on_output: Callable | None = None,
+        stdin_hook: Callable | None = None,
     ) -> bool:
         from services.colab.vm_ops import auth_gcp_on_vm_impl
 

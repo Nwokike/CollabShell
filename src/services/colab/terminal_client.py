@@ -10,11 +10,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from urllib.parse import urlparse
-from typing import Callable
+
 import requests
 import tornado.httpclient
-from tornado.websocket import websocket_connect, WebSocketClientConnection
+from tornado.websocket import WebSocketClientConnection, websocket_connect
 
 logger = logging.getLogger(__name__)
 

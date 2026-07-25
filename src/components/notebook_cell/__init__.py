@@ -1,8 +1,9 @@
 import flet as ft
+
+from components.notebook_cell.actions import copy_output, make_actions_row
+from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from core.theme import AppColors
-from components.notebook_cell.actions import make_actions_row, copy_output
-from components.notebook_cell.output import parse_outputs_to_controls
 
 
 def build_notebook_cell(

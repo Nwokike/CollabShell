@@ -1,7 +1,9 @@
-import flet as ft
 import posixpath
-from core import tokens
+
+import flet as ft
+
 from components.file_item import build_file_item
+from core import tokens
 
 
 async def load_files_impl(ctrl, path=None):

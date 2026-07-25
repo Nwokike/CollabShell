@@ -1,22 +1,23 @@
 import flet as ft
-from core import tokens, constants
-from core.styles import glass_card, hardware_badge, status_dot, build_banner_ad
+
+from components.notebook_toolbar import build_notebook_toolbar
+from core import constants, tokens
+from core.styles import build_banner_ad, glass_card, hardware_badge, status_dot
 from core.theme import AppColors
 from services.storage_service import StorageService
 from views.session.controller import SessionController
+from views.session.ipynb import on_export_ipynb, on_import_ipynb
 from views.session.layout import build_action_row, build_keep_alive_card
 from views.session.vm_ops import (
-    on_restart,
-    on_stop,
-    on_mount_drive,
+    check_session,
     on_auth_gcp,
-    on_view_logs,
     on_keep_alive,
     on_keep_alive_disconnect,
-    check_session,
+    on_mount_drive,
+    on_restart,
+    on_stop,
+    on_view_logs,
 )
-from views.session.ipynb import on_export_ipynb, on_import_ipynb
-from components.notebook_toolbar import build_notebook_toolbar
 
 
 def build_session_view(

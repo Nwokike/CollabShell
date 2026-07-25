@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import flet as ft
-from flet_terminal import MobileTerminal, BUILTIN_THEMES
+from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
 from core import tokens
 from core.theme import AppColors
@@ -25,8 +25,8 @@ def build_terminal_panel(
     page: ft.Page,
     session_name: str,
     colab_service,
-    snack: Optional[Callable[[str], None]] = None,
-    on_fullscreen_change: Optional[Callable[[bool], None]] = None,
+    snack: Callable[[str], None] | None = None,
+    on_fullscreen_change: Callable[[bool], None] | None = None,
 ) -> tuple[ft.Container, Callable[[], None]]:
     """Build native multi-tab terminal panel and return (container, init_task)."""
     _spinner = ft.Ref[ft.ProgressRing]()
@@ -395,7 +395,7 @@ def build_terminal_view(
     session_name: str,
     state=None,
     on_back=None,
-    snack: Optional[Callable[[str], None]] = None,
+    snack: Callable[[str], None] | None = None,
     theme_btn=None,
 ) -> ft.View:
     """Build a view with the native Colab terminal control."""

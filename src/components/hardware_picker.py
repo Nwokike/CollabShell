@@ -2,7 +2,7 @@
 
 import flet as ft
 
-from core import tokens, constants
+from core import constants, tokens
 from core.styles import tip_text
 
 

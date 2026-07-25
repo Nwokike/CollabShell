@@ -1,7 +1,8 @@
 import flet as ft
-from core import tokens, constants
-from core.theme import AppColors
+
+from core import constants, tokens
 from core.styles import glass_card, section_header, tip_text
+from core.theme import AppColors
 
 
 def build_auth_section(page: ft.Page, colab_service, state, storage, snack):

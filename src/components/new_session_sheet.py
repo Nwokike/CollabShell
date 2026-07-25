@@ -1,8 +1,10 @@
 import asyncio
 import logging
+
 import flet as ft
-from core import tokens
+
 from components.hardware_picker import build_hardware_picker
+from core import tokens
 
 logger = logging.getLogger("new_session_sheet")
 

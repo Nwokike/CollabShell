@@ -1,4 +1,3 @@
-# ruff: noqa: E402
 """Colab — Cloud GPUs from your phone.
 
 Main entry point: page config, routing, service bootstrapping.
@@ -19,9 +18,9 @@ import flet as ft
 from core import constants
 from core.state import state
 from core.theme import AppTheme
+from services.ad_service import AdService
 from services.colab import ColabService
 from services.storage_service import StorageService
-from services.ad_service import AdService
 
 logging.basicConfig(
     level=logging.INFO,

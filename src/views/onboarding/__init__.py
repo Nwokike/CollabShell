@@ -1,7 +1,8 @@
 import flet as ft
+
 from core import tokens
-from views.onboarding.oauth_handler import make_auth_handlers
 from views.onboarding.controller import make_slide_controller
+from views.onboarding.oauth_handler import make_auth_handlers
 
 
 def build_onboarding_view(

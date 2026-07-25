@@ -1,7 +1,8 @@
 import flet as ft
+
+from components.ansi_parser import parse_ansi_to_flet_text
 from core import tokens
 from core.theme import AppColors
-from components.ansi_parser import parse_ansi_to_flet_text
 
 
 def parse_outputs_to_controls(outputs: list) -> list[ft.Control]:

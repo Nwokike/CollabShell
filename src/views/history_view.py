@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import flet as ft
 import os
 
-from core import tokens, constants
-from core.styles import section_header, build_banner_ad, glass_card
-from core.theme import AppColors
+import flet as ft
+
 from components.brand_header import build_brand_header
+from core import constants, tokens
+from core.styles import build_banner_ad, glass_card, section_header
+from core.theme import AppColors
 
 
 def build_history_view(

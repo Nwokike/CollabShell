@@ -112,6 +112,7 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
 
     try:
         import flet_ads as fta
+
         from services.ad_service import AdService
 
         if not unit_id:

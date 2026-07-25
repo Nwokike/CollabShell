@@ -1,4 +1,5 @@
 import flet as ft
+
 from core import tokens
 from core.styles import glass_card, section_header
 

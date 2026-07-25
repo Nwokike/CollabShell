@@ -1,7 +1,9 @@
 import asyncio
+
 import flet as ft
-from core import tokens
+
 from components.session_card import build_session_card
+from core import tokens
 
 
 def build_sessions_section(

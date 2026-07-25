@@ -1,15 +1,14 @@
 import asyncio
 import logging
-from typing import Optional
 
 logger = logging.getLogger("colab_session_ops")
 
 
 async def new_session_impl(
     service,
-    name: Optional[str] = None,
-    gpu: Optional[str] = None,
-    tpu: Optional[str] = None,
+    name: str | None = None,
+    gpu: str | None = None,
+    tpu: str | None = None,
     auth_method: str = "oauth2",
     keep_alive: bool = True,
 ) -> dict:
@@ -17,9 +16,10 @@ async def new_session_impl(
 
     def _new():
         import uuid
+
         from colab_cli.auth import AuthProvider
+        from colab_cli.client import Accelerator, ColabRequestError, Variant
         from colab_cli.common import State
-        from colab_cli.client import Accelerator, Variant, ColabRequestError
         from colab_cli.state import SessionState
         from colab_cli.utils import get_status_code
 

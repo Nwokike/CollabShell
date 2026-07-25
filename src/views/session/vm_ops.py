@@ -1,6 +1,8 @@
 import asyncio
+
 import flet as ft
-from core import tokens, constants
+
+from core import constants, tokens
 
 
 async def check_session(ctrl):

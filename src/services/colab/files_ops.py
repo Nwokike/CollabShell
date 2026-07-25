@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("colab_files_ops")
 
@@ -16,6 +16,7 @@ async def ls_impl(
 
     def _ls():
         import posixpath
+
         from colab_cli.auth import AuthProvider
         from colab_cli.common import State
         from colab_cli.contents import ContentsClient
@@ -71,6 +72,7 @@ async def upload_impl(
 
     def _upload():
         import posixpath
+
         from colab_cli.auth import AuthProvider
         from colab_cli.common import State
         from colab_cli.contents import ContentsClient
@@ -113,6 +115,7 @@ async def download_impl(
 
     def _download():
         import posixpath
+
         from colab_cli.auth import AuthProvider
         from colab_cli.common import State
         from colab_cli.contents import ContentsClient
@@ -149,7 +152,7 @@ async def download_folder_impl(
     remote_path: str,
     local_path: str,
     auth_method: str = "oauth2",
-    on_progress: Optional[Callable] = None,
+    on_progress: Callable | None = None,
 ) -> bool:
     """Download a remote directory as a zip file to a local path."""
     import posixpath
@@ -247,6 +250,7 @@ async def rm_impl(
 
     def _rm():
         import posixpath
+
         from colab_cli.auth import AuthProvider
         from colab_cli.common import State
         from colab_cli.contents import ContentsClient

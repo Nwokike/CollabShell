@@ -151,9 +151,9 @@ def apply_storage_patches():
         wsclient_mod.JupyterSubprotocol = ctx.JupyterSubprotocol
 
     import colab_cli.auth
+    import colab_cli.common
     import colab_cli.history
     import colab_cli.state
-    import colab_cli.common
 
     # Override token path
     colab_cli.auth.TOKEN_CONFIG_PATH = os.path.join(storage_dir, "token.json")

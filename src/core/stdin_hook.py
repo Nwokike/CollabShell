@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import threading
+
 import flet as ft
+
 from core import tokens
 
 logger = logging.getLogger("stdin_hook")

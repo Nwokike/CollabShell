@@ -1,7 +1,9 @@
-import urllib.parse
 import logging
+import urllib.parse
+
 import flet as ft
-from core import tokens, constants
+
+from core import constants, tokens
 
 logger = logging.getLogger("router")
 
