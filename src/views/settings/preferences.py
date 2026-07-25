@@ -32,7 +32,7 @@ def build_preferences_section(page: ft.Page, state, storage):
 
     light_btn = create_theme_card("light", "Light", ft.Icons.LIGHT_MODE_ROUNDED)
     dark_btn = create_theme_card("dark", "Dark", ft.Icons.DARK_MODE_ROUNDED)
-    system_btn = create_theme_card("system", "System", ft.Icons.SETTINGS_BRIGHT_ROUNDED)
+    system_btn = create_theme_card("system", "System", ft.Icons.BRIGHTNESS_AUTO_ROUNDED)
 
     async def change_theme_and_update(mode_str):
         if mode_str == "light":

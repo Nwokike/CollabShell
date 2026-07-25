@@ -10,12 +10,14 @@ from core.styles import glass_card, section_header
 def get_live_logs() -> str:
     """Retrieve combined live in-memory and disk log contents."""
     from core.storage_patch import MemoryLogHandler
+
     memory_logs = MemoryLogHandler.get_logs()
     if memory_logs:
         return "\n".join(memory_logs)
-    
+
     import os
     from services.storage_service import get_storage_dir
+
     log_file = os.path.join(get_storage_dir(), "colab.log")
     if os.path.exists(log_file):
         try:
@@ -30,7 +32,7 @@ def get_live_logs() -> str:
 def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
     """Build modal AlertDialog containing live activity log terminal."""
     log_text = get_live_logs()
-    
+
     log_control = ft.Text(
         value=log_text,
         size=tokens.FONT_XS,

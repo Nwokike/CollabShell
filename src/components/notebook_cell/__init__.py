@@ -195,9 +195,7 @@ def build_notebook_cell(
         txt = getattr(ctrl, "value", "") or ""
         line_count += max(txt.count("\n") + 1, 1)
 
-    calc_height = (
-        min(max(line_count * 20 + 16, 36), 220) if output_controls else None
-    )
+    calc_height = min(max(line_count * 20 + 16, 36), 220) if output_controls else None
 
     output_actions = ft.Row(
         controls=[
