@@ -113,13 +113,13 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     try:
         import flet_ads as fta
 
-        from services.ad_service import AdService, CollabBannerAd
+        from services.ad_service import AdService
 
         if not unit_id:
             ad_service = AdService(page)
             unit_id = ad_service.banner_id
 
-        ad = CollabBannerAd(
+        ad = fta.BannerAd(
             unit_id=unit_id,
             width=320,
             height=50,
