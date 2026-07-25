@@ -43,6 +43,16 @@ class MemoryLogHandler(logging.Handler):
         return list(cls._logs)
 
 
+_memory_log_handler = MemoryLogHandler()
+_memory_log_handler.setLevel(logging.DEBUG)
+_memory_log_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
+)
+root_logger = logging.getLogger()
+if _memory_log_handler not in root_logger.handlers:
+    root_logger.addHandler(_memory_log_handler)
+
+
 def apply_storage_patches():
     # 1. Resolve storage directory — shared with StorageService
     storage_dir = resolve_storage_dir()

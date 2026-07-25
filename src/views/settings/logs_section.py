@@ -34,9 +34,9 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
 
     log_control = ft.Text(
         value=log_text,
-        size=tokens.FONT_XS,
+        size=11,
         font_family="JetBrains Mono",
-        color="#A6ADC8",
+        color="#A6E22E",
         selectable=True,
     )
 
