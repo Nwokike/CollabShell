@@ -46,19 +46,17 @@ def build_terminal_panel(
     _switcher_box = ft.Container(
         content=_switcher_row,
         padding=ft.Padding(
-            tokens.SPACE_MD, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS
+            tokens.SPACE_MD, tokens.SPACE_MICRO, tokens.SPACE_MD, tokens.SPACE_MICRO
         ),
         bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
     )
     _stack = ft.Stack(controls=[], expand=True)
 
-    restore_btn_box = ft.Container(visible=False, right=12, top=8)
-
     def _set_fullscreen(val: bool):
         _is_fullscreen["value"] = val
-        status_bar.visible = not val
-        _switcher_box.visible = not val
-        restore_btn_box.visible = val
+        status_bar.visible = True
+        _switcher_box.visible = True
+        _refresh_switcher()
         if on_fullscreen_change:
             try:
                 on_fullscreen_change(val)
@@ -70,36 +68,28 @@ def build_terminal_panel(
             except RuntimeError:
                 pass
 
-    restore_btn = ft.IconButton(
-        icon=ft.Icons.UNFOLD_LESS_ROUNDED,
-        icon_size=18,
-        tooltip="Restore headers & tabs",
-        style=ft.ButtonStyle(
-            padding=4,
-            bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.SURFACE_CONTAINER_HIGHEST),
-            color=ft.Colors.PRIMARY,
-        ),
-        on_click=lambda e: _set_fullscreen(False),
-    )
-    restore_btn_box.content = restore_btn
-    _stack.controls.append(restore_btn_box)
-
     status_bar = ft.Container(
         content=ft.Row(
             controls=[
-                ft.ProgressRing(ref=_spinner, width=16, height=16, stroke_width=2),
+                ft.ProgressRing(
+                    ref=_spinner,
+                    width=tokens.ICON_XS,
+                    height=tokens.ICON_XS,
+                    stroke_width=tokens.SPACE_NANO,
+                ),
                 ft.Text(
                     ref=_status,
                     value="Loading session…",
-                    size=tokens.FONT_SM,
+                    size=tokens.FONT_XS,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 ft.Container(expand=True),
             ],
-            spacing=tokens.SPACE_MD,
+            spacing=tokens.SPACE_SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.Padding(
-            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+            tokens.SPACE_MD, tokens.SPACE_NANO, tokens.SPACE_MD, tokens.SPACE_NANO
         ),
     )
 
@@ -118,7 +108,7 @@ def build_terminal_panel(
                         controls=[
                             ft.Text(
                                 f"Terminal {tid}",
-                                size=tokens.FONT_SM,
+                                size=tokens.FONT_XS,
                                 weight=ft.FontWeight.BOLD
                                 if active
                                 else ft.FontWeight.NORMAL,
@@ -126,9 +116,9 @@ def build_terminal_panel(
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.CLOSE_ROUNDED,
-                                icon_size=14,
+                                icon_size=tokens.ICON_MICRO,
                                 style=ft.ButtonStyle(
-                                    padding=2,
+                                    padding=tokens.SPACE_MICRO,
                                     visual_density=ft.VisualDensity.COMPACT,
                                     color=AppColors.ERROR if active else c,
                                 ),
@@ -136,11 +126,16 @@ def build_terminal_panel(
                                 on_click=lambda e, id_val=tid: _close_terminal(id_val),
                             ),
                         ],
-                        spacing=2,
+                        spacing=tokens.SPACE_MICRO,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding(10, 4, 6, 4),
-                    border_radius=16,
+                    padding=ft.Padding(
+                        tokens.SPACE_SM,
+                        tokens.SPACE_NANO,
+                        tokens.SPACE_XS,
+                        tokens.SPACE_NANO,
+                    ),
+                    border_radius=tokens.RADIUS_MD,
                     bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
                     if active
                     else ft.Colors.TRANSPARENT,
@@ -155,9 +150,29 @@ def build_terminal_panel(
             ft.IconButton(
                 icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
                 tooltip="New Terminal Tab",
-                icon_size=20,
+                icon_size=tokens.ICON_SM,
+                style=ft.ButtonStyle(
+                    padding=tokens.SPACE_MICRO, visual_density=ft.VisualDensity.COMPACT
+                ),
                 icon_color=ft.Colors.PRIMARY,
                 on_click=lambda e: page.run_task(_create_terminal),
+            )
+        )
+        is_fs = _is_fullscreen["value"]
+        ctrls.append(
+            ft.IconButton(
+                icon=ft.Icons.FULLSCREEN_EXIT_ROUNDED
+                if is_fs
+                else ft.Icons.FULLSCREEN_ROUNDED,
+                tooltip="Exit Fullscreen Mode"
+                if is_fs
+                else "Full Screen Terminal Mode",
+                icon_size=tokens.ICON_SM,
+                style=ft.ButtonStyle(
+                    padding=tokens.SPACE_MICRO, visual_density=ft.VisualDensity.COMPACT
+                ),
+                icon_color=ft.Colors.PRIMARY,
+                on_click=lambda e: _set_fullscreen(not _is_fullscreen["value"]),
             )
         )
         _switcher_row.controls = ctrls
@@ -363,7 +378,6 @@ def build_terminal_panel(
                     pass
         _terminals.clear()
         _stack.controls.clear()
-        _stack.controls.append(restore_btn_box)
         await _create_terminal()
 
     panel = ft.Container(

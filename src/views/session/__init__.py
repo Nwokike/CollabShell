@@ -105,6 +105,8 @@ def build_session_view(
             status_header.visible = not is_fullscreen
         if app_tabs:
             app_tabs.visible = not is_fullscreen
+        if page:
+            page.update()
 
     terminal_panel, terminal_init_func = build_terminal_panel(
         page,
@@ -271,9 +273,13 @@ def build_session_view(
                         ft.Tab(
                             label=ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, size=tokens.ICON_MD),
+                                    ft.Icon(
+                                        ft.Icons.EDIT_NOTE_ROUNDED, size=tokens.ICON_MD
+                                    ),
                                     ft.Text(
-                                        "Notebook", size=tokens.FONT_MD, weight=ft.FontWeight.W_500
+                                        "Notebook",
+                                        size=tokens.FONT_MD,
+                                        weight=ft.FontWeight.W_500,
                                     ),
                                 ],
                                 spacing=tokens.SPACE_SM,
@@ -283,9 +289,13 @@ def build_session_view(
                         ft.Tab(
                             label=ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.TERMINAL_ROUNDED, size=tokens.ICON_MD),
+                                    ft.Icon(
+                                        ft.Icons.TERMINAL_ROUNDED, size=tokens.ICON_MD
+                                    ),
                                     ft.Text(
-                                        "Terminal", size=tokens.FONT_MD, weight=ft.FontWeight.W_500
+                                        "Terminal",
+                                        size=tokens.FONT_MD,
+                                        weight=ft.FontWeight.W_500,
                                     ),
                                 ],
                                 spacing=tokens.SPACE_SM,
