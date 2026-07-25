@@ -60,7 +60,7 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
                 ft.Icon(
                     ft.Icons.TERMINAL_ROUNDED,
                     size=tokens.ICON_MD,
-                    color=AppColors.PRIMARY,
+                    color=ft.Colors.PRIMARY,
                 ),
                 ft.Text(
                     "Activity Terminal",
@@ -130,7 +130,7 @@ def build_logs_section(page: ft.Page) -> ft.Column:
                     icon=ft.Icons.TERMINAL_ROUNDED,
                     on_click=lambda e: page.show_dialog(build_logs_dialog(page)),
                     style=ft.ButtonStyle(
-                        bgcolor=AppColors.PRIMARY,
+                        bgcolor=ft.Colors.PRIMARY,
                         color=ft.Colors.WHITE,
                         shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_SM),
                     ),
