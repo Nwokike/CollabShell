@@ -3,7 +3,8 @@
 from __future__ import annotations
 import flet as ft
 from core import tokens
-from core.theme import AppColors, AppStyles
+from core.theme import AppColors
+from core.styles import glass_card, section_header
 
 
 def get_live_logs() -> str:
@@ -107,11 +108,9 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
     )
 
 
-def build_logs_section(page: ft.Page) -> ft.Container:
+def build_logs_section(page: ft.Page) -> ft.Column:
     """Build Settings section card for Activity Terminal troubleshooting."""
-    return AppStyles.section_card(
-        "Activity Terminal",
-        ft.Icons.TERMINAL_ROUNDED,
+    card = glass_card(
         ft.Column(
             controls=[
                 ft.Text(
@@ -136,6 +135,12 @@ def build_logs_section(page: ft.Page) -> ft.Container:
                 ),
             ],
             spacing=tokens.SPACE_SM,
-        ),
-        page=page,
+        )
+    )
+    return ft.Column(
+        controls=[
+            section_header("TROUBLESHOOTING & LOGS"),
+            card,
+        ],
+        spacing=tokens.SPACE_XS,
     )
