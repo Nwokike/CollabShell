@@ -74,7 +74,14 @@ class AdService:
                 height=50,
                 alignment=ft.Alignment.CENTER,
             )
-        except Exception:
+        except (
+            ValueError,
+            TypeError,
+            OSError,
+            RuntimeError,
+            ConnectionError,
+            ImportError,
+        ):
             return ft.Container(width=0, height=0)
 
     async def preload_interstitial(self, on_close: Optional[Callable] = None):

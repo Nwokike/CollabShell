@@ -124,7 +124,14 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
             height=50,
             on_error=lambda e: None,
         )
-    except Exception as e:
+    except (
+        ValueError,
+        TypeError,
+        OSError,
+        RuntimeError,
+        ConnectionError,
+        ImportError,
+    ) as e:
         logger.warning("Failed to load BannerAd: %s", e)
         return ft.Container(width=0, height=0)
 

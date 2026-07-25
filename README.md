@@ -11,7 +11,7 @@
   <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Windows_EXE-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows EXE" /></a>
   <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux_DEB-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux DEB" /></a>
   <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux_RPM-E91E63?style=for-the-badge&logo=redhat&logoColor=white" alt="Linux RPM" /></a>
-  <img src="https://img.shields.io/badge/Built_with-Flet_0.86-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
+  <img src="https://img.shields.io/badge/Built_with-Flet_0.85.3-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
 
@@ -42,14 +42,16 @@
 | Capability | Description |
 | :--- | :--- |
 | **Interactive PTY Terminal (TTY)** | Real-time live web terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. |
+| **Full LLM & TUI Support** | Run local AI models (`ollama run llama3`), AI coding assistants (`opencode`), and full terminal applications directly inside your Colab runtimes. |
+| **Multi-Tab Terminal & Themes** | Create multiple concurrent terminal tabs, customize terminal themes (Matrix Green, Dracula, JetBrains Dark), cursor styles, and search outputs. |
 | **Tabbed Workspace** | Seamlessly toggle between **Notebook** cell execution and live **Terminal** shell tabs inside active cloud runtimes. |
 | **Session Lifecycle Control** | Instantly create, list, restart, and stop active Google Colab sessions directly from your device with smart intent routing. |
 | **Hardware Tiers** | Provision CPU (always free), T4 GPU, or TPU v5e/v6e runtimes based on your Google tier limits. |
+| **Activity Terminal Logs** | Live troubleshooting Activity Terminal log viewer in Settings to inspect connection events and copy logs for debugging. |
 | **Native OS File Picker & Transfers** | Save downloaded files and archives anywhere on your device via the native OS File Picker without Android storage permission issues. |
 | **Folder Zip-and-Download** | Archive and download entire remote directory structures (`/content/folder`) right to your local device with live sweeping progress bars. |
 | **Google Drive & GCP Mounts** | Mount your personal Google Drive storage (`/content/drive`) or propagate Google Cloud credentials with real-time execution progress. |
-| **Exportable Event Logs** | Maintain universal history profiles (`storage/history/`) and export session logs as Jupyter Notebooks (.ipynb), Markdown (.md), or plain text. |
-| **Sandbox Security** | Secure OAuth2 credentials management sandboxed directly on your device storage. |
+
 ---
 
 ## Screenshots
@@ -66,15 +68,13 @@
   </tr>
 </table>
 
-### Dashboard & Navigation
+### Dashboard & Provisioning
 <table>
   <tr>
-    <td width="33%"><img src="screenshots/home_light.png" width="100%" alt="Home View Light" /></td>
-    <td width="33%"><img src="screenshots/home_active_sessions_dark.png" width="100%" alt="Active Sessions Dark" /></td>
-    <td width="33%"><img src="screenshots/new_session_dialog_dark.png" width="100%" alt="New Session Dialog" /></td>
+    <td width="50%"><img src="screenshots/home_active_sessions_dark.png" width="100%" alt="Active Sessions Dark" /></td>
+    <td width="50%"><img src="screenshots/new_session_dialog_dark.png" width="100%" alt="New Session Dialog" /></td>
   </tr>
   <tr>
-    <td align="center"><em>Home view (Light Theme) — one-click access to all active runtimes</em></td>
     <td align="center"><em>Dashboard (Dark Theme) — list active instances with direct shortcut links</em></td>
     <td align="center"><em>New Session Provisioning — select accelerators (CPU, GPU, TPU) and set run names</em></td>
   </tr>
@@ -83,53 +83,40 @@
 ### Interactive Notebook & Code Editor
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/session_notebook_dark.png" width="100%" alt="Notebook Session View" /></td>
-    <td width="50%"><img src="screenshots/session_running_command_dark.png" width="100%" alt="Cell Command Execution" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Interactive Editor — mount Google Drive, toggle keep-alive, and edit code cells</em></td>
-    <td align="center"><em>Command execution — run shell scripts natively with real-time progress logging</em></td>
-  </tr>
-</table>
-
-<table>
-  <tr>
+    <td width="33%"><img src="screenshots/session_notebook_dark.png" width="100%" alt="Notebook Session View" /></td>
     <td width="33%"><img src="screenshots/session_markdown_cell_dark.png" width="100%" alt="Markdown Cell Editor" /></td>
-    <td width="33%"><img src="screenshots/session_typing_markdown_cell_dark.png" width="100%" alt="Typing in Notebook" /></td>
     <td width="33%"><img src="screenshots/session_run_code_dark.png" width="100%" alt="Notebook Execution Results" /></td>
   </tr>
   <tr>
+    <td align="center"><em>Interactive Editor — mount Google Drive, toggle keep-alive, and edit code cells</em></td>
     <td align="center"><em>Rich Markdown editor — write documentation with live render support</em></td>
-    <td align="center"><em>Virtual Keyboard Integration — responsive input alignments for mobile screens</em></td>
-    <td align="center"><em>Result Output Console — view parsed JSON payloads and execution blocks</em></td>
+    <td align="center"><em>Result Output Console — view streaming code execution output in real time</em></td>
   </tr>
 </table>
 
-### Real-Time Terminal & Remote File Manager
+### Full PTY Terminal & LLM TUI Execution
 <table>
   <tr>
-    <td width="33%"><img src="screenshots/session_terminal_dark.png" width="100%" alt="Interactive TTY Terminal" /></td>
-    <td width="33%"><img src="screenshots/files_browser_dark.png" width="100%" alt="Remote File Browser" /></td>
-    <td width="33%"><img src="screenshots/file_transfer_progress.png" width="100%" alt="File Transfer Progress" /></td>
+    <td width="50%"><img src="screenshots/session_ollama_terminal_dark.png" width="100%" alt="Ollama LLM Terminal" /></td>
+    <td width="50%"><img src="screenshots/session_opencode_tui_dark.png" width="100%" alt="OpenCode AI TUI Terminal" /></td>
   </tr>
   <tr>
-    <td align="center"><em>Interactive TTY Shell — live real-time bash commands over Colab WebSockets</em></td>
-    <td align="center"><em>Remote File Browser — navigate folders, select items, and trigger action bar tools</em></td>
-    <td align="center"><em>Native OS Picker & Progress — sweeping progress bars and accurate payload sizes</em></td>
+    <td align="center"><em>Ollama LLM Execution — run open-weight AI models directly in Colab TTY terminal</em></td>
+    <td align="center"><em>OpenCode AI Coding Assistant — interactive terminal TUI with full soft-key controls</em></td>
   </tr>
 </table>
 
-### History, Settings & Scripts
+### Terminal Customization & App Settings
 <table>
   <tr>
-    <td width="33%"><img src="screenshots/quick_run_dark.png" width="100%" alt="Quick Run View" /></td>
-    <td width="33%"><img src="screenshots/history_light.png" width="100%" alt="Event Log History" /></td>
-    <td width="33%"><img src="screenshots/settings_light.png" width="100%" alt="App Settings" /></td>
+    <td width="33%"><img src="screenshots/terminal_settings_modal_dark.png" width="100%" alt="Terminal Theme Modal" /></td>
+    <td width="33%"><img src="screenshots/terminal_matrix_green_dark.png" width="100%" alt="Matrix Green Terminal" /></td>
+    <td width="33%"><img src="screenshots/settings_dark.png" width="100%" alt="App Settings Dark" /></td>
   </tr>
   <tr>
-    <td align="center"><em>Quick Run Mode — upload and execute raw scripts in one-shot runtimes</em></td>
-    <td align="center"><em>Chronological History — filter, trace, and export session logs to IPYNB</em></td>
-    <td align="center"><em>Settings Manager — toggle app themes, customize timeout defaults, and re-authenticate</em></td>
+    <td align="center"><em>Terminal Settings Sheet — select themes (Dracula, Matrix Green), cursor styles & zoom</em></td>
+    <td align="center"><em>Matrix Green Theme — customized TTY styling with built-in output search bar</em></td>
+    <td align="center"><em>Settings Manager — toggle app themes, inspect Activity Terminal logs & re-authenticate</em></td>
   </tr>
 </table>
 
@@ -138,56 +125,13 @@
 ## Features
 
 - **Collab Shell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
-- **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`).
+- **Interactive TTY Terminal Engine** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`).
+- **Live Activity Log Terminal** — In-memory ring-buffer Activity Terminal in Settings capturing real-time connection events and clipboard copy.
 - **Universal Storage & History Normalization** — Monkey-patched backend state persistence (`storage_patch.py`) guaranteeing history and execution logs save reliably across Android and Linux desktops.
 - **Native OS File Picker & Zip-and-Download** — Save files anywhere on your OS/Android device without permission headaches, and archive entire cloud folders on the fly.
-- **Dynamic Onboarding Guide** — 3-step walk-through onboarding introducing features with gesture-swipe controls.
-- **Preloaded Interstitial Ads** — Intelligent Google AdMob integration displaying ads seamlessly on mobile platforms.
+- **Preloaded Interstitial & Frosted Banner Ads** — Production Google AdMob integration with frosted glass container styling and `SPONSORED` badge.
 - **Non-Blocking Execution** — Asynchronous connection wrappers ensuring the Flet UI stays fully responsive during long remote computations.
 - **Ruff Compliance** — Clean, formatted, and strictly linted Python codebase.
-
----
-
-## Architecture
-
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | Flet | Cross-platform UI with responsive views and smooth page transitions |
-| **Client Service** | `google-colab-cli` SDK | Wrapper for Colab session management and code execution |
-| **Local Database** | Flat JSON Storage (`storage.json`) | Key-value store for app settings, theme state, and credentials |
-| **Auth Provider** | Google OAuth2 | Secure user authentication to manage personal Google Cloud instances |
-
-### Visual Flow
-
-```mermaid
-graph TB
-    subgraph COLLABSHELL_CLIENT ["📱 COLLABSHELL CLIENT (Android App)"]
-        UI["🎨 Flet Reactive UI (Home | Session | Terminal | Settings)"]
-        Service["⚙️ Colab Service wrapper"]
-        Storage["💾 Local Storage (settings & credentials)"]
-        UI --> Service
-        UI --> Storage
-    end
-
-    subgraph GOOGLE_SERVICES ["🌐 GOOGLE COLAB INSTANCES"]
-        OAuth["🔐 Google OAuth2 Auth Server"]
-        VMs["🖥️ Google Colab Runtimes (CPU / GPU / TPU)"]
-    end
-
-    Service ==>|Google Auth Client| OAuth
-    Service ==>|gRPC / REST Commands| VMs
-```
-
----
-
-## Privacy & Security
-
-Collab Shell is designed with a strict **Privacy-First** philosophy:
-
-1. **Direct VM Connections**: All commands, file accesses, and script executions are sent directly to Google Colab. No intermediate proxy.
-2. **Zero Metadata Tracking**: We do not trace, log, or collect your code, file lists, or Google account credentials.
-3. **Device Sandboxing**: Local settings and tokens are kept in secure application directories.
-4. **Data Sovereignty**: Saved logs and exports reside 100% locally in your device Downloads folder.
 
 ---
 
