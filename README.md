@@ -41,7 +41,7 @@
 
 | Capability | Description |
 | :--- | :--- |
-| **Interactive PTY Terminal (TTY)** | Real-time live web terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. |
+| **Interactive PTY Terminal (TTY)** | Real-time live interactive terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. |
 | **Tabbed Workspace** | Seamlessly toggle between **Notebook** cell execution and live **Terminal** shell tabs inside active cloud runtimes. |
 | **Session Lifecycle Control** | Instantly create, list, restart, and stop active Google Colab sessions directly from your device with smart intent routing. |
 | **Hardware Tiers** | Provision CPU (always free), T4 GPU, or TPU v5e/v6e runtimes based on your Google tier limits. |
