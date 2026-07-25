@@ -99,6 +99,9 @@ async def do_download_selected_impl(ctrl, e=None):
     if not selected_items:
         return
 
+    if ctrl.state and getattr(ctrl.state, "ad_service", None):
+        await ctrl.state.ad_service.show_interstitial()
+
     for item in selected_items:
         name = item["name"]
         is_dir = item.get("type") == "directory"
