@@ -42,15 +42,16 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
 
     async def _copy_logs(e):
         try:
-            await page.set_clipboard(log_control.value)
+            await ft.Clipboard().set(log_control.value)
             page.snack_bar = ft.SnackBar(
                 content=ft.Text("Activity logs copied to clipboard"),
                 bgcolor=AppColors.SUCCESS,
             )
             page.snack_bar.open = True
             page.update()
-        except Exception:
-            pass
+        except Exception as ex:
+            import logging
+            logging.getLogger("colab").error("Copy logs failed: %s", ex)
 
     return ft.AlertDialog(
         modal=True,
