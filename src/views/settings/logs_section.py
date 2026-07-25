@@ -34,9 +34,9 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
 
     log_control = ft.Text(
         value=log_text,
-        size=11,
+        size=tokens.FONT_XS,
         font_family="JetBrains Mono",
-        color="#A6E22E",
+        color=AppColors.TERMINAL_GREEN,
         selectable=True,
     )
 
@@ -84,7 +84,7 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
                             expand=True,
                         ),
                         padding=tokens.SPACE_MD,
-                        bgcolor="#0D0D0D",
+                        bgcolor=AppColors.LOG_TERMINAL_BG,
                         border=ft.Border.all(
                             1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)
                         ),

@@ -43,6 +43,8 @@ class AppColors:
 
     # ─── Terminal colors ──────────────────────────────────────────────────────
     TERMINAL_BG = "#0D0D1A"
+    LOG_TERMINAL_BG = "#0D0D0D"
+    TERMINAL_GREEN = "#A6E22E"
     TERMINAL_HEADER = "#1A1A2E"
     TERMINAL_CURSOR = "#28C840"
     TERMINAL_DOT_RED = "#FF5F57"
