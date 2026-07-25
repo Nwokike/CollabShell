@@ -48,7 +48,7 @@ def build_settings_view(
             hardware_section,
             execution_section,
             behavior_section,
-            build_native_ad(page, size="small", glass=True),
+            build_native_ad(page, size="small", glass=False),
             advanced_section,
             logs_section,
             build_banner_ad(page),

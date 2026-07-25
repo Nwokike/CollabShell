@@ -116,15 +116,12 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            if self.interstitial and self.interstitial in self.page.services:
-                self.page.services.remove(self.interstitial)
             self.interstitial = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: logger.error("Interstitial error: %s", e),
-                on_close=lambda e: self.page.run_task(self._handle_close, e),
+                on_close=self._handle_close,
             )
-            self.page.services.append(self.interstitial)
         except Exception as e:
             logger.error("Failed to preload interstitial: %s", e)
             self.interstitial = None
@@ -176,7 +173,6 @@ class AdService:
                     "Rewarded Interstitial error: %s", e.data
                 ),
             )
-            self.page.services.append(self._active_rewarded_ad)
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)

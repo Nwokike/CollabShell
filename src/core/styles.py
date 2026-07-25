@@ -132,13 +132,6 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     return ft.Container(
         content=ft.Column(
             [
-                ft.Text(
-                    "SPONSORED",
-                    size=tokens.FONT_XXS,
-                    weight=ft.FontWeight.W_700,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    style=ft.TextStyle(letter_spacing=1),
-                ),
                 ad,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,

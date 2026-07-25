@@ -247,7 +247,7 @@ def build_home_view(
             build_native_ad(page, size="medium", glass=True),
             ft.Divider(height=tokens.SPACE_SM, color=ft.Colors.TRANSPARENT),
             features_section,
-            build_native_ad(page, size="small", glass=True),
+            build_native_ad(page, size="small", glass=False),
             how_it_works,
             build_native_ad(page, size="medium", glass=False),
             ft.Container(height=tokens.ICON_XXXL),
