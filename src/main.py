@@ -28,6 +28,20 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
+
+from core.storage_patch import _memory_log_handler
+
+for log_name in ["", "colab", "flet", "router", "services", "core"]:
+    lg = logging.getLogger(log_name)
+    if _memory_log_handler not in lg.handlers:
+        lg.addHandler(_memory_log_handler)
+    # Ensure they actually pass INFO logs down
+    if lg.level == logging.NOTSET:
+        lg.setLevel(logging.INFO)
+    # Ensure propagation doesn't duplicate if we attach to both child and root
+    if log_name != "":
+        lg.propagate = False
+
 logger = logging.getLogger("colab")
 
 colab_service = ColabService()

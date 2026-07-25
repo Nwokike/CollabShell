@@ -94,8 +94,8 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
                 ],
                 spacing=tokens.SPACE_SM,
             ),
-            width=min(page.window.width * 0.9 if page.window.width else 450, 500),
-            height=400,
+            width=page.width * 0.9 if page.width else 450,
+            height=500,
         ),
         actions=[
             ft.IconButton(
