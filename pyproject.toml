@@ -32,7 +32,7 @@ min_sdk_version = 24
 target_sdk_version = 35
 
 [tool.flet.android.meta_data]
-"com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~1261089274"
+"com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~7138516733"
 
 [tool.flet.android.manifest_application]
 allowBackup = "false"

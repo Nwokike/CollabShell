@@ -1,3 +1,4 @@
+import asyncio
 import flet as ft
 from core import tokens, constants
 from core.styles import glass_card
@@ -80,6 +81,12 @@ def build_keep_alive_card(
     page: ft.Page, state, on_keep_alive, on_keep_alive_disconnect
 ):
     def _keep_alive_toggle(label, tooltip, value, on_change):
+        async def _trigger_change(e):
+            if callable(on_change):
+                res = on_change(e)
+                if asyncio.iscoroutine(res):
+                    await res
+
         return ft.Row(
             controls=[
                 ft.Column(
@@ -102,7 +109,7 @@ def build_keep_alive_card(
                 ),
                 ft.Switch(
                     value=value,
-                    on_change=lambda e: page.run_task(on_change, e),
+                    on_change=lambda e: page.run_task(_trigger_change, e),
                     scale=0.75,
                 ),
             ],

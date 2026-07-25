@@ -25,16 +25,13 @@ except ImportError:
 class AdService:
     """Manages AdMob banner and interstitial ads."""
 
-    USE_TEST_IDS = (
-        True  # Default to True for testing, user can toggle to False for production
-    )
+    USE_TEST_IDS = False  # Production AdMob IDs active
 
     BANNER_ID_ANDROID_TEST = "ca-app-pub-3940256099942544/9214589741"
     INTERSTITIAL_ID_ANDROID_TEST = "ca-app-pub-3940256099942544/1033173712"
 
-    # Replace with Colab's real Ad Unit IDs for production release
-    BANNER_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/5131365762"
-    INTERSTITIAL_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/2758003779"
+    BANNER_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/8726930570"
+    INTERSTITIAL_ID_ANDROID_PROD = "ca-app-pub-5679949845754640/7258916174"
 
     def __init__(self, page: ft.Page):
         self.page = page

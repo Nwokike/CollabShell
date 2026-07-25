@@ -12,6 +12,7 @@ from views.settings.advanced_section import (
     build_advanced_section,
     build_about_section,
 )
+from views.settings.logs_section import build_logs_section
 
 
 def build_settings_view(
@@ -35,6 +36,7 @@ def build_settings_view(
     execution_section = build_execution_section(page, state, storage)
     behavior_section = build_behavior_section(page, state, storage)
     advanced_section = build_advanced_section(page, state, storage)
+    logs_section = build_logs_section(page)
     about_section = build_about_section()
 
     view_content = ft.Column(
@@ -46,6 +48,7 @@ def build_settings_view(
             execution_section,
             behavior_section,
             advanced_section,
+            logs_section,
             build_banner_ad(page),
             about_section,
             ft.Container(height=tokens.SPACE_XXL),

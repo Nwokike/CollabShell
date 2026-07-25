@@ -67,17 +67,17 @@ def build_notebook_cell(
                 page.update()
 
         def _render(e=None):
-            if cell.get("is_editing"):
-                if editor_ref.current:
-                    cell["source"] = editor_ref.current.value
-                    if markdown_ref.current:
-                        markdown_ref.current.value = cell["source"]
-                cell["is_editing"] = False
-                edit_container.visible = False
-                render_container.visible = True
-                if on_change:
-                    on_change()
-                page.update()
+            if editor_ref.current:
+                cell["source"] = editor_ref.current.value
+            new_source = cell.get("source", "")
+            if markdown_ref.current:
+                markdown_ref.current.value = new_source
+            cell["is_editing"] = False
+            edit_container.visible = False
+            render_container.visible = True
+            if on_change:
+                on_change()
+            page.update()
 
         edit_container.content = ft.Column(
             controls=[
@@ -119,12 +119,12 @@ def build_notebook_cell(
                             spacing=tokens.SPACE_XS,
                         ),
                         ft.Container(expand=True),
-                        ft.FilledButton(
-                            "Render",
+                        ft.IconButton(
                             icon=ft.Icons.CHECK_ROUNDED,
+                            icon_size=tokens.ICON_SM,
+                            icon_color=AppColors.SUCCESS,
+                            tooltip="Done / Render Markdown",
                             on_click=_render,
-                            height=tokens.SPACE_LG * 2,
-                            style=ft.ButtonStyle(padding=ft.Padding(12, 0, 12, 0)),
                         ),
                         _make_actions_row(),
                     ],
@@ -189,6 +189,16 @@ def build_notebook_cell(
     # ── Code Cell ──
     output_controls = parse_outputs_to_controls(outputs)
 
+    # Dynamic height calculation for compact output boxes (1-2 lines default, max 220px)
+    line_count = 0
+    for ctrl in output_controls:
+        txt = getattr(ctrl, "value", "") or ""
+        line_count += max(txt.count("\n") + 1, 1)
+
+    calc_height = (
+        min(max(line_count * 20 + 16, 36), 220) if output_controls else None
+    )
+
     output_actions = ft.Row(
         controls=[
             ft.Text(
@@ -236,7 +246,7 @@ def build_notebook_cell(
                     controls=output_controls,
                     spacing=tokens.SPACE_XXS,
                     auto_scroll=True,
-                    height=tokens.SPACE_XXXL * 8,
+                    height=calc_height,
                     expand=False,
                 ),
                 output_actions,
@@ -246,7 +256,7 @@ def build_notebook_cell(
         padding=tokens.SPACE_SM,
         bgcolor=AppColors.TERMINAL_BG,
         border_radius=tokens.RADIUS_SM,
-        visible=True,
+        visible=bool(output_controls),
         width=float("inf"),
     )
 

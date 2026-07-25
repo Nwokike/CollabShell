@@ -1,5 +1,6 @@
 """Dynamic patcher to redirect colab_cli storage paths for Android/Local consistency."""
 
+import logging
 import os
 from pathlib import Path
 
@@ -162,6 +163,25 @@ def apply_storage_patches():
     )
 
     # Override colab_cli.common.setup_logging log folder
+    class MemoryLogHandler(logging.Handler):
+        """In-memory ring-buffer log handler for live Activity Terminal."""
+
+        _logs: list[str] = []
+        _MAX_LOGS = 300
+
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                MemoryLogHandler._logs.append(msg)
+                if len(MemoryLogHandler._logs) > MemoryLogHandler._MAX_LOGS:
+                    MemoryLogHandler._logs.pop(0)
+            except Exception:
+                pass
+
+        @classmethod
+        def get_logs(cls) -> list[str]:
+            return list(cls._logs)
+
     def patched_setup_logging(log_to_stderr: bool):
         import logging
         import sys
@@ -169,6 +189,16 @@ def apply_storage_patches():
         log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
+
+        has_mem = False
+        for handler in logger.handlers:
+            if isinstance(handler, MemoryLogHandler):
+                has_mem = True
+                break
+        if not has_mem:
+            mem_handler = MemoryLogHandler()
+            mem_handler.setFormatter(logging.Formatter(log_format))
+            logger.addHandler(mem_handler)
 
         # Check if already added to avoid duplicates
         has_file = False
