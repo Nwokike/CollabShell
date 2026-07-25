@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 try:
     import flet as ft
     import flet_ads as fta
+    from flet_ads.native_ad import NativeAd
 
     _HAS_ADS = True
 except ImportError:
@@ -99,7 +100,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = fta.NativeAd(
+            ad = NativeAd(
                 unit_id=self.native_id,
                 template_style=template_style,
                 on_error=lambda e: None,
