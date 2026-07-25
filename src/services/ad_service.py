@@ -17,7 +17,22 @@ logger = logging.getLogger(__name__)
 try:
     import flet as ft
     import flet_ads as fta
+    from flet_ads.base_ad import BaseAd
     from flet_ads.native_ad import NativeAd
+
+    class CollabBannerAd(fta.BannerAd):
+        def init(self):
+            super(BaseAd, self).init()
+
+    class CollabInterstitialAd(fta.InterstitialAd):
+        def init(self):
+            super(BaseAd, self).init()
+
+    class CollabNativeAd(NativeAd):
+        def init(self):
+            super(BaseAd, self).init()
+            if getattr(self, "factory_id", None) is None and getattr(self, "template_style", None) is None:
+                raise ValueError("factory_id or template_style must be set")
 
     _HAS_ADS = True
 except ImportError:
@@ -73,7 +88,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = fta.BannerAd(
+            ad = CollabBannerAd(
                 unit_id=self.banner_id,
                 width=320,
                 height=50,
@@ -100,7 +115,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = NativeAd(
+            ad = CollabNativeAd(
                 unit_id=self.native_id,
                 template_style=template_style,
                 on_error=lambda e: None,
@@ -116,12 +131,16 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            self.interstitial = fta.InterstitialAd(
+            if self.interstitial and self.interstitial in self.page.services:
+                self.page.services.remove(self.interstitial)
+            self.interstitial = CollabInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: logger.error("Interstitial error: %s", e),
                 on_close=self._handle_close,
             )
+            self.page.services.append(self.interstitial)
+            self.page.update()
         except Exception as e:
             logger.error("Failed to preload interstitial: %s", e)
             self.interstitial = None
@@ -165,7 +184,7 @@ class AdService:
                 else:
                     on_close()
 
-            self._active_rewarded_ad = fta.InterstitialAd(
+            self._active_rewarded_ad = CollabInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),
@@ -173,6 +192,8 @@ class AdService:
                     "Rewarded Interstitial error: %s", e.data
                 ),
             )
+            self.page.services.append(self._active_rewarded_ad)
+            self.page.update()
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)
