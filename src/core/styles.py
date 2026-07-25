@@ -195,7 +195,10 @@ def build_native_ad(
             ),
         )
 
-        ad = ad_service.get_native_ad(template_style=style)
+        # flet-ads plugin has a NativeAd python class but it is NOT implemented
+        # on the Flutter/Dart side yet, which causes "unknown control: NativeAd"
+        # on the device. We gracefully fallback to a standard BannerAd here.
+        ad = build_banner_ad(page)
     except Exception as e:
         logger.warning("Failed to load NativeAd in styles: %s", e)
         return ft.Container(width=0, height=0)

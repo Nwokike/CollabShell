@@ -141,6 +141,8 @@ class AdService:
                 on_error=lambda e: logger.error("Interstitial error: %s", e),
                 on_close=self._handle_close,
             )
+            self.page.overlay.append(self.interstitial)
+            self.page.update()
         except Exception as e:
             logger.error("Failed to preload interstitial: %s", e)
             self.interstitial = None
@@ -192,6 +194,8 @@ class AdService:
                     "Rewarded Interstitial error: %s", e.data
                 ),
             )
+            self.page.overlay.append(self._active_rewarded_ad)
+            self.page.update()
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)
