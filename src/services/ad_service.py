@@ -19,6 +19,25 @@ try:
     import flet_ads as fta
     from flet_ads.native_ad import NativeAd
 
+    class SafeAdMixin:
+        def init(self):
+            try:
+                super().init()
+            except RuntimeError as e:
+                if "Control must be added to the page first" in str(e):
+                    pass
+                else:
+                    raise
+
+    class SafeBannerAd(SafeAdMixin, fta.BannerAd):
+        pass
+
+    class SafeInterstitialAd(SafeAdMixin, fta.InterstitialAd):
+        pass
+
+    class SafeNativeAd(SafeAdMixin, NativeAd):
+        pass
+
     _HAS_ADS = True
 except ImportError:
     _HAS_ADS = False
@@ -73,7 +92,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = fta.BannerAd(
+            ad = SafeBannerAd(
                 unit_id=self.banner_id,
                 width=320,
                 height=50,
@@ -100,7 +119,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
-            ad = NativeAd(
+            ad = SafeNativeAd(
                 unit_id=self.native_id,
                 template_style=template_style,
                 on_error=lambda e: None,
@@ -116,7 +135,7 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile():
             return
         try:
-            self.interstitial = fta.InterstitialAd(
+            self.interstitial = SafeInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: None,
                 on_error=lambda e: logger.error("Interstitial error: %s", e),
@@ -165,7 +184,7 @@ class AdService:
                 else:
                     on_close()
 
-            self._active_rewarded_ad = fta.InterstitialAd(
+            self._active_rewarded_ad = SafeInterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),
