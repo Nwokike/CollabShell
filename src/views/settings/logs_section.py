@@ -9,16 +9,15 @@ from core.styles import glass_card, section_header
 
 def get_live_logs() -> str:
     """Retrieve combined live in-memory and disk log contents."""
-    from core.storage_patch import MemoryLogHandler
+    from core.storage_patch import MemoryLogHandler, resolve_storage_dir
 
     memory_logs = MemoryLogHandler.get_logs()
     if memory_logs:
         return "\n".join(memory_logs)
 
     import os
-    from services.storage_service import get_storage_dir
 
-    log_file = os.path.join(get_storage_dir(), "colab.log")
+    log_file = os.path.join(resolve_storage_dir(), "colab.log")
     if os.path.exists(log_file):
         try:
             with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
@@ -44,12 +43,12 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
     async def _copy_logs(e):
         try:
             await page.set_clipboard(log_control.value)
-            page.show_dialog(
-                ft.SnackBar(
-                    content=ft.Text("Activity logs copied to clipboard"),
-                    bgcolor=AppColors.SUCCESS,
-                )
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text("Activity logs copied to clipboard"),
+                bgcolor=AppColors.SUCCESS,
             )
+            page.snack_bar.open = True
+            page.update()
         except Exception:
             pass
 
