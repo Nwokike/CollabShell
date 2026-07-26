@@ -82,6 +82,7 @@ async def main(page: ft.Page):
     storage = StorageService(page)
     ad_service = AdService(page)
     state.ad_service = ad_service
+    await ad_service.gather_consent()
     page.run_task(ad_service.preload_interstitial)
 
     file_picker = ft.FilePicker()

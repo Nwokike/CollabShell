@@ -76,6 +76,7 @@ def build_session_card(
         border_radius=tokens.RADIUS_MD,
         bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+        margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
         on_click=on_click,
         ink=True,
     )

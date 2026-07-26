@@ -111,15 +111,14 @@ def build_session_selector_view(
     # Top action: New Session
     new_session_btn = ft.Container(
         content=ft.ListTile(
-            leading=ft.Icon(ft.Icons.ADD_ROUNDED, color=ft.Colors.ON_PRIMARY),
+            leading=ft.Icon(ft.Icons.ADD_ROUNDED, color=ft.Colors.ON_SURFACE),
             title=ft.Text(
-                "New Session", color=ft.Colors.ON_PRIMARY, weight=ft.FontWeight.BOLD
+                "New Session", color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600
             ),
         ),
-        bgcolor=ft.Colors.PRIMARY,
-        border_radius=tokens.RADIUS_LG,
         on_click=_on_new,
         margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
+        ink=True,
     )
 
     controls = []

@@ -181,9 +181,7 @@ class SessionController:
             if (i + 1) % 2 == 0:
                 from core.styles import build_banner_ad
 
-                self.cells_list.controls.append(
-                    build_banner_ad(self.page)
-                )
+                self.cells_list.controls.append(build_banner_ad(self.page))
         self.page.run_task(self.deferred_update)
 
     def stop_cell(self, idx):

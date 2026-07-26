@@ -1,6 +1,6 @@
 import flet as ft
 
-from components.notebook_cell.actions import copy_output, make_actions_row
+from components.notebook_cell.actions import copy_code, copy_output, make_actions_row
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from core.theme import AppColors
@@ -48,11 +48,20 @@ def build_notebook_cell(
             if on_change:
                 on_change()
 
-    async def _copy_output(e):
-        await copy_output(page, outputs)
+    async def _copy_output(e=None):
+        await copy_output(page, cell.get("outputs", []))
+
+    async def _copy_code_task(e=None):
+        code_val = editor_ref.current.value if editor_ref.current else source
+        await copy_code(page, code_val)
 
     def _make_actions_row():
-        return make_actions_row(on_move_up, on_move_down, on_delete)
+        return make_actions_row(
+            on_move_up=on_move_up,
+            on_move_down=on_move_down,
+            on_delete=on_delete,
+            on_copy=lambda: page.run_task(_copy_code_task),
+        )
 
     if cell_type == "markdown":
         is_editing_initial = cell.get("is_editing", not bool(source.strip()))
@@ -222,7 +231,7 @@ def build_notebook_cell(
                         ft.Icons.COPY_ALL_ROUNDED,
                         icon_size=tokens.ICON_SM,
                         tooltip="Copy Output",
-                        on_click=_copy_output,
+                        on_click=lambda e: page.run_task(_copy_output, e),
                     ),
                     ft.IconButton(
                         ft.Icons.CLEAR_ALL_ROUNDED,
