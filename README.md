@@ -8,9 +8,8 @@
 
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=ng.kiri.collabshell"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
-  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Windows_EXE-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows EXE" /></a>
-  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux_DEB-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux DEB" /></a>
-  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux_RPM-E91E63?style=for-the-badge&logo=redhat&logoColor=white" alt="Linux RPM" /></a>
+  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /></a>
+  <a href="https://github.com/Nwokike/CollabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /></a>
   <img src="https://img.shields.io/badge/Built_with-Flet_0.86-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
