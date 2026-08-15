@@ -1,14 +1,16 @@
-"""Onboarding presentation slides."""
+"""Onboarding presentation slides for Colab."""
 
 from __future__ import annotations
 
 import flet as ft
 
 from components.brand_header import build_brand_header
-from core import tokens
+from core import constants, tokens
+from core.theme import AppColors
 
 
-def feature_row(icon, title, subtitle):
+def feature_row(icon, title: str, subtitle: str) -> ft.Container:
+    """Feature row with icon badge and title/subtitle."""
     return ft.Container(
         content=ft.Row(
             controls=[
@@ -40,7 +42,8 @@ def feature_row(icon, title, subtitle):
     )
 
 
-def build_page_1():
+def build_page_1() -> ft.Column:
+    """Slide 1: Brand welcome and core capabilities."""
     return ft.Column(
         controls=[
             build_brand_header(),
@@ -63,13 +66,15 @@ def build_page_1():
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         spacing=tokens.SPACE_SM,
+        scroll=ft.ScrollMode.AUTO,
     )
 
 
-def build_page_2():
+def build_page_2() -> ft.Column:
+    """Slide 2: How it works and free-tier hardware guide."""
     return ft.Column(
         controls=[
-            ft.Container(height=tokens.SPACE_XL),
+            ft.Container(height=tokens.SPACE_LG),
             ft.Icon(
                 ft.Icons.ROCKET_LAUNCH_ROUNDED,
                 size=tokens.ICON_XXXL,
@@ -122,4 +127,132 @@ def build_page_2():
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         spacing=tokens.SPACE_SM,
+        scroll=ft.ScrollMode.AUTO,
+    )
+
+
+def build_page_3(
+    auth_code_ref: ft.Ref,
+    auth_code_val: str,
+    on_auth_code_change,
+    show_verify: bool,
+    auth_status: str,
+    auth_status_color,
+    is_loading_auth: bool,
+    on_start_auth,
+    on_submit_code,
+) -> ft.Column:
+    """Slide 3: Google Sign-In with status badge and browser guidance."""
+    return ft.Column(
+        controls=[
+            ft.Container(height=tokens.SPACE_LG),
+            ft.Icon(
+                ft.Icons.LOCK_OPEN_ROUNDED,
+                size=tokens.ICON_XXXL,
+                color=ft.Colors.PRIMARY,
+            ),
+            ft.Text(
+                "Sign in to Google",
+                size=tokens.FONT_XXL,
+                weight=ft.FontWeight.W_700,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Text(
+                "Required to create and manage Collab Shell sessions",
+                size=tokens.FONT_SM,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            ft.Container(height=tokens.SPACE_MD),
+            # Reassuring CLI engine status badge
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(
+                            ft.Icons.CHECK_CIRCLE_ROUNDED,
+                            size=tokens.ICON_MD,
+                            color=AppColors.SUCCESS,
+                        ),
+                        ft.Text(
+                            "Colab CLI ready",
+                            size=tokens.FONT_SM,
+                            weight=ft.FontWeight.W_500,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                ),
+                padding=ft.Padding(
+                    tokens.SPACE_LG,
+                    tokens.SPACE_MD,
+                    tokens.SPACE_LG,
+                    tokens.SPACE_MD,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+                border_radius=tokens.RADIUS_MD,
+            ),
+            ft.Container(height=tokens.SPACE_MD),
+            # Critical in-app browser guidance note
+            ft.Container(
+                content=ft.Text(
+                    "💡 IMPORTANT: A browser will open over the app. After copying the code, press the 'X' button at the top left to close the browser and return here.",
+                    size=tokens.FONT_XS,
+                    color=AppColors.WARNING,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
+            ),
+            ft.Container(height=tokens.SPACE_XS),
+            ft.FilledButton(
+                content=ft.Text(constants.LBL_SIGN_IN),
+                icon=ft.Icons.LOGIN_ROUNDED,
+                width=float("inf"),
+                style=ft.ButtonStyle(
+                    padding=ft.Padding(
+                        tokens.SPACE_XL,
+                        tokens.SPACE_MD,
+                        tokens.SPACE_XL,
+                        tokens.SPACE_MD,
+                    ),
+                ),
+                disabled=is_loading_auth,
+                on_click=on_start_auth,
+            ),
+            ft.TextField(
+                ref=auth_code_ref,
+                value=auth_code_val,
+                label="Paste authorization code",
+                prefix_icon=ft.Icons.KEY_ROUNDED,
+                border_radius=tokens.RADIUS_MD,
+                text_size=tokens.FONT_MD,
+                visible=show_verify,
+                on_change=on_auth_code_change,
+                on_submit=on_submit_code,
+            ),
+            ft.FilledTonalButton(
+                content=ft.Text("Verify Code"),
+                icon=ft.Icons.VERIFIED_ROUNDED,
+                visible=show_verify,
+                disabled=is_loading_auth,
+                width=float("inf"),
+                on_click=on_submit_code,
+            ),
+            ft.Text(
+                value=auth_status,
+                size=tokens.FONT_SM,
+                color=auth_status_color,
+                text_align=ft.TextAlign.CENTER,
+                visible=bool(auth_status),
+            ),
+            ft.Divider(height=tokens.SPACE_SM),
+            ft.Text(
+                "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
+                size=tokens.FONT_XXS,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                text_align=ft.TextAlign.CENTER,
+                italic=True,
+            ),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=tokens.SPACE_SM,
+        scroll=ft.ScrollMode.AUTO,
     )
