@@ -1,4 +1,6 @@
-"""File item — reusable list item for the file browser."""
+"""File item — reusable list item for the file browser matching SpanInsight."""
+
+from __future__ import annotations
 
 import flet as ft
 
@@ -32,7 +34,7 @@ def _file_icon(name: str, is_dir: bool) -> ft.Icons:
     return icon_map.get(ext, ft.Icons.INSERT_DRIVE_FILE_ROUNDED)
 
 
-def _format_size(size_bytes) -> str:
+def _format_size(size_bytes: int | float | None) -> str:
     """Format file size to human-readable string."""
     if size_bytes is None or size_bytes == 0:
         return ""
@@ -45,68 +47,74 @@ def _format_size(size_bytes) -> str:
 
 
 def build_file_item(
-    file_info: dict,
+    file_info: dict | None = None,
+    item: dict | None = None,
     selected: bool = False,
+    is_selected: bool = False,
+    selection_mode: bool = False,
     on_click=None,
+    on_tap=None,
+    on_long_press=None,
 ) -> ft.Container:
-    """Build a file browser list item.
+    """Build a file browser list item matching SpanInsight's visual style."""
+    data = file_info or item or {}
+    name = data.get("name", "")
+    is_dir = data.get("type") == "directory" or data.get("is_dir", False)
+    size = data.get("size", 0)
 
-    file_info dict: name, type ("directory" | "file"), size
-    """
-    name = file_info.get("name", "")
-    is_dir = file_info.get("type") == "directory"
-    size = file_info.get("size", 0)
+    is_sel = selected or is_selected
+    click_fn = on_click or on_tap
 
     icon = _file_icon(name, is_dir)
 
-    trailing_icon = (
-        ft.Icons.CHECK_CIRCLE_ROUNDED if selected else ft.Icons.RADIO_BUTTON_UNCHECKED
-    )
-
-    return ft.Container(
-        bgcolor=ft.Colors.PRIMARY_CONTAINER if selected else ft.Colors.TRANSPARENT,
-        border_radius=tokens.RADIUS_MD,
-        content=ft.Row(
+    controls: list[ft.Control] = [
+        ft.Icon(
+            icon,
+            size=tokens.ICON_LG,
+            color=ft.Colors.PRIMARY if is_dir else ft.Colors.ON_SURFACE_VARIANT,
+        ),
+        ft.Column(
             controls=[
-                ft.Icon(
-                    icon,
-                    size=tokens.ICON_LG,
-                    color=ft.Colors.PRIMARY if is_dir else ft.Colors.ON_SURFACE_VARIANT,
+                ft.Text(
+                    name,
+                    size=tokens.FONT_MD,
+                    weight=ft.FontWeight.W_500 if is_dir else ft.FontWeight.W_400,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
                 ),
-                ft.Column(
-                    controls=[
-                        ft.Text(
-                            name,
-                            size=tokens.FONT_MD,
-                            weight=ft.FontWeight.W_500
-                            if is_dir
-                            else ft.FontWeight.W_400,
-                            max_lines=1,
-                            overflow=ft.TextOverflow.ELLIPSIS,
-                        ),
-                        ft.Text(
-                            _format_size(size) if not is_dir else "Folder",
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_XXS,
-                    expand=True,
-                ),
-                ft.Icon(
-                    trailing_icon,
-                    size=tokens.ICON_MD,
-                    color=ft.Colors.PRIMARY
-                    if selected
-                    else ft.Colors.ON_SURFACE_VARIANT,
+                ft.Text(
+                    _format_size(size) if not is_dir else "Folder",
+                    size=tokens.FONT_XS,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
             ],
+            spacing=tokens.SPACE_XXS,
+            expand=True,
+        ),
+    ]
+
+    # Show selection checkbox/radio when in selection mode
+    if selection_mode or is_sel:
+        controls.append(
+            ft.Icon(
+                ft.Icons.CHECK_CIRCLE_ROUNDED if is_sel else ft.Icons.RADIO_BUTTON_UNCHECKED,
+                size=tokens.ICON_MD,
+                color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE_VARIANT,
+            )
+        )
+
+    return ft.Container(
+        bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY) if is_sel else ft.Colors.TRANSPARENT,
+        border_radius=tokens.RADIUS_MD,
+        content=ft.Row(
+            controls=controls,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_MD,
         ),
         padding=ft.Padding(
             tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
         ),
-        on_click=on_click,
+        on_click=click_fn,
+        on_long_press=on_long_press,
         ink=True,
     )

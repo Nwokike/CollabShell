@@ -1,8 +1,4 @@
-"""Display preferences settings section (light/dark/system themes).
-
-Uses @ft.component so that when theme changes, the buttons re-render
-with the new selected state (highlighting the active theme correctly).
-"""
+"""Display preferences settings section (light/dark/system themes) matching SpanInsight polish."""
 
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ from core.styles import glass_card, section_header
 
 @ft.component
 def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
-    # Local reactive state mirrors state.theme_mode so toggling re-renders.
+    # Local reactive state mirrors state.theme_mode so toggling re-renders immediately.
     current_mode, set_current_mode = ft.use_state(state.theme_mode)
 
     def _make_theme_btn(label: str, mode: ft.ThemeMode) -> ft.Control:
@@ -23,7 +19,7 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
         def _select(e, m=mode, lbl=label):
             page.theme_mode = m
             state.theme_mode = m
-            set_current_mode(m)  # triggers reactive re-render
+            set_current_mode(m)
             page.run_task(
                 services.storage.set,
                 constants.STORAGE_THEME,
@@ -43,10 +39,11 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
                         color=ft.Colors.PRIMARY
                         if is_sel
                         else ft.Colors.ON_SURFACE_VARIANT,
+                        size=tokens.ICON_MD,
                     ),
                     ft.Text(
                         label,
-                        size=tokens.FONT_XS,
+                        size=tokens.FONT_SM,
                         color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE,
                         weight=ft.FontWeight.W_600
                         if is_sel
@@ -64,9 +61,13 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
                 tokens.SPACE_MD,
             ),
             border_radius=tokens.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(tokens.OPACITY_ACCENT, ft.Colors.PRIMARY)
+            border=ft.Border.all(2, ft.Colors.PRIMARY)
+            if is_sel
+            else ft.Border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.ON_SURFACE)),
+            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY)
             if is_sel
             else ft.Colors.with_opacity(tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
             on_click=_select,
             ink=True,
         )
@@ -92,7 +93,7 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         ft.Text(
-                                            "Appearance mode",
+                                            "Choose Light, Dark, or System default",
                                             size=tokens.FONT_XS,
                                             color=ft.Colors.ON_SURFACE_VARIANT,
                                         ),

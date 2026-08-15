@@ -4,6 +4,8 @@ APP_NAME = "Colab Shell"
 APP_FULL_NAME = "Colab Shell: Notebook & TTY"
 APP_VERSION = "1.2.0"
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=ng.kiri.collabshell"
+PRIVACY_POLICY_URL = "https://kiri.ng/privacy"
+TERMS_OF_SERVICE_URL = "https://kiri.ng/terms"
 
 # ── Storage keys ──────────────────────────────────────────────────────────────
 STORAGE_THEME = "colab_theme"

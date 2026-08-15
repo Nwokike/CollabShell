@@ -10,6 +10,7 @@ from screens.settings.about_section import build_about_section
 from screens.settings.account_section import build_account_section
 from screens.settings.advanced_section import build_advanced_section
 from screens.settings.behavior_section import build_behavior_section
+from screens.settings.data_section import build_data_section
 from screens.settings.execution_section import build_execution_section
 from screens.settings.hardware_section import build_hardware_section
 from screens.settings.logs_section import build_logs_section
@@ -34,6 +35,7 @@ def SettingsScreen() -> ft.Control:
             build_account_section(page, state, services),
             build_advanced_section(page, state, services),
             build_logs_section(page, state, services),
+            build_data_section(page, state, services),
             build_about_section(page, state, services),
             ft.Container(height=tokens.SPACE_XXL),
         ],

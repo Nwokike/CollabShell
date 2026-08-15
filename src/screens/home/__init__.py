@@ -1,4 +1,4 @@
-"""HomeScreen — session list, quick actions, offline banner."""
+"""HomeScreen — session list, quick actions, offline banner, and feature overview."""
 
 from __future__ import annotations
 
@@ -10,45 +10,13 @@ from components.session_card import build_session_card
 from core import constants, tokens
 from core.styles import build_banner_ad, glass_card
 from core.theme import AppColors
+from screens.home.cards import action_button, feature_card, step_row
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
-
-
-def _action_button(icon, label, on_click, color=None) -> ft.Control:
-    return ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Container(
-                    content=ft.Icon(
-                        icon, size=tokens.ICON_XL, color=color or ft.Colors.PRIMARY
-                    ),
-                    width=tokens.CARD_ICON_CONTAINER,
-                    height=tokens.CARD_ICON_CONTAINER,
-                    border_radius=tokens.RADIUS_MD,
-                    bgcolor=ft.Colors.with_opacity(0.1, color or ft.Colors.PRIMARY),
-                    alignment=ft.Alignment.CENTER,
-                ),
-                ft.Text(
-                    label,
-                    size=tokens.FONT_XS,
-                    text_align=ft.TextAlign.CENTER,
-                    weight=ft.FontWeight.W_500,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=tokens.SPACE_SM,
-        ),
-        on_click=on_click,
-        expand=True,
-        ink=True,
-        padding=ft.Padding(
-            tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD
-        ),
-        border_radius=tokens.RADIUS_MD,
-    )
 
 
 @ft.component
 def HomeScreen() -> ft.Control:
+    """Landing dashboard — active sessions, quick action launch, features and guide."""
     state = ft.use_context(AppStateCtx)
     services = ft.use_context(ServiceCtx)
     controller = ft.use_context(ControllerMethodsCtx)
@@ -157,51 +125,7 @@ def HomeScreen() -> ft.Control:
         visible=bool(state.update_available_version),
     )
 
-    # ── Sessions list ─────────────────────────────────────────────────────────
-    if is_loading:
-        sessions_content: ft.Control = ft.Container(
-            content=ft.ProgressRing(width=tokens.SPINNER_LG, height=tokens.SPINNER_LG),
-            alignment=ft.Alignment.CENTER,
-            padding=tokens.SPACE_XXL,
-        )
-    elif not sessions:
-        sessions_content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(
-                        ft.Icons.STORAGE_ROUNDED,
-                        size=tokens.ICON_XXL,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                    ft.Text(
-                        "No active sessions",
-                        size=tokens.FONT_MD,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                    ft.Text(
-                        "Tap New Notebook, Terminal, or Files to create one.",
-                        size=tokens.FONT_XS,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=tokens.SPACE_SM,
-            ),
-            alignment=ft.Alignment.CENTER,
-            padding=tokens.SPACE_XXL,
-        )
-    else:
-        sessions_content = ft.Column(
-            controls=[
-                build_session_card(
-                    session=s, on_click=lambda e, s=s: _on_session_tap(s)
-                )
-                for s in sessions
-            ],
-            spacing=0,
-        )
-
-    # ── Auth status chip ──────────────────────────────────────────────────
+    # ── Auth status chip ──────────────────────────────────────────────────────
     auth_status_chip = ft.Container(
         content=ft.Row(
             controls=[
@@ -236,60 +160,52 @@ def HomeScreen() -> ft.Control:
         margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
     )
 
-    # ── Feature cards ─────────────────────────────────────────────────────
-    def _feature_card(
-        icon: str, title: str, desc: str, color
-    ) -> ft.Container:
-        return ft.Container(
-            content=ft.Row(
+    # ── Sessions list content ─────────────────────────────────────────────────
+    if is_loading:
+        sessions_content: ft.Control = ft.Container(
+            content=ft.ProgressRing(width=tokens.SPINNER_LG, height=tokens.SPINNER_LG),
+            alignment=ft.Alignment.CENTER,
+            padding=tokens.SPACE_XXL,
+        )
+    elif not sessions:
+        sessions_content = ft.Container(
+            content=ft.Column(
                 controls=[
-                    ft.Container(
-                        content=ft.Icon(
-                            icon, size=tokens.ICON_LG, color=color
-                        ),
-                        width=tokens.ICON_CONTAINER_SM,
-                        height=tokens.ICON_CONTAINER_SM,
-                        border_radius=tokens.RADIUS_MD,
-                        bgcolor=ft.Colors.with_opacity(
-                            tokens.OPACITY_ACCENT, color
-                        ),
-                        alignment=ft.Alignment.CENTER,
+                    ft.Icon(
+                        ft.Icons.STORAGE_ROUNDED,
+                        size=tokens.ICON_XXL,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
-                    ft.Column(
-                        controls=[
-                            ft.Text(
-                                title,
-                                size=tokens.FONT_SM,
-                                weight=ft.FontWeight.W_600,
-                            ),
-                            ft.Text(
-                                desc,
-                                size=tokens.FONT_XS,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                                max_lines=3,
-                                overflow=ft.TextOverflow.ELLIPSIS,
-                            ),
-                        ],
-                        spacing=tokens.SPACE_NANO,
-                        expand=True,
+                    ft.Text(
+                        "No active sessions",
+                        size=tokens.FONT_MD,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                    ft.Text(
+                        "Tap New Notebook, Terminal, or Files to create one.",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                 ],
-                spacing=tokens.SPACE_MD,
-                vertical_alignment=ft.CrossAxisAlignment.START,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=tokens.SPACE_SM,
             ),
-            padding=tokens.SPACE_LG,
-            border_radius=tokens.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(
-                tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE
-            ),
-            border=ft.Border.all(
-                tokens.DIVIDER_THICKNESS,
-                ft.Colors.with_opacity(
-                    tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE
-                ),
-            ),
+            alignment=ft.Alignment.CENTER,
+            padding=tokens.SPACE_XXL,
+        )
+    else:
+        sessions_content = ft.Column(
+            controls=[
+                build_session_card(
+                    session=s, on_click=lambda e, s=s: _on_session_tap(s)
+                )
+                for s in sessions
+            ],
+            spacing=0,
         )
 
+    # ── Features section ──────────────────────────────────────────────────────
     features_section = ft.Container(
         content=ft.Column(
             controls=[
@@ -299,25 +215,25 @@ def HomeScreen() -> ft.Control:
                     weight=ft.FontWeight.W_600,
                 ),
                 ft.Container(height=tokens.SPACE_SM),
-                _feature_card(
+                feature_card(
                     ft.Icons.MENU_BOOK_ROUNDED,
                     "Interactive Jupyter Notebooks",
                     "Open and run .ipynb notebooks, execute code cell by cell, and view rich Markdown and outputs.",
                     AppColors.BADGE_GPU,
                 ),
-                _feature_card(
+                feature_card(
                     ft.Icons.TERMINAL_ROUNDED,
                     "Full Interactive Terminal",
                     "Real-time bash shell access to your cloud runtime with live stdin/stdout streaming.",
                     AppColors.BADGE_TPU,
                 ),
-                _feature_card(
+                feature_card(
                     ft.Icons.MEMORY_ROUNDED,
                     "Free Hardware Accelerators",
                     "Harness Google Colab's free CPU, T4 GPU, and TPU v2/v3 runtimes for heavy computation.",
                     ft.Colors.PRIMARY,
                 ),
-                _feature_card(
+                feature_card(
                     ft.Icons.FOLDER_SPECIAL_ROUNDED,
                     "Cloud File Explorer",
                     "Browse, upload, download, and manage remote workspace files in your Colab container.",
@@ -334,45 +250,7 @@ def HomeScreen() -> ft.Control:
         ),
     )
 
-    # ── How It Works ─────────────────────────────────────────────────────────
-    def _step_row(number: str, title: str, desc: str) -> ft.Row:
-        return ft.Row(
-            controls=[
-                ft.Container(
-                    content=ft.Text(
-                        number,
-                        size=tokens.FONT_SM,
-                        weight=ft.FontWeight.W_700,
-                        color=ft.Colors.WHITE,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=tokens.STEP_BADGE_SIZE,
-                    height=tokens.STEP_BADGE_SIZE,
-                    border_radius=tokens.STEP_BADGE_RADIUS,
-                    bgcolor=ft.Colors.PRIMARY,
-                    alignment=ft.Alignment.CENTER,
-                ),
-                ft.Column(
-                    controls=[
-                        ft.Text(
-                            title,
-                            size=tokens.FONT_SM,
-                            weight=ft.FontWeight.W_600,
-                        ),
-                        ft.Text(
-                            desc,
-                            size=tokens.FONT_XS,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_XXS,
-                    expand=True,
-                ),
-            ],
-            spacing=tokens.SPACE_MD,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
+    # ── How It Works section ──────────────────────────────────────────────────
     how_it_works = ft.Container(
         content=ft.Column(
             controls=[
@@ -382,17 +260,17 @@ def HomeScreen() -> ft.Control:
                     weight=ft.FontWeight.W_600,
                 ),
                 ft.Container(height=tokens.SPACE_SM),
-                _step_row(
+                step_row(
                     "1",
                     "Sign In",
                     "Authenticate securely with your Google account",
                 ),
-                _step_row(
+                step_row(
                     "2",
                     "Create Session",
                     "Start a workspace session and select your hardware",
                 ),
-                _step_row(
+                step_row(
                     "3",
                     "Start Coding",
                     "Navigate to Notebooks or Terminal from the bottom bar",
@@ -421,17 +299,17 @@ def HomeScreen() -> ft.Control:
                         glass_card(
                             ft.Row(
                                 controls=[
-                                    _action_button(
+                                    action_button(
                                         ft.Icons.EDIT_NOTE_ROUNDED,
                                         constants.LBL_NEW_NOTEBOOK,
                                         lambda e: _on_new_session("notebook"),
                                     ),
-                                    _action_button(
+                                    action_button(
                                         ft.Icons.TERMINAL_ROUNDED,
                                         constants.LBL_NEW_TERMINAL,
                                         lambda e: _on_new_session("terminal"),
                                     ),
-                                    _action_button(
+                                    action_button(
                                         ft.Icons.FOLDER_ROUNDED,
                                         constants.LBL_FILES,
                                         lambda e: _on_new_session("files"),
@@ -451,7 +329,7 @@ def HomeScreen() -> ft.Control:
                 padding=ft.Padding(0, tokens.SPACE_SM, 0, 0),
             ),
             build_banner_ad(page),
-            # Sessions
+            # Sessions header & list
             ft.Container(
                 content=ft.Row(
                     controls=[
