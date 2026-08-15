@@ -13,16 +13,16 @@ def feature_row(icon, title, subtitle):
         content=ft.Row(
             controls=[
                 ft.Container(
-                    content=ft.Icon(icon, size=tokens.ICON_MD, color=ft.Colors.PRIMARY),
-                    width=tokens.AVATAR_MD,
-                    height=tokens.AVATAR_MD,
+                    content=ft.Icon(icon, size=tokens.ICON_XL, color=ft.Colors.PRIMARY),
+                    width=tokens.CARD_ICON_CONTAINER,
+                    height=tokens.CARD_ICON_CONTAINER,
                     border_radius=tokens.RADIUS_MD,
                     bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.PRIMARY),
                     alignment=ft.Alignment.CENTER,
                 ),
                 ft.Column(
                     controls=[
-                        ft.Text(title, size=tokens.FONT_MD, weight=ft.FontWeight.W_600),
+                        ft.Text(title, size=tokens.FONT_LG, weight=ft.FontWeight.W_600),
                         ft.Text(
                             subtitle,
                             size=tokens.FONT_SM,

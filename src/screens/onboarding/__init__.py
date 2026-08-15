@@ -27,13 +27,13 @@ def _build_slide_3(
         controls=[
             ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=80, color=ft.Colors.PRIMARY),
             ft.Text(
-                constants.LBL_SIGN_IN_TITLE,
+                "Sign in to Google",
                 size=tokens.FONT_XL,
                 weight=ft.FontWeight.BOLD,
                 text_align=ft.TextAlign.CENTER,
             ),
             ft.Text(
-                constants.LBL_SIGN_IN_BODY,
+                "Required to create and manage Collab Shell sessions",
                 size=tokens.FONT_SM,
                 color=ft.Colors.ON_SURFACE_VARIANT,
                 text_align=ft.TextAlign.CENTER,

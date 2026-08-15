@@ -136,12 +136,13 @@ def HomeScreen() -> ft.Control:
                 ft.TextButton(
                     "Update",
                     style=ft.ButtonStyle(color=ft.Colors.ON_TERTIARY_CONTAINER),
-                    on_click=lambda e: (
-                        page.run_task(
-                            ft.UrlLauncher().launch_url, constants.PLAY_STORE_URL
-                        )
-                        if hasattr(constants, "PLAY_STORE_URL")
-                        else None
+                    on_click=lambda e: page.run_task(
+                        ft.UrlLauncher().launch_url,
+                        getattr(
+                            constants,
+                            "PLAY_STORE_URL",
+                            "https://play.google.com/store/apps/details?id=ng.kiri.collabshell",
+                        ),
                     ),
                 ),
             ],
