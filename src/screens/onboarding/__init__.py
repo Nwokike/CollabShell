@@ -208,7 +208,6 @@ def OnboardingScreen() -> ft.Control:
     if page_idx == 2:
         next_btn = ft.FilledButton(
             content=ft.Text("Get Started"),
-            disabled=not state.is_authenticated,
             on_click=lambda e: page.run_task(_on_get_started, e),
         )
     else:

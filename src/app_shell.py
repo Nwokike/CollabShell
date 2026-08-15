@@ -65,7 +65,7 @@ def AppShell() -> ft.Control:
         return OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
 
     # ── 2. Onboarding flow ────────────────────────────────────────────────────
-    if not state.onboarding_done or not state.is_authenticated:
+    if not state.onboarding_done:
         return OnboardingScreen()
 
     # ── 3. Active session fullscreen ──────────────────────────────────────────
@@ -151,14 +151,6 @@ def AppShell() -> ft.Control:
         )
 
     # ── 5. Main Tabbed Navigation ─────────────────────────────────────────────
-    tab_screens = [
-        HomeScreen(),
-        SessionSelectorTab(mode="notebook"),
-        SessionSelectorTab(mode="terminal"),
-        SessionSelectorTab(mode="files"),
-        SettingsScreen(),
-    ]
-
     tab_titles = [
         constants.LBL_HOME,
         constants.LBL_NOTEBOOKS,
@@ -166,6 +158,17 @@ def AppShell() -> ft.Control:
         constants.LBL_CLOUD_FILES,
         constants.LBL_SETTINGS,
     ]
+
+    if state.selected_tab == 1:
+        screen = SessionSelectorTab(mode="notebook", key=ft.ValueKey("notebooks"))
+    elif state.selected_tab == 2:
+        screen = SessionSelectorTab(mode="terminal", key=ft.ValueKey("terminal"))
+    elif state.selected_tab == 3:
+        screen = SessionSelectorTab(mode="files", key=ft.ValueKey("files"))
+    elif state.selected_tab == 4:
+        screen = SettingsScreen(key=ft.ValueKey("settings"))
+    else:
+        screen = HomeScreen(key=ft.ValueKey("home"))
 
     nav_bar = ft.NavigationBar(
         selected_index=state.selected_tab,
@@ -242,7 +245,7 @@ def AppShell() -> ft.Control:
         controls=[
             header_bar,
             ft.Container(
-                content=tab_screens[state.selected_tab],
+                content=screen,
                 expand=True,
             ),
             nav_bar,
