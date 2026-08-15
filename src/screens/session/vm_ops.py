@@ -8,6 +8,7 @@ import logging
 import flet as ft
 
 from core import tokens
+from core.theme import AppColors
 
 logger = logging.getLogger("colab")
 
@@ -20,7 +21,12 @@ def _close_active_auth(page: ft.Page):
 
 
 async def on_mount_drive(
-    page: ft.Page, session_name: str, colab_service, state, snack=None, stdin_hook=None
+    page: ft.Page,
+    session_name: str,
+    colab_service,
+    state,
+    snack=None,
+    stdin_hook=None,
 ):
     dialog = ft.AlertDialog(
         title=ft.Text("Mounting Google Drive..."),
@@ -28,7 +34,11 @@ async def on_mount_drive(
             [
                 ft.Row(
                     [
-                        ft.ProgressRing(width=24, height=24, stroke_width=3),
+                        ft.ProgressRing(
+                            width=tokens.SPINNER_MD,
+                            height=tokens.SPINNER_MD,
+                            stroke_width=3,
+                        ),
                         ft.Text(
                             "Initiating mount on virtual machine...",
                             size=tokens.FONT_SM,
@@ -71,7 +81,11 @@ async def on_mount_drive(
             dialog.title = ft.Text("Success")
             dialog.content = ft.Row(
                 [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="green", size=24),
+                    ft.Icon(
+                        ft.Icons.CHECK_CIRCLE_ROUNDED,
+                        color=AppColors.SUCCESS,
+                        size=tokens.ICON_LG,
+                    ),
                     ft.Text(
                         f"Drive mounted at {state.drive_mount_path}",
                         size=tokens.FONT_SM,
@@ -95,7 +109,11 @@ async def on_mount_drive(
             dialog.title = ft.Text("Failed")
             dialog.content = ft.Row(
                 [
-                    ft.Icon(ft.Icons.ERROR_ROUNDED, color="red", size=24),
+                    ft.Icon(
+                        ft.Icons.ERROR_ROUNDED,
+                        color=AppColors.ERROR,
+                        size=tokens.ICON_LG,
+                    ),
                     ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
                 ],
                 spacing=tokens.SPACE_SM,
@@ -107,7 +125,12 @@ async def on_mount_drive(
 
 
 async def on_auth_gcp(
-    page: ft.Page, session_name: str, colab_service, state, snack=None, stdin_hook=None
+    page: ft.Page,
+    session_name: str,
+    colab_service,
+    state,
+    snack=None,
+    stdin_hook=None,
 ):
     dialog = ft.AlertDialog(
         title=ft.Text("Authenticating GCP..."),
@@ -115,7 +138,11 @@ async def on_auth_gcp(
             [
                 ft.Row(
                     [
-                        ft.ProgressRing(width=24, height=24, stroke_width=3),
+                        ft.ProgressRing(
+                            width=tokens.SPINNER_MD,
+                            height=tokens.SPINNER_MD,
+                            stroke_width=3,
+                        ),
                         ft.Text(
                             "Initiating GCP auth on virtual machine...",
                             size=tokens.FONT_SM,
@@ -157,7 +184,11 @@ async def on_auth_gcp(
             dialog.title = ft.Text("Success")
             dialog.content = ft.Row(
                 [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="green", size=24),
+                    ft.Icon(
+                        ft.Icons.CHECK_CIRCLE_ROUNDED,
+                        color=AppColors.SUCCESS,
+                        size=tokens.ICON_LG,
+                    ),
                     ft.Text(
                         "GCP authenticated successfully on VM",
                         size=tokens.FONT_SM,
@@ -181,7 +212,11 @@ async def on_auth_gcp(
             dialog.title = ft.Text("Failed")
             dialog.content = ft.Row(
                 [
-                    ft.Icon(ft.Icons.ERROR_ROUNDED, color="red", size=24),
+                    ft.Icon(
+                        ft.Icons.ERROR_ROUNDED,
+                        color=AppColors.ERROR,
+                        size=tokens.ICON_LG,
+                    ),
                     ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
                 ],
                 spacing=tokens.SPACE_SM,

@@ -107,16 +107,18 @@ class AdService:
         if not _HAS_ADS or not self._is_mobile() or not self._can_request_ads:
             return ft.Container(width=0, height=0)
         try:
+            from core import tokens
+
             ad = fta.BannerAd(
                 unit_id=self.banner_id,
-                width=320,
-                height=50,
+                width=tokens.BANNER_WIDTH,
+                height=tokens.BANNER_HEIGHT,
                 on_error=lambda e: None,
             )
             return ft.Container(
                 content=ad,
-                width=320,
-                height=50,
+                width=tokens.BANNER_WIDTH,
+                height=tokens.BANNER_HEIGHT,
                 alignment=ft.Alignment.CENTER,
             )
         except (

@@ -47,12 +47,16 @@ def AppShell() -> ft.Control:
                 [
                     ft.Image(
                         src="icon.png",
-                        width=72,
-                        height=72,
+                        width=tokens.HERO_ICON_SIZE,
+                        height=tokens.HERO_ICON_SIZE,
                         fit=ft.BoxFit.CONTAIN,
                     ),
-                    ft.Container(height=24),
-                    ft.ProgressRing(width=28, height=28, stroke_width=3),
+                    ft.Container(height=tokens.SPACE_XL),
+                    ft.ProgressRing(
+                        width=tokens.SPINNER_LG,
+                        height=tokens.SPINNER_LG,
+                        stroke_width=3,
+                    ),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,

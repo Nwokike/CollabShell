@@ -25,7 +25,11 @@ def _build_slide_3(
 ) -> ft.Control:
     return ft.Column(
         controls=[
-            ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=80, color=ft.Colors.PRIMARY),
+            ft.Icon(
+                ft.Icons.LOCK_OPEN_ROUNDED,
+                size=tokens.ICON_XXXL,
+                color=ft.Colors.PRIMARY,
+            ),
             ft.Text(
                 "Sign in to Google",
                 size=tokens.FONT_XL,
@@ -190,9 +194,9 @@ def OnboardingScreen() -> ft.Control:
     # ── Dot indicators ────────────────────────────────────────────────────────
     dots = [
         ft.Container(
-            width=10 if i == page_idx else 6,
-            height=6,
-            border_radius=3,
+            width=tokens.SPACE_MD if i == page_idx else tokens.SPACE_SM,
+            height=tokens.SPACE_SM,
+            border_radius=tokens.SPACE_XS,
             bgcolor=ft.Colors.PRIMARY
             if i == page_idx
             else ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE),

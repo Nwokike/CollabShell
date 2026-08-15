@@ -256,7 +256,7 @@ def HistoryScreen() -> ft.Control:
                                                 on_change=lambda e: set_max_lines(
                                                     e.control.value or "50"
                                                 ),
-                                                width=120,
+                                                width=tokens.INPUT_WIDTH_LG,
                                             ),
                                         ],
                                         spacing=tokens.SPACE_SM,

@@ -18,7 +18,7 @@ apply_storage_patches()
 
 from app_shell import AppShell
 from components.new_session_sheet import show_new_session_sheet
-from core import constants
+from core import constants, tokens
 from core.state import state
 from core.theme import AppTheme
 from services.ad_service import AdService
@@ -63,8 +63,8 @@ class AppController:
         page.theme_mode = ft.ThemeMode.SYSTEM
         state.theme_mode = page.theme_mode
 
-        page.window.min_width = 360
-        page.window.min_height = 600
+        page.window.min_width = tokens.WINDOW_MIN_WIDTH
+        page.window.min_height = tokens.WINDOW_MIN_HEIGHT
         page.padding = 0
         page.spacing = 0
 
