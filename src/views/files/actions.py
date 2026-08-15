@@ -106,52 +106,28 @@ async def do_download_selected_impl(ctrl, e=None):
     if not selected_items:
         return
 
-    if ctrl.state and getattr(ctrl.state, "ad_service", None):
-        await ctrl.state.ad_service.show_interstitial()
+    async def _do_downloads():
 
-    for item in selected_items:
-        name = item["name"]
-        is_dir = item.get("type") == "directory"
-        remote_path = posixpath.normpath(posixpath.join(ctrl.current_path, name))
+        for item in selected_items:
+            name = item["name"]
+            is_dir = item.get("type") == "directory"
+            remote_path = posixpath.normpath(posixpath.join(ctrl.current_path, name))
 
-        size_bytes = item.get("size")
-        size_str = ""
-        if size_bytes is not None:
-            if size_bytes < 1024:
-                size_str = f" ({size_bytes} B)"
-            elif size_bytes < 1024 * 1024:
-                size_str = f" ({size_bytes / 1024:.1f} KB)"
-            else:
-                size_str = f" ({size_bytes / (1024 * 1024):.1f} MB)"
-        elif is_dir:
-            size_str = " (folder)"
+            size_bytes = item.get("size")
+            size_str = ""
+            if size_bytes is not None:
+                if size_bytes < 1024:
+                    size_str = f" ({size_bytes} B)"
+                elif size_bytes < 1024 * 1024:
+                    size_str = f" ({size_bytes / 1024:.1f} KB)"
+                else:
+                    size_str = f" ({size_bytes / (1024 * 1024):.1f} MB)"
+            elif is_dir:
+                size_str = " (folder)"
 
-        default_name = f"{name}.zip" if is_dir else name
+            default_name = f"{name}.zip" if is_dir else name
 
-        if ctrl.page.platform in [
-            ft.PagePlatform.ANDROID,
-            ft.PagePlatform.ANDROID_TV,
-            ft.PagePlatform.IOS,
-        ]:
-            dl_dir = "/storage/emulated/0/Download"
-            if not os.path.exists(dl_dir):
-                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-            os.makedirs(dl_dir, exist_ok=True)
-
-            name_part, ext_part = os.path.splitext(default_name)
-            counter = 1
-            unique_name = default_name
-            while os.path.exists(os.path.join(dl_dir, unique_name)):
-                unique_name = f"{name_part} ({counter}){ext_part}"
-                counter += 1
-            local_path = os.path.join(dl_dir, unique_name)
-        else:
-            try:
-                local_path = await ctrl.page.file_picker.save_file(
-                    dialog_title=f"Save {default_name}",
-                    file_name=default_name,
-                )
-            except ValueError:
+            if ctrl.page.platform.is_mobile():
                 dl_dir = "/storage/emulated/0/Download"
                 if not os.path.exists(dl_dir):
                     dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -164,83 +140,112 @@ async def do_download_selected_impl(ctrl, e=None):
                     unique_name = f"{name_part} ({counter}){ext_part}"
                     counter += 1
                 local_path = os.path.join(dl_dir, unique_name)
-
-        if not local_path:
-            continue
-
-        prog_bar = ft.ProgressBar(
-            color=ft.Colors.PRIMARY,
-            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-        )
-
-        status_text = ft.Text(
-            f"Downloading...{size_str}",
-            size=tokens.FONT_XS,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-        )
-
-        download_dialog = ft.AlertDialog(
-            title=ft.Text(
-                f"Downloading {default_name}",
-                size=tokens.FONT_SM,
-                font_family="Outfit",
-            ),
-            content=ft.Column(
-                [
-                    prog_bar,
-                    status_text,
-                ],
-                spacing=tokens.SPACE_SM,
-                tight=True,
-            ),
-        )
-        ctrl.page.show_dialog(download_dialog)
-
-        def _on_status(msg: str, status_text=status_text):
-            status_text.value = msg
-            try:
-                status_text.update()
-            except Exception:
-                pass
-
-        try:
-            if is_dir:
-                await ctrl.colab_service.download_folder(
-                    remote_dir_path=remote_path,
-                    local_zip_path=local_path,
-                    session_name=ctrl.session_name,
-                    auth_method=ctrl.state.auth_method,
-                    on_status=_on_status,
-                )
             else:
-                await ctrl.colab_service.download(
-                    remote_path,
-                    local_path,
-                    session_name=ctrl.session_name,
-                    auth_method=ctrl.state.auth_method,
-                )
-            if ctrl.snack:
-                ctrl.snack(f"✅ Saved to {local_path}")
-        except Exception as ex:
-            if ctrl.snack:
-                ctrl.snack(f"❌ {ex}")
-        finally:
-            download_dialog.open = False
-            try:
-                ctrl.page.update()
-            except Exception:
-                pass
+                try:
+                    local_path = await ctrl.page.file_picker.save_file(
+                        dialog_title=f"Save {default_name}",
+                        file_name=default_name,
+                    )
+                except ValueError:
+                    dl_dir = "/storage/emulated/0/Download"
+                    if not os.path.exists(dl_dir):
+                        dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                    os.makedirs(dl_dir, exist_ok=True)
 
-    ctrl.selected_files.clear()
-    ctrl.file_list_container.content = ctrl.build_file_list()
-    ctrl.action_bar_container.content = ctrl.build_action_bar()
-    ctrl.upload_fab.visible = True
-    try:
-        ctrl.file_list_container.update()
-        ctrl.action_bar_container.update()
-        ctrl.upload_fab.update()
-    except Exception:
-        pass
+                    name_part, ext_part = os.path.splitext(default_name)
+                    counter = 1
+                    unique_name = default_name
+                    while os.path.exists(os.path.join(dl_dir, unique_name)):
+                        unique_name = f"{name_part} ({counter}){ext_part}"
+                        counter += 1
+                    local_path = os.path.join(dl_dir, unique_name)
+
+            if not local_path:
+                continue
+
+            prog_bar = ft.ProgressBar(
+                color=ft.Colors.PRIMARY,
+                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+            )
+
+            status_text = ft.Text(
+                f"Downloading...{size_str}",
+                size=tokens.FONT_XS,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
+
+            download_dialog = ft.AlertDialog(
+                title=ft.Text(
+                    f"Downloading {default_name}",
+                    size=tokens.FONT_SM,
+                    font_family="Outfit",
+                ),
+                content=ft.Column(
+                    [
+                        prog_bar,
+                        status_text,
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+            )
+            ctrl.page.show_dialog(download_dialog)
+
+            def _on_status(msg: str, status_text=status_text):
+                status_text.value = msg
+                try:
+                    status_text.update()
+                except Exception:
+                    pass
+
+            try:
+                if is_dir:
+                    await ctrl.colab_service.download_folder(
+                        remote_dir_path=remote_path,
+                        local_zip_path=local_path,
+                        session_name=ctrl.session_name,
+                        auth_method=ctrl.state.auth_method,
+                        on_status=_on_status,
+                    )
+                else:
+                    await ctrl.colab_service.download(
+                        remote_path,
+                        local_path,
+                        session_name=ctrl.session_name,
+                        auth_method=ctrl.state.auth_method,
+                    )
+                if ctrl.snack:
+                    ctrl.snack(f"✅ Saved to {local_path}")
+            except Exception as ex:
+                if ctrl.snack:
+                    ctrl.snack(f"❌ {ex}")
+            finally:
+                download_dialog.open = False
+                try:
+                    ctrl.page.update()
+                except Exception:
+                    pass
+
+        ctrl.selected_files.clear()
+        ctrl.file_list_container.content = ctrl.build_file_list()
+        ctrl.action_bar_container.content = ctrl.build_action_bar()
+        ctrl.upload_fab.visible = True
+        try:
+            ctrl.file_list_container.update()
+            ctrl.action_bar_container.update()
+            ctrl.upload_fab.update()
+        except Exception:
+            pass
+
+    ad_service = (
+        ctrl.state.ad_service
+        if ctrl.state and getattr(ctrl.state, "ad_service", None)
+        else None
+    )
+    if ad_service:
+        await ad_service.show_rewarded_interstitial(on_close=_do_downloads)
+    else:
+        await _do_downloads()
 
 
 async def do_delete_selected_impl(ctrl, e=None):

@@ -3,6 +3,7 @@ import urllib.parse
 
 import flet as ft
 
+from components.offline_flow import OfflineFlow
 from core import constants, tokens
 
 logger = logging.getLogger("router")
@@ -70,6 +71,30 @@ async def route_change_impl(
         await route_change_impl(
             page, colab_service, state, storage, navigate, show_new_session_sheet, snack
         )
+        return
+
+    if route == "/offline":
+
+        async def _on_retry(e):
+            connectivity = await state.connectivity.get_connectivity()
+            state.is_online = ft.ConnectivityType.NONE not in connectivity
+            if state.is_online:
+                # Lazy import avoids the router <-> main circular dependency.
+                from main import run_initial_route
+
+                page.run_task(run_initial_route)
+            else:
+                if snack:
+                    snack("Still offline. Check your connection.")
+
+        page.views.append(
+            ft.View(
+                route="/offline",
+                controls=[OfflineFlow(on_retry=_on_retry)],
+                padding=0,
+            )
+        )
+        page.update()
         return
 
     if route == "/onboarding":

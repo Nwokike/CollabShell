@@ -22,6 +22,7 @@ async def exec_code_impl(
     stdin_hook: Callable | None = None,
 ) -> dict:
     """Execute Python code in a session."""
+    await service._ensure_online()
     service._cancel_event.clear()
 
     def _exec():

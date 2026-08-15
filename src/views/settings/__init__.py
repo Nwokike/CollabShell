@@ -51,7 +51,6 @@ def build_settings_view(
             build_banner_ad(page),
             advanced_section,
             logs_section,
-            build_banner_ad(page),
             about_section,
             ft.Container(height=tokens.SPACE_XXL),
         ],

@@ -103,30 +103,30 @@ def build_history_view(
                 snack("Select a session first")
             return
 
-        if state.ad_service:
-            await state.ad_service.show_interstitial()
+        async def _do_export():
+            fmt = state.default_log_format or "ipynb"
+            if page.platform.is_mobile():
+                export_dir = "/storage/emulated/0/Download"
+            else:
+                export_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(export_dir, exist_ok=True)
+            output_path = os.path.join(export_dir, f"{sess}_log.{fmt}")
 
-        fmt = state.default_log_format or "ipynb"
-        if page.platform in [
-            ft.PagePlatform.ANDROID,
-            ft.PagePlatform.ANDROID_TV,
-            ft.PagePlatform.IOS,
-        ]:
-            export_dir = "/storage/emulated/0/Download"
+            if snack:
+                snack(f"Exporting to {fmt}...")
+            try:
+                await colab_service.export_log(sess, output_path)
+                if snack:
+                    snack(f"✅ Exported to {output_path}")
+            except Exception as ex:
+                if snack:
+                    snack(f"❌ {ex}")
+
+        ad_service = state.ad_service if state else None
+        if ad_service:
+            await ad_service.show_rewarded_interstitial(on_close=_do_export)
         else:
-            export_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-        os.makedirs(export_dir, exist_ok=True)
-        output_path = os.path.join(export_dir, f"{sess}_log.{fmt}")
-
-        if snack:
-            snack(f"Exporting to {fmt}...")
-        try:
-            await colab_service.export_log(sess, output_path)
-            if snack:
-                snack(f"✅ Exported to {output_path}")
-        except Exception as ex:
-            if snack:
-                snack(f"❌ {ex}")
+            await _do_export()
 
     # ── Event type badge ──────────────────────────────────────────────────────
     def _event_badge(event_type):

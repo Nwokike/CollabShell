@@ -13,6 +13,7 @@ async def mount_drive_impl(
     stdin_hook: Callable | None = None,
 ) -> bool:
     """Mount Google Drive at the given path."""
+    await service._ensure_online()
     code = f"from google.colab import drive\ndrive.mount('{path}')"
     try:
         await service.exec_code(
@@ -38,6 +39,7 @@ async def install_packages_impl(
     on_output: Callable | None = None,
 ) -> bool:
     """Install Python packages on the VM."""
+    await service._ensure_online()
     code = f"""
 import subprocess, sys
 try:

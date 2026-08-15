@@ -69,6 +69,7 @@ async def upload_impl(
     auth_method: str = "oauth2",
 ) -> bool:
     """Upload a local file to the remote session."""
+    await service._ensure_online()
 
     def _upload():
         import posixpath

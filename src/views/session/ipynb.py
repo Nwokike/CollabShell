@@ -2,17 +2,11 @@ import json
 import os
 from pathlib import Path
 
-import flet as ft
-
 from services.ipynb_converter import cells_to_ipynb, ipynb_to_cells
 
 
 async def on_export_ipynb(ctrl, e=None):
-    if ctrl.page.platform in [
-        ft.PagePlatform.ANDROID,
-        ft.PagePlatform.ANDROID_TV,
-        ft.PagePlatform.IOS,
-    ]:
+    if ctrl.page.platform.is_mobile():
         dl_dir = "/storage/emulated/0/Download"
         if not os.path.exists(dl_dir):
             dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")

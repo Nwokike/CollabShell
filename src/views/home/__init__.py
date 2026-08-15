@@ -236,8 +236,38 @@ def build_home_view(
         page, colab_service, state, on_session_tap, storage
     )
 
+    # Persistent offline indicator — appears at the top of home when the
+    # device loses connectivity mid-session (state.is_online is also refreshed
+    # by the periodic connectivity probe in main.py).
+    offline_banner = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.CLOUD_OFF_ROUNDED,
+                    size=tokens.ICON_SM,
+                    color=AppColors.WARNING,
+                ),
+                ft.Text(
+                    "No internet connection",
+                    size=tokens.FONT_XS,
+                    color=AppColors.WARNING,
+                    weight=ft.FontWeight.W_600,
+                ),
+            ],
+            spacing=tokens.SPACE_XS,
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor=ft.Colors.with_opacity(0.12, AppColors.WARNING),
+        padding=ft.Padding(0, tokens.SPACE_XS, 0, tokens.SPACE_XS),
+        visible=not state.is_online,
+        width=float("inf"),
+        alignment=ft.Alignment.CENTER,
+    )
+
     content = ft.Column(
         controls=[
+            offline_banner,
             header,
             auth_status_chip,
             quick_actions,
@@ -249,7 +279,6 @@ def build_home_view(
             features_section,
             build_banner_ad(page),
             how_it_works,
-            build_banner_ad(page),
             ft.Container(height=tokens.ICON_XXXL),
         ],
         spacing=0,

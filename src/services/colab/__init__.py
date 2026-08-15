@@ -281,17 +281,57 @@ class ColabService:
         start = time.time()
         max_dur = 24 * 3600
         consecutive_4xx = 0
+        iterations = 0
 
+        logger.info(
+            "[keep_alive] started session=%s endpoint=%s", session_name, endpoint
+        )
+
+        reason = "time_limit_reached"
         while time.time() - start < max_dur:
+            iterations += 1
             try:
                 st = State()
                 st.auth_provider = provider
+
+                # Gap #2: stop immediately if session was removed locally
+                # (e.g. user stopped it from another device or the UI).
+                s = st.store.get(session_name)
+                if not s:
+                    reason = "session_not_found"
+                    break
+                if s.endpoint != endpoint:
+                    reason = "endpoint_mismatch"
+                    break
+
                 await asyncio.to_thread(st.client.keep_alive_assignment, endpoint)
                 consecutive_4xx = 0
             except Exception as e:
-                code = getattr(e, "response", None) and e.response.status_code
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                logger.warning(
+                    "[keep_alive] error session=%s iteration=%d code=%s err=%s",
+                    session_name,
+                    iterations,
+                    code,
+                    e,
+                )
                 if code is not None and 400 <= code < 500:
                     consecutive_4xx += 1
                     if consecutive_4xx >= 2:
+                        reason = "consecutive_4xx_errors"
+                        logger.error(
+                            "[keep_alive] 2 consecutive 4xx — aborting session=%s",
+                            session_name,
+                        )
                         break
+                # Non-4xx (network, 5xx): retry next cycle
             await asyncio.sleep(60)
+
+        logger.info(
+            "[keep_alive] stopped session=%s reason=%s iterations=%d duration=%.0fs",
+            session_name,
+            reason,
+            iterations,
+            time.time() - start,
+        )
+

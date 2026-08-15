@@ -13,6 +13,7 @@ async def new_session_impl(
     keep_alive: bool = True,
 ) -> dict:
     """Create a new Colab session."""
+    await service._ensure_online()
 
     def _new():
         import uuid
@@ -86,10 +87,37 @@ async def new_session_impl(
         )
 
         if keep_alive:
+            # Pre-flight the keep-alive ping. If it returns a 403 caused by
+            # missing OAuth scopes the in-process loop will fail the same way —
+            # unassign the VM now so we don't leak a billable assignment.
             try:
                 st.client.keep_alive_assignment(endpoint)
-            except ColabRequestError:
-                pass
+            except ColabRequestError as e:
+                status_code = get_status_code(e)
+                body = str(getattr(e, "response_body", "") or "")
+                is_scope_err = (
+                    "insufficient_scope" in body
+                    or "insufficient authentication scopes" in body.lower()
+                )
+                if status_code == 403 and is_scope_err:
+                    logger.error(
+                        "[keep_alive] pre-flight 403 scope error for %s — "
+                        "unassigning to prevent billable VM leak",
+                        session_name,
+                    )
+                    try:
+                        st.client.unassign(endpoint)
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        "Keep-alive pre-flight failed: OAuth credentials are "
+                        "missing a Colab scope. Please re-authenticate."
+                    ) from e
+                # Any other error (network blip, 5xx): non-fatal.
+                # The in-process loop will retry after 60 s.
+                logger.warning(
+                    "[keep_alive] pre-flight non-fatal error (will retry): %s", e
+                )
 
             st.store.add(s)
             s.keep_alive_pid = None
@@ -205,6 +233,7 @@ async def stop_session_impl(
     service, session_name: str, auth_method: str = "oauth2"
 ) -> bool:
     """Stop a session by name."""
+    await service._ensure_online()
     task = service._keep_alive_tasks.pop(session_name, None)
     if task is not None and not task.done():
         task.cancel()
@@ -280,7 +309,6 @@ async def restart_kernel_impl(
             session_id=s.session_id,
             on_kernel_started=on_started,
             on_session_started=on_sess,
-            on_output=None,
         )
         try:
             runtime.restart()

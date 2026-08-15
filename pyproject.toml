@@ -5,8 +5,8 @@ description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "flet>=0.86.2",
-    "flet-ads>=0.86.2",
+    "flet>=0.86.5",
+    "flet-ads>=0.86.5",
     "flet-terminal>=0.2.2",
     "google-colab-cli>=0.6.0",
     "rich>=15.0.0",

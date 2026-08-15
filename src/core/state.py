@@ -33,7 +33,7 @@ class AppState:
     default_tpu: str = ""
     default_timeout: int = 30
     keep_alive_enabled: bool = True
-    keep_alive_on_disconnect: bool = False
+    keep_alive_on_disconnect: bool = True
     default_log_format: str = "ipynb"
     drive_mount_path: str = "/content/drive"
     logtostderr: bool = False
@@ -54,6 +54,9 @@ class AppState:
     log_session_names: ClassVar[list] = []
     log_events: ClassVar[list] = []
 
+    # ── Connectivity ─────────────────────────────────────────────────────────
+    is_online: bool = True
+
     # ── Services ──────────────────────────────────────────────────────────────
     ad_service = None
 
@@ -65,6 +68,7 @@ class AppState:
         self.log_events = []
         self.update_available_version = None
         self.onboarding_done = False
+        self.is_online = True
         self.ad_service = None
         self.notebook_cells = []
 

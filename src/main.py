@@ -30,7 +30,8 @@ logging.basicConfig(
 
 from core.storage_patch import _memory_log_handler
 
-for log_name in ["", "colab", "flet", "router", "services", "core"]:
+for log_name in ["", "colab", "flet", "router", "services", "core",
+                  "colab_service", "colab_session_ops", "colab_auth"]:
     lg = logging.getLogger(log_name)
     if _memory_log_handler not in lg.handlers:
         lg.addHandler(_memory_log_handler)
@@ -72,6 +73,10 @@ async def main(page: ft.Page):
                         color=ft.Colors.WHITE,
                     ),
                     bgcolor=ft.Colors.BLACK,
+                    # Persist until dismissed so a transient glitch doesn't hide
+                    # the message before the user can read it.
+                    persist=True,
+                    show_close_icon=True,
                 )
             )
         except Exception:
@@ -84,6 +89,18 @@ async def main(page: ft.Page):
     state.ad_service = ad_service
     await ad_service.gather_consent()
     page.run_task(ad_service.preload_interstitial)
+
+    # Native connectivity monitoring (flet 0.86.5 ft.Connectivity). Replaces the
+    # hand-rolled DNS-probe polling loop with a reactive on_change event.
+    def _on_connectivity_change(e):
+        is_online = ft.ConnectivityType.NONE not in e.connectivity
+        state.is_online = is_online
+        # Keep the /home offline banner reactive without a periodic poll.
+        if page.route == "/home":
+            page.run_task(navigate, "/home")
+
+    state.connectivity = ft.Connectivity(on_change=_on_connectivity_change)
+    page.services.append(state.connectivity)
 
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
@@ -159,8 +176,18 @@ async def main(page: ft.Page):
         page.run_task(navigate, route)
 
     def _snack(msg: str):
-        """Show a snackbar with the given message."""
-        page.show_dialog(ft.SnackBar(content=ft.Text(msg)))
+        """Show a snackbar with the given message.
+
+        FLOATING so it hovers above the bottom NavigationBar instead of
+        shoving it; swipe-up to dismiss.
+        """
+        page.show_dialog(
+            ft.SnackBar(
+                content=ft.Text(msg),
+                behavior=ft.SnackBarBehavior.FLOATING,
+                dismiss_direction=ft.DismissDirection.UP,
+            )
+        )
 
     def _build_nav_bar(active_route: str):
         routes = ["/home", "/history", "/settings"]
@@ -264,6 +291,57 @@ async def main(page: ft.Page):
 
     page.on_disconnect = on_disconnect
 
+    # ── Android / mobile lifecycle ────────────────────────────────────────────
+    # Android suspends/kills backgrounded apps, which kills asyncio tasks.
+    # When the user brings the app back to the foreground (RESUMED), we:
+    #   1. Re-probe connectivity so the offline banner updates immediately.
+    #   2. Restart any keep-alive tasks that died while suspended.
+    # NOTE: We cannot keep Python alive while Android has killed the process;
+    # this handler only helps when the OS *suspended* (not killed) the app.
+    async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
+        if e.state != ft.AppLifecycleState.RESUMED:
+            return
+
+        logger.info("[lifecycle] app resumed — re-probing connectivity")
+
+        # 1. Re-probe connectivity
+        try:
+            connectivity = await state.connectivity.get_connectivity()
+            state.is_online = ft.ConnectivityType.NONE not in connectivity
+        except Exception as exc:
+            logger.warning("[lifecycle] connectivity probe failed: %s", exc)
+
+        # 2. Restart dead keep-alive tasks
+        if state.is_online and state.active_sessions:
+            dead = [
+                name
+                for name, task in colab_service._keep_alive_tasks.items()
+                if task.done()
+            ]
+            for session_name in dead:
+                # Look up endpoint from active_sessions list
+                ep = next(
+                    (
+                        s.get("endpoint")
+                        for s in state.active_sessions
+                        if s.get("name") == session_name
+                    ),
+                    None,
+                )
+                if ep:
+                    logger.info(
+                        "[lifecycle] restarting keep-alive for %s", session_name
+                    )
+                    colab_service._start_in_process_keep_alive(
+                        session_name, ep, state.auth_method
+                    )
+
+        # 3. Refresh the current view so the offline banner is up-to-date
+        if page.route == "/home":
+            page.run_task(navigate, "/home")
+
+    page.on_app_lifecycle_state_change = _on_lifecycle_change
+
     # ── Wire up routing ───────────────────────────────────────────────────────
     # Navigation is driven explicitly via navigate()/route_change() (which set
     # page.route and rebuild views). We deliberately do NOT register
@@ -284,6 +362,15 @@ async def main(page: ft.Page):
 
     # ── Initial route ─────────────────────────────────────────────────────────
     async def _initial_route():
+        # Probe connectivity first. If offline, surface the offline screen and
+        # skip auth entirely — a returning user must not be forced back through
+        # onboarding just because the token can't be refreshed right now.
+        connectivity = await state.connectivity.get_connectivity()
+        state.is_online = ft.ConnectivityType.NONE not in connectivity
+        if not state.is_online:
+            await navigate("/offline")
+            return
+
         await _init_cli()
         if state.is_authenticated:
             state.onboarding_done = True
@@ -296,6 +383,10 @@ async def main(page: ft.Page):
             await navigate("/home")
         else:
             await navigate("/onboarding")
+
+    # Public alias so the offline screen's Retry can re-enter routing.
+    async def run_initial_route():
+        await _initial_route()
 
     page.run_task(_initial_route)
 
