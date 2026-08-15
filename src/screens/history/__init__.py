@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
+
 import flet as ft
 
 from components.brand_header import build_brand_header
 from core import tokens
 from core.styles import build_banner_ad, glass_card, section_header
+from core.theme import AppColors
 from state import AppStateCtx, ServiceCtx
 
 
@@ -26,16 +29,15 @@ def HistoryScreen() -> ft.Control:
     async def _load_sessions():
         set_loading(True)
         try:
-            sess = state.active_sessions or await services.colab.list_sessions(
-                auth_method=state.auth_method
-            )
-            names = [s.get("name", "") for s in (sess or []) if s.get("name")]
-            set_sessions(names)
-            if names and not selected_session:
-                set_selected_session(names[0])
-                await _load_events(names[0])
+            log_names = await services.colab.list_log_sessions()
+            active_names = [s.get("name", "") for s in (state.active_sessions or []) if s.get("name")]
+            all_names = list(dict.fromkeys(log_names + active_names))
+            set_sessions(all_names)
+            if all_names and not selected_session:
+                set_selected_session(all_names[0])
+                await _load_events(all_names[0])
         except Exception:
-            pass
+            set_sessions([])
         finally:
             set_loading(False)
 
@@ -45,14 +47,14 @@ def HistoryScreen() -> ft.Control:
             return
         set_loading(True)
         try:
-            ev = await services.colab.get_session_logs(session_name)
+            ev = await services.colab.get_log(session_name)
             set_events(ev or [])
         except Exception:
             set_events([])
         finally:
             set_loading(False)
 
-    ft.on_mounted(lambda: page.run_task(_load_sessions))
+    ft.use_effect(lambda: page.run_task(_load_sessions), [])
 
     async def _on_session_change(e):
         name = e.control.value or ""
@@ -61,26 +63,26 @@ def HistoryScreen() -> ft.Control:
 
     async def _on_export(e):
         fmt = state.default_log_format or "ipynb"
-        if not events:
+        if not events or not selected_session:
             return
         try:
-            import asyncio
-            import json
-            import os
-
             dl_dir = "/storage/emulated/0/Download"
             if not os.path.exists(dl_dir):
                 dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
             os.makedirs(dl_dir, exist_ok=True)
-            fname = f"{selected_session or 'history'}.{fmt}"
+            fname = f"{selected_session}.{fmt}"
             path = os.path.join(dl_dir, fname)
 
-            def _write():
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(events, f, indent=2, ensure_ascii=False)
-
-            await asyncio.to_thread(_write)
-            page.snack_bar = ft.SnackBar(ft.Text(f"✅ Exported to {path}"))
+            success = await services.colab.export_log(selected_session, path)
+            if success:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"✅ Exported to {path}"), bgcolor=AppColors.SUCCESS
+                )
+            else:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text("❌ Export failed: No events to export"),
+                    bgcolor=ft.Colors.ERROR,
+                )
             page.snack_bar.open = True
             page.update()
         except Exception as ex:
@@ -92,7 +94,11 @@ def HistoryScreen() -> ft.Control:
 
     # ── Filter events ─────────────────────────────────────────────────────────
     filtered = [
-        ev for ev in events if filter_type == "all" or ev.get("type") == filter_type
+        ev
+        for ev in events
+        if filter_type == "all"
+        or ev.get("type") == filter_type
+        or ev.get("event_type") == filter_type
     ]
     try:
         limit = None if max_lines == "all" else int(max_lines)
@@ -100,9 +106,9 @@ def HistoryScreen() -> ft.Control:
     except (ValueError, TypeError):
         display_events = filtered
 
-    # ── Event item ────────────────────────────────────────────────────────────
+    # ── Event item ────────────────────────────────────────────────────
     def _build_event_item(ev: dict) -> ft.Control:
-        ev_type = ev.get("type", "unknown")
+        ev_type = ev.get("event_type") or ev.get("type", "unknown")
         ts = ev.get("timestamp", "")
         detail = ev.get("detail") or ev.get("source") or ev.get("code", "")[:80]
         icon_map = {
@@ -147,7 +153,9 @@ def HistoryScreen() -> ft.Control:
             ),
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
             border_radius=tokens.RADIUS_MD,
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)),
+            border=ft.Border.all(
+                1, ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
+            ),
             margin=ft.Margin(0, tokens.SPACE_XXS, 0, tokens.SPACE_XXS),
         )
 
@@ -208,7 +216,7 @@ def HistoryScreen() -> ft.Control:
                                             ft.dropdown.Option(n, n) for n in sessions
                                         ],
                                         border_radius=tokens.RADIUS_MD,
-                                        on_change=lambda e: page.run_task(
+                                        on_select=lambda e: page.run_task(
                                             _on_session_change, e
                                         ),
                                     ),
@@ -236,7 +244,7 @@ def HistoryScreen() -> ft.Control:
                                                     ),
                                                 ],
                                                 border_radius=tokens.RADIUS_MD,
-                                                on_change=lambda e: set_filter_type(
+                                                on_select=lambda e: set_filter_type(
                                                     e.control.value or "all"
                                                 ),
                                                 expand=True,
@@ -253,7 +261,7 @@ def HistoryScreen() -> ft.Control:
                                                     ft.dropdown.Option("all", "All"),
                                                 ],
                                                 border_radius=tokens.RADIUS_MD,
-                                                on_change=lambda e: set_max_lines(
+                                                on_select=lambda e: set_max_lines(
                                                     e.control.value or "50"
                                                 ),
                                                 width=tokens.INPUT_WIDTH_LG,
@@ -290,3 +298,6 @@ def HistoryScreen() -> ft.Control:
         scroll=ft.ScrollMode.AUTO,
         expand=True,
     )
+
+
+__all__ = ["HistoryScreen"]

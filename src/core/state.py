@@ -1,6 +1,8 @@
-from typing import ClassVar
+"""Observable application state — single source of truth."""
 
-"""Observable application state."""
+from __future__ import annotations
+
+from typing import ClassVar
 
 import flet as ft
 
@@ -9,6 +11,8 @@ import flet as ft
 class AppState:
     # ── Session state ─────────────────────────────────────────────────────────
     active_sessions: ClassVar[list] = []
+    active_session_name: str = ""
+    session_mode: str = "notebook"  # "notebook", "terminal", "files"
     selected_session_name: str = ""
     is_provisioning: bool = False
     is_executing: bool = False
@@ -27,6 +31,16 @@ class AppState:
     file_listing: ClassVar[list] = []
     is_browsing: bool = False
 
+    # ── Navigation & UI ───────────────────────────────────────────────────────
+    current_tab: int = 0  # 0=Home, 1=Notebooks, 2=Terminal, 3=Files, 4=Settings
+    active_subview: str = ""  # "", "session", "history"
+    theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
+    is_loading: bool = False
+    app_ready: bool = False
+    cli_available: bool = False
+    update_available_version: str | None = None
+    onboarding_done: bool = False
+
     # ── Settings (every CLI flag exposed) ─────────────────────────────────────
     auth_method: str = "oauth2"
     default_gpu: str = ""
@@ -43,14 +57,6 @@ class AppState:
     auth_email: str = ""
     auth_error: str = ""
 
-    # ── UI ────────────────────────────────────────────────────────────────────
-    theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
-    is_loading: bool = False
-    app_ready: bool = False
-    cli_available: bool = False
-    update_available_version: str | None = None
-    onboarding_done: bool = False
-
     # ── History ───────────────────────────────────────────────────────────────
     log_session_names: ClassVar[list] = []
     log_events: ClassVar[list] = []
@@ -63,6 +69,10 @@ class AppState:
 
     def __init__(self):
         self.active_sessions = []
+        self.active_session_name = ""
+        self.session_mode = "notebook"
+        self.current_tab = 0
+        self.active_subview = ""
         self.exec_output_lines = []
         self.file_listing = []
         self.log_session_names = []

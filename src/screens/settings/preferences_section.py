@@ -1,4 +1,4 @@
-"""Display preferences settings section (light/dark/system themes) matching SpanInsight polish."""
+"""Display preferences settings section (light/dark/system themes)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ from core import constants, tokens
 from core.styles import glass_card, section_header
 
 
-@ft.component
-def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
-    # Local reactive state mirrors state.theme_mode so toggling re-renders immediately.
-    current_mode, set_current_mode = ft.use_state(state.theme_mode)
+def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
+    """Build preferences section with light/dark/system theme cards."""
+    current_mode = state.theme_mode or page.theme_mode
 
     def _make_theme_btn(label: str, mode: ft.ThemeMode) -> ft.Control:
         is_sel = current_mode == mode
@@ -19,12 +18,12 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
         def _select(e, m=mode, lbl=label):
             page.theme_mode = m
             state.theme_mode = m
-            set_current_mode(m)
-            page.run_task(
-                services.storage.set,
-                constants.STORAGE_THEME,
-                lbl.lower(),
-            )
+            if services and services.storage:
+                page.run_task(
+                    services.storage.set,
+                    constants.STORAGE_THEME,
+                    lbl.lower(),
+                )
             page.update()
 
         return ft.Container(
@@ -129,6 +128,4 @@ def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
     )
 
 
-def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
-    """Shim so settings/__init__.py call signature is unchanged."""
-    return PreferencesSection(page=page, state=state, services=services)
+__all__ = ["build_preferences_section"]

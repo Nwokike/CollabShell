@@ -98,14 +98,37 @@ class AppController:
             page.snack_bar.open = True
             page.update()
 
+        def _navigate_tab(idx: int):
+            state.active_subview = ""
+            state.current_tab = idx
+            page.update()
+
+        def _open_session(name: str, mode: str = "notebook"):
+            state.active_session_name = name
+            state.session_mode = mode
+            state.active_subview = "session"
+            page.update()
+
+        def _close_session():
+            state.active_subview = ""
+            state.active_session_name = ""
+            page.update()
+
+        def _open_history():
+            state.active_subview = "history"
+            page.update()
+
+        def _close_history():
+            state.active_subview = ""
+            page.update()
+
         def _show_new_session_sheet(mode: str = "notebook"):
             show_new_session_sheet(
                 page=page,
                 state=state,
                 colab_service=self.colab_service,
                 ad_service=self.ad_service,
-                navigate=None,
-                route_change=None,
+                on_session_created=lambda name: _open_session(name, mode),
                 snack_func=_show_snack,
                 mode=mode,
                 ignore_warning=False,
@@ -126,6 +149,11 @@ class AppController:
             page.update()
 
         methods = ControllerMethods(
+            navigate_tab=_navigate_tab,
+            open_session=_open_session,
+            close_session=_close_session,
+            open_history=_open_history,
+            close_history=_close_history,
             show_snack=_show_snack,
             show_new_session_sheet=_show_new_session_sheet,
             toggle_theme=_toggle_theme,
