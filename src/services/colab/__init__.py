@@ -334,4 +334,3 @@ class ColabService:
             iterations,
             time.time() - start,
         )
-

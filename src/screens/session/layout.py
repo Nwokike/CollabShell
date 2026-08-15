@@ -1,9 +1,13 @@
+"""Session screen layout components (action chips, keep-alive card, status header)."""
+
+from __future__ import annotations
+
 import asyncio
 
 import flet as ft
 
 from core import constants, tokens
-from core.styles import glass_card
+from core.styles import glass_card, hardware_badge, status_dot
 from core.theme import AppColors
 
 
@@ -155,5 +159,54 @@ def build_keep_alive_card(
         ),
         margin=ft.Margin(
             tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+        ),
+    )
+
+
+def build_status_header(page: ft.Page, session_name: str, state, colab_service):
+    session = next(
+        (
+            s
+            for s in getattr(state, "active_sessions", [])
+            if s.get("name") == session_name
+        ),
+        None,
+    )
+    if not session:
+        return ft.Container()
+
+    accel = session.get("accelerator", "NONE")
+    variant = session.get("variant", "DEFAULT")
+    is_running = session.get("running") is not None
+
+    return glass_card(
+        ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        status_dot(is_running),
+                        ft.Text(
+                            session_name,
+                            size=tokens.FONT_XL,
+                            weight=ft.FontWeight.W_700,
+                            expand=True,
+                        ),
+                        hardware_badge(accel, variant),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=tokens.SPACE_MD,
+                ),
+                ft.Text(
+                    session.get("status", "IDLE"),
+                    size=tokens.FONT_SM,
+                    color=AppColors.SUCCESS
+                    if is_running
+                    else ft.Colors.ON_SURFACE_VARIANT,
+                ),
+            ],
+            spacing=tokens.SPACE_SM,
+        ),
+        margin=ft.Margin(
+            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
         ),
     )

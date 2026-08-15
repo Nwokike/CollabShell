@@ -1,6 +1,6 @@
-"""Colab — Cloud GPUs from your phone.
+"""Colab Shell — Unofficial mobile and desktop client for Google Colab.
 
-Main entry point: page config, routing, service bootstrapping.
+Main entry point: Bootstraps services and mounts the React-like component tree via page.render().
 """
 
 from __future__ import annotations
@@ -8,387 +8,325 @@ from __future__ import annotations
 import asyncio
 import atexit
 import logging
+import sys
+
+import flet as ft
 
 from core.storage_patch import apply_storage_patches
 
 apply_storage_patches()
 
-import flet as ft
-
+from app_shell import AppShell
+from components.new_session_sheet import show_new_session_sheet
 from core import constants
 from core.state import state
 from core.theme import AppTheme
 from services.ad_service import AdService
 from services.colab import ColabService
 from services.storage_service import StorageService
+from state import ControllerMethods, ControllerMethodsCtx, ServiceCtx, Services
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-
-from core.storage_patch import _memory_log_handler
-
-for log_name in ["", "colab", "flet", "router", "services", "core",
-                  "colab_service", "colab_session_ops", "colab_auth"]:
-    lg = logging.getLogger(log_name)
-    if _memory_log_handler not in lg.handlers:
-        lg.addHandler(_memory_log_handler)
-    # Ensure they actually pass INFO logs down
-    if lg.level == logging.NOTSET:
-        lg.setLevel(logging.INFO)
-    # Ensure propagation doesn't duplicate if we attach to both child and root
-    if log_name != "":
-        lg.propagate = False
-
 logger = logging.getLogger("colab")
 
-colab_service = ColabService()
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-async def main(page: ft.Page):
-    """Main Flet application entry point."""
-    page.fonts = {
-        "Outfit": "assets/fonts/Outfit-Regular.ttf",
-        "RobotoMono": "assets/fonts/RobotoMono-Regular.ttf",
-    }
-    page.title = constants.APP_NAME
-    page.favicon = "icon.png"
-    page.theme = AppTheme.get_light_theme()
-    page.dark_theme = AppTheme.get_dark_theme()
-    page.theme_mode = ft.ThemeMode.SYSTEM
-    state.theme_mode = page.theme_mode
+class AppController:
+    """Initializes backend services, handles lifecycle events, and mounts the AppShell."""
 
-    page.padding = 0
-    page.spacing = 0
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.storage: StorageService | None = None
+        self.ad_service: AdService | None = None
+        self.colab_service: ColabService | None = None
 
-    def on_error(e):
-        logger.error("Page error: %s", e.data)
+    async def init(self):
+        """Bootstrap services, restore preferences, and render the application."""
+        page = self.page
+
+        # ── Window & Typography ───────────────────────────────────────────────
+        page.title = constants.APP_NAME
+        page.fonts = {
+            "Outfit": "assets/fonts/Outfit-Regular.ttf",
+            "RobotoMono": "assets/fonts/RobotoMono-Regular.ttf",
+        }
+        page.theme = AppTheme.get_light_theme()
+        page.dark_theme = AppTheme.get_dark_theme()
+        page.theme.font_family = "Outfit"
+        page.dark_theme.font_family = "Outfit"
+        page.theme_mode = ft.ThemeMode.SYSTEM
+        state.theme_mode = page.theme_mode
+
+        page.window.min_width = 360
+        page.window.min_height = 600
+        page.padding = 0
+        page.spacing = 0
+
+        page.on_error = self._on_error
+
+        # ── Global Services ───────────────────────────────────────────────────
+        file_picker = ft.FilePicker()
+        page.services.append(file_picker)
+        page.file_picker = file_picker
+
+        connectivity = ft.Connectivity()
+        page.services.append(connectivity)
+        page.connectivity = connectivity
+        state.connectivity = connectivity
+
+        self.storage = StorageService(page)
+        self.ad_service = AdService(page)
+        state.ad_service = self.ad_service
+        await self.ad_service.gather_consent()
+        page.run_task(self.ad_service.preload_interstitial)
+
+        self.colab_service = ColabService()
+        page.run_task(self.colab_service.init)
+
+        # ── Restore Preferences ───────────────────────────────────────────────
+        await self._restore_preferences()
+
+        # ── Controller Methods for UI ─────────────────────────────────────────
+        def _show_snack(msg: str):
+            page.snack_bar = ft.SnackBar(content=ft.Text(msg))
+            page.snack_bar.open = True
+            page.update()
+
+        def _show_new_session_sheet(mode: str = "notebook"):
+            show_new_session_sheet(
+                page=page,
+                state=state,
+                colab_service=self.colab_service,
+                ad_service=self.ad_service,
+                navigate=None,
+                route_change=None,
+                snack_func=_show_snack,
+                mode=mode,
+                ignore_warning=False,
+            )
+
+        def _toggle_theme():
+            page.theme_mode = (
+                ft.ThemeMode.DARK
+                if page.theme_mode == ft.ThemeMode.LIGHT
+                else ft.ThemeMode.LIGHT
+            )
+            state.theme_mode = page.theme_mode
+            page.run_task(
+                self.storage.set,
+                constants.STORAGE_THEME,
+                "dark" if page.theme_mode == ft.ThemeMode.DARK else "light",
+            )
+            page.update()
+
+        methods = ControllerMethods(
+            show_snack=_show_snack,
+            show_new_session_sheet=_show_new_session_sheet,
+            toggle_theme=_toggle_theme,
+        )
+
+        services = Services(
+            colab=self.colab_service,
+            storage=self.storage,
+            ad_service=self.ad_service,
+            page=page,
+        )
+
+        # ── Register Lifecycle & Disconnect Handlers ──────────────────────────
+        self._register_lifecycle_handlers()
+
+        # ── Mount Reactive Component Tree ─────────────────────────────────────
+        page.render(
+            lambda: ServiceCtx(
+                services,
+                lambda: ControllerMethodsCtx(
+                    methods,
+                    lambda: AppShell(),
+                ),
+            )
+        )
+        logger.info("Colab Shell application mounted successfully")
+
+        # ── Initial background bootstrap (auth, connectivity, sessions) ──────
+        page.run_task(self._bootstrap_state)
+
+    async def _restore_preferences(self):
         try:
-            page.show_dialog(
-                ft.SnackBar(
-                    content=ft.Text(
-                        "Something went wrong. Please try again.",
-                        color=ft.Colors.WHITE,
-                    ),
-                    bgcolor=ft.Colors.BLACK,
-                    # Persist until dismissed so a transient glitch doesn't hide
-                    # the message before the user can read it.
-                    persist=True,
-                    show_close_icon=True,
+            saved_theme = await self.storage.get(constants.STORAGE_THEME)
+            theme_map = {
+                "dark": ft.ThemeMode.DARK,
+                "system": ft.ThemeMode.SYSTEM,
+                "light": ft.ThemeMode.LIGHT,
+            }
+            if saved_theme in theme_map:
+                self.page.theme_mode = theme_map[saved_theme]
+                state.theme_mode = self.page.theme_mode
+
+            saved_keep_alive = await self.storage.get(constants.STORAGE_KEEP_ALIVE)
+            if saved_keep_alive is not None:
+                state.keep_alive_enabled = saved_keep_alive == "true"
+
+            saved_keep_alive_dc = await self.storage.get(
+                constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT
+            )
+            if saved_keep_alive_dc is not None:
+                state.keep_alive_on_disconnect = saved_keep_alive_dc == "true"
+
+            saved_gpu = await self.storage.get(constants.STORAGE_DEFAULT_GPU)
+            if saved_gpu:
+                state.default_gpu = saved_gpu
+
+            saved_tpu = await self.storage.get(constants.STORAGE_DEFAULT_TPU)
+            if saved_tpu:
+                state.default_tpu = saved_tpu
+
+            saved_timeout = await self.storage.get(constants.STORAGE_DEFAULT_TIMEOUT)
+            if saved_timeout:
+                try:
+                    state.default_timeout = int(saved_timeout)
+                except ValueError:
+                    pass
+
+            saved_drive_path = await self.storage.get(
+                constants.STORAGE_DRIVE_MOUNT_PATH
+            )
+            if saved_drive_path:
+                state.drive_mount_path = saved_drive_path
+        except Exception as e:
+            logger.warning("Failed to restore some preferences: %s", e)
+
+    async def _bootstrap_state(self):
+        """Check initial connectivity and authenticate."""
+        try:
+            connectivity = await self.page.connectivity.get_connectivity()
+            state.is_online = ft.ConnectivityType.NONE not in connectivity
+        except Exception as exc:
+            logger.warning("Connectivity check failed: %s", exc)
+
+        if not state.is_online:
+            return
+
+        try:
+            auth_info = await self.colab_service.check_auth()
+            state.is_authenticated = auth_info.get("authenticated", False)
+            state.auth_email = auth_info.get("email", "")
+            if state.is_authenticated:
+                state.onboarding_done = True
+                await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
+            else:
+                onboarding_done = await self.storage.get(
+                    constants.STORAGE_ONBOARDING_DONE
                 )
+                state.onboarding_done = onboarding_done == "true"
+        except Exception as ex:
+            logger.warning("Auth check failed: %s", ex)
+
+        # Preload active sessions
+        try:
+            state.active_sessions = (
+                await self.colab_service.list_sessions(auth_method=state.auth_method)
+                or []
             )
         except Exception:
             pass
 
-    page.on_error = on_error
+    def _register_lifecycle_handlers(self):
+        page = self.page
 
-    storage = StorageService(page)
-    ad_service = AdService(page)
-    state.ad_service = ad_service
-    await ad_service.gather_consent()
-    page.run_task(ad_service.preload_interstitial)
+        # Disconnect cleanup
+        def _cleanup_sessions():
+            if state.keep_alive_on_disconnect or not state.active_sessions:
+                return
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                for s in state.active_sessions:
+                    name = s.get("name")
+                    if name:
+                        try:
+                            loop.run_until_complete(
+                                self.colab_service.stop_session(
+                                    name, auth_method=state.auth_method
+                                )
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Cleanup failed for session %s: %s", name, exc
+                            )
+                loop.close()
+            except Exception as e:
+                logger.warning("atexit cleanup encountered error: %s", e)
 
-    # Native connectivity monitoring (flet 0.86.5 ft.Connectivity). Replaces the
-    # hand-rolled DNS-probe polling loop with a reactive on_change event.
-    def _on_connectivity_change(e):
-        is_online = ft.ConnectivityType.NONE not in e.connectivity
-        state.is_online = is_online
-        # Keep the /home offline banner reactive without a periodic poll.
-        if page.route == "/home":
-            page.run_task(navigate, "/home")
+        atexit.register(_cleanup_sessions)
 
-    state.connectivity = ft.Connectivity(on_change=_on_connectivity_change)
-    page.services.append(state.connectivity)
-
-    file_picker = ft.FilePicker()
-    page.services.append(file_picker)
-    page.file_picker = file_picker
-
-    from core.stdin_hook import setup_global_stdin_hook
-
-    setup_global_stdin_hook(page, colab_service, lambda m: _snack(m))
-
-    # ── Load saved settings ───────────────────────────────────────────────────
-    try:
-        theme_str = await storage.get(constants.STORAGE_THEME)
-        if theme_str == "dark":
-            page.theme_mode = ft.ThemeMode.DARK
-        elif theme_str == "light":
-            page.theme_mode = ft.ThemeMode.LIGHT
-        else:
-            page.theme_mode = ft.ThemeMode.SYSTEM
-        state.theme_mode = page.theme_mode
-
-        auth_raw = await storage.get(constants.STORAGE_AUTH_METHOD)
-        state.auth_method = auth_raw if auth_raw else "oauth2"
-
-        gpu_raw = await storage.get(constants.STORAGE_DEFAULT_GPU)
-        state.default_gpu = gpu_raw if gpu_raw else ""
-
-        tpu_raw = await storage.get(constants.STORAGE_DEFAULT_TPU)
-        state.default_tpu = tpu_raw if tpu_raw else ""
-
-        timeout_raw = await storage.get(constants.STORAGE_DEFAULT_TIMEOUT)
-        if timeout_raw:
-            state.default_timeout = int(timeout_raw)
-
-        keep_raw = await storage.get(constants.STORAGE_KEEP_ALIVE)
-        if keep_raw is not None:
-            state.keep_alive_enabled = keep_raw == "true"
-
-        disconnect_raw = await storage.get(constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT)
-        if disconnect_raw is not None:
-            state.keep_alive_on_disconnect = disconnect_raw == "true"
-
-        fmt_raw = await storage.get(constants.STORAGE_LOG_FORMAT)
-        state.default_log_format = fmt_raw if fmt_raw else "ipynb"
-
-        drive_raw = await storage.get(constants.STORAGE_DRIVE_MOUNT_PATH)
-        state.drive_mount_path = drive_raw if drive_raw else "/content/drive"
-
-        log_raw = await storage.get(constants.STORAGE_LOGTOSTDERR)
-        if log_raw is not None:
-            state.logtostderr = str(log_raw).lower() == "true"
-    except Exception as e:
-        logger.warning("Settings load failed: %s", e)
-
-    # ── Init CLI service ──────────────────────────────────────────────────────
-    async def _init_cli():
-        try:
-            await colab_service.init()
-            state.cli_available = True
-
-            auth_info = await colab_service.check_auth()
-            state.is_authenticated = auth_info["authenticated"]
-            state.auth_email = auth_info["email"]
-        except Exception as e:
-            logger.error("CLI init failed: %s", e)
-            state.cli_available = False
-
-    # ── Navigation ────────────────────────────────────────────────────────────
-    async def navigate(route: str):
-        page.route = route
-        await route_change()
-
-    def navigate_sync(route: str):
-        page.run_task(navigate, route)
-
-    def _snack(msg: str):
-        """Show a snackbar with the given message.
-
-        FLOATING so it hovers above the bottom NavigationBar instead of
-        shoving it; swipe-up to dismiss.
-        """
-        page.show_dialog(
-            ft.SnackBar(
-                content=ft.Text(msg),
-                behavior=ft.SnackBarBehavior.FLOATING,
-                dismiss_direction=ft.DismissDirection.UP,
-            )
-        )
-
-    def _build_nav_bar(active_route: str):
-        routes = ["/home", "/history", "/settings"]
-        nav_bar = ft.NavigationBar(
-            selected_index=routes.index(active_route) if active_route in routes else 0,
-            destinations=[
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.HOME_OUTLINED,
-                    selected_icon=ft.Icons.HOME_ROUNDED,
-                    label=constants.LBL_HOME,
-                ),
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.HISTORY_OUTLINED,
-                    selected_icon=ft.Icons.HISTORY_ROUNDED,
-                    label=constants.LBL_HISTORY,
-                ),
-                ft.NavigationBarDestination(
-                    icon=ft.Icons.SETTINGS_OUTLINED,
-                    selected_icon=ft.Icons.SETTINGS_ROUNDED,
-                    label=constants.LBL_SETTINGS,
-                ),
-            ],
-            bgcolor=ft.Colors.SURFACE,
-            indicator_color=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-            label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
-        )
-
-        def on_nav_change(e):
-            index = e.control.selected_index
-            page.run_task(navigate, routes[index])
-
-        nav_bar.on_change = on_nav_change
-        return nav_bar
-
-    # ── New Session Sheet ─────────────────────────────────────────────────────
-    def _show_new_session_sheet(mode=None, ignore_warning=False):
-        from components.new_session_sheet import show_new_session_sheet
-
-        show_new_session_sheet(
-            page=page,
-            state=state,
-            colab_service=colab_service,
-            ad_service=ad_service,
-            navigate=navigate,
-            route_change=route_change,
-            snack_func=_snack,
-            mode=mode,
-            ignore_warning=ignore_warning,
-        )
-
-    # ── Route change handler ──────────────────────────────────────────────────
-
-    async def route_change(e=None):
-        from core.router import route_change_impl
-
-        await route_change_impl(
-            page=page,
-            colab_service=colab_service,
-            state=state,
-            storage=storage,
-            navigate=navigate,
-            show_new_session_sheet=_show_new_session_sheet,
-            snack=_snack,
-        )
-
-    # ── Disconnect handler (auto-stop) ────────────────────────────────────────
-    def _cleanup_sessions():
-        """Stop all sessions synchronously (used by atexit)."""
-        if state.keep_alive_on_disconnect or not state.active_sessions:
-            return
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        async def on_disconnect(e=None):
+            if state.keep_alive_on_disconnect or not state.active_sessions:
+                return
             for s in state.active_sessions:
                 name = s.get("name")
-                if not name:
-                    continue
-                try:
-                    loop.run_until_complete(
-                        colab_service.stop_session(name, auth_method=state.auth_method)
-                    )
-                except Exception as exc:
-                    logger.warning("Cleanup failed for session %s: %s", name, exc)
-            loop.close()
-        except Exception as e:
-            logger.warning("atexit cleanup encountered error: %s", e)
+                if name:
+                    try:
+                        await self.colab_service.stop_session(
+                            name, auth_method=state.auth_method
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Disconnect cleanup failed for %s: %s", name, exc
+                        )
 
-    atexit.register(_cleanup_sessions)
+        page.on_disconnect = on_disconnect
 
-    async def on_disconnect(e=None):
-        if state.keep_alive_on_disconnect or not state.active_sessions:
-            return
-        for s in state.active_sessions:
-            name = s.get("name")
-            if not name:
-                continue
+        # Android lifecycle handler
+        async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
+            if e.state != ft.AppLifecycleState.RESUMED:
+                return
+
+            logger.info("[lifecycle] app resumed — re-probing connectivity")
             try:
-                await colab_service.stop_session(name, auth_method=state.auth_method)
+                connectivity = await page.connectivity.get_connectivity()
+                state.is_online = ft.ConnectivityType.NONE not in connectivity
             except Exception as exc:
-                logger.warning("Disconnect cleanup failed for %s: %s", name, exc)
+                logger.warning("[lifecycle] connectivity probe failed: %s", exc)
 
-    page.on_disconnect = on_disconnect
-
-    # ── Android / mobile lifecycle ────────────────────────────────────────────
-    # Android suspends/kills backgrounded apps, which kills asyncio tasks.
-    # When the user brings the app back to the foreground (RESUMED), we:
-    #   1. Re-probe connectivity so the offline banner updates immediately.
-    #   2. Restart any keep-alive tasks that died while suspended.
-    # NOTE: We cannot keep Python alive while Android has killed the process;
-    # this handler only helps when the OS *suspended* (not killed) the app.
-    async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
-        if e.state != ft.AppLifecycleState.RESUMED:
-            return
-
-        logger.info("[lifecycle] app resumed — re-probing connectivity")
-
-        # 1. Re-probe connectivity
-        try:
-            connectivity = await state.connectivity.get_connectivity()
-            state.is_online = ft.ConnectivityType.NONE not in connectivity
-        except Exception as exc:
-            logger.warning("[lifecycle] connectivity probe failed: %s", exc)
-
-        # 2. Restart dead keep-alive tasks
-        if state.is_online and state.active_sessions:
-            dead = [
-                name
-                for name, task in colab_service._keep_alive_tasks.items()
-                if task.done()
-            ]
-            for session_name in dead:
-                # Look up endpoint from active_sessions list
-                ep = next(
-                    (
-                        s.get("endpoint")
-                        for s in state.active_sessions
-                        if s.get("name") == session_name
-                    ),
-                    None,
-                )
-                if ep:
-                    logger.info(
-                        "[lifecycle] restarting keep-alive for %s", session_name
+            if state.is_online and state.active_sessions:
+                dead = [
+                    name
+                    for name, task in self.colab_service._keep_alive_tasks.items()
+                    if task.done()
+                ]
+                for session_name in dead:
+                    ep = next(
+                        (
+                            s.get("endpoint")
+                            for s in state.active_sessions
+                            if s.get("name") == session_name
+                        ),
+                        None,
                     )
-                    colab_service._start_in_process_keep_alive(
-                        session_name, ep, state.auth_method
-                    )
+                    if ep:
+                        logger.info(
+                            "[lifecycle] restarting keep-alive for %s",
+                            session_name,
+                        )
+                        self.colab_service._start_in_process_keep_alive(
+                            session_name, ep, state.auth_method
+                        )
 
-        # 3. Refresh the current view so the offline banner is up-to-date
-        if page.route == "/home":
-            page.run_task(navigate, "/home")
+        page.on_app_lifecycle_state_change = _on_lifecycle_change
 
-    page.on_app_lifecycle_state_change = _on_lifecycle_change
+    def _on_error(self, e):
+        logger.error("Global Page Error: %s", getattr(e, "data", e))
 
-    # ── Wire up routing ───────────────────────────────────────────────────────
-    # Navigation is driven explicitly via navigate()/route_change() (which set
-    # page.route and rebuild views). We deliberately do NOT register
-    # on_route_change: assigning page.route already fires the route-change
-    # event, so registering it would cause every navigation to run twice.
-    page.on_route_change = None
 
-    async def view_pop(e):
-        page.views.pop()
-        if page.views:
-            top = page.views[-1]
-            page.route = top.route
-        else:
-            page.route = "/home"
-        await route_change()
-
-    page.on_view_pop = view_pop
-
-    # ── Initial route ─────────────────────────────────────────────────────────
-    async def _initial_route():
-        # Probe connectivity first. If offline, surface the offline screen and
-        # skip auth entirely — a returning user must not be forced back through
-        # onboarding just because the token can't be refreshed right now.
-        connectivity = await state.connectivity.get_connectivity()
-        state.is_online = ft.ConnectivityType.NONE not in connectivity
-        if not state.is_online:
-            await navigate("/offline")
-            return
-
-        await _init_cli()
-        if state.is_authenticated:
-            state.onboarding_done = True
-            await storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
-        else:
-            onboarding_done = await storage.get(constants.STORAGE_ONBOARDING_DONE)
-            state.onboarding_done = onboarding_done == "true"
-
-        if state.onboarding_done and state.is_authenticated:
-            await navigate("/home")
-        else:
-            await navigate("/onboarding")
-
-    # Public alias so the offline screen's Retry can re-enter routing.
-    async def run_initial_route():
-        await _initial_route()
-
-    page.run_task(_initial_route)
+async def main(page: ft.Page):
+    controller = AppController(page)
+    await controller.init()
 
 
 if __name__ == "__main__":

@@ -14,11 +14,12 @@ def show_new_session_sheet(
     state,
     colab_service,
     ad_service,
-    navigate,
-    route_change,
-    snack_func,
+    navigate=None,
+    route_change=None,
+    snack_func=None,
     mode=None,
     ignore_warning=False,
+    on_session_created=None,
 ):
     def _close_limit_dialog(e=None):
         limit_dialog.open = False
@@ -31,11 +32,12 @@ def show_new_session_sheet(
             state,
             colab_service,
             ad_service,
-            navigate,
-            route_change,
-            snack_func,
+            navigate=navigate,
+            route_change=route_change,
+            snack_func=snack_func,
             mode=mode,
             ignore_warning=True,
+            on_session_created=on_session_created,
         )
 
     if not ignore_warning and len(state.active_sessions) >= 3:
@@ -167,9 +169,11 @@ def show_new_session_sheet(
             sessions = await colab_service.list_sessions(
                 auth_method=state.auth_method,
             )
-            state.active_sessions = sessions
+            state.active_sessions = sessions or []
 
-            if mode:
+            if on_session_created:
+                on_session_created(result["name"])
+            elif navigate and mode:
                 import urllib.parse
 
                 encoded_session = urllib.parse.quote(result["name"])
@@ -179,7 +183,7 @@ def show_new_session_sheet(
                     await navigate(f"/session?session={encoded_session}&tab=terminal")
                 elif mode == "files":
                     await navigate(f"/files?session={encoded_session}")
-            else:
+            elif route_change:
                 await route_change()
         except Exception as ex:
             logger.exception("Failed to create session")
