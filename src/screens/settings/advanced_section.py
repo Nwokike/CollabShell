@@ -5,48 +5,56 @@ from __future__ import annotations
 import flet as ft
 
 from core import constants, tokens
-from core.styles import section_card, tip_text
+from core.styles import glass_card, section_header, tip_text
 
 
-def build_advanced_section(page: ft.Page, state, services) -> ft.Container:
+def build_advanced_section(page: ft.Page, state, services) -> ft.Column:
     async def _on_logtostderr_change(e):
         state.logtostderr = e.control.value
         await services.storage.set(
             constants.STORAGE_LOGTOSTDERR, str(e.control.value).lower()
         )
 
-    return section_card(
-        "Advanced Developer Settings",
-        ft.Icons.CODE_ROUNDED,
-        ft.Column(
-            controls=[
-                ft.Row(
+    return ft.Column(
+        controls=[
+            section_header("ADVANCED"),
+            glass_card(
+                ft.Column(
                     controls=[
-                        ft.Column(
+                        ft.Row(
                             controls=[
-                                ft.Text(
-                                    "Log to Stderr",
-                                    size=tokens.FONT_MD,
-                                    weight=ft.FontWeight.W_500,
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Log to Stderr",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Debug: route all CLI output to stderr"
+                                        ),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
                                 ),
-                                tip_text(
-                                    "Debug: route all CLI subprocess output directly to stderr"
+                                ft.Switch(
+                                    value=state.logtostderr,
+                                    on_change=lambda e: page.run_task(
+                                        _on_logtostderr_change, e
+                                    ),
                                 ),
                             ],
-                            spacing=tokens.SPACE_XXS,
-                            expand=True,
-                        ),
-                        ft.Switch(
-                            value=state.logtostderr,
-                            on_change=lambda e: page.run_task(
-                                _on_logtostderr_change, e
-                            ),
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                     ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-            ],
-            spacing=tokens.SPACE_SM,
-        ),
-        page=page,
+                margin=ft.Margin(
+                    tokens.SPACE_LG,
+                    tokens.SPACE_XS,
+                    tokens.SPACE_LG,
+                    tokens.SPACE_XS,
+                ),
+            ),
+        ],
+        spacing=0,
     )

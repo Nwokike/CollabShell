@@ -208,6 +208,7 @@ def OnboardingScreen() -> ft.Control:
     if page_idx == 2:
         next_btn = ft.FilledButton(
             content=ft.Text("Get Started"),
+            disabled=not state.is_authenticated,
             on_click=lambda e: page.run_task(_on_get_started, e),
         )
     else:
@@ -237,16 +238,7 @@ def OnboardingScreen() -> ft.Control:
                             ft.Row(
                                 controls=[
                                     ft.TextButton(
-                                        "Back",
-                                        on_click=_on_back,
-                                        visible=page_idx > 0,
-                                    ),
-                                    ft.TextButton(
-                                        "Skip",
-                                        on_click=lambda e: page.run_task(
-                                            _on_get_started, e
-                                        ),
-                                        visible=page_idx < 2,
+                                        "Back", on_click=_on_back, visible=page_idx > 0
                                     ),
                                     ft.Container(expand=True),
                                     next_btn,

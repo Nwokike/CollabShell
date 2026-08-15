@@ -5,56 +5,51 @@ from __future__ import annotations
 import flet as ft
 
 from components.brand_header import build_brand_header
-from core import constants, tokens
-from core.styles import section_card
+from core import tokens
+from core.styles import glass_card, section_header
 
 
-def build_about_section(page: ft.Page, state, services) -> ft.Container:
-    return section_card(
-        "About",
-        ft.Icons.INFO_ROUNDED,
-        ft.Column(
-            controls=[
-                ft.Container(
-                    content=build_brand_header(show_tagline=True, spacing_below=False),
-                    opacity=0.85,
-                ),
-                ft.Divider(
-                    height=1,
-                    color=ft.Colors.with_opacity(
-                        tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE
-                    ),
-                ),
-                ft.Row(
+def build_about_section(page: ft.Page, state, services) -> ft.Column:
+    return ft.Column(
+        controls=[
+            section_header("ABOUT"),
+            glass_card(
+                ft.Column(
                     controls=[
-                        ft.Text("Version", size=tokens.FONT_SM),
+                        ft.Container(
+                            content=build_brand_header(
+                                show_tagline=True, spacing_below=False
+                            ),
+                            opacity=0.8,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        ft.Row(
+                            controls=[
+                                ft.Text("Core Engine", size=tokens.FONT_SM),
+                                ft.Text(
+                                    "google-colab-cli",
+                                    size=tokens.FONT_SM,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
                         ft.Text(
-                            f"v{constants.APP_VERSION}",
-                            size=tokens.FONT_SM,
+                            "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
+                            size=tokens.FONT_XXS,
                             color=ft.Colors.ON_SURFACE_VARIANT,
+                            italic=True,
                         ),
                     ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    spacing=tokens.SPACE_SM,
                 ),
-                ft.Row(
-                    controls=[
-                        ft.Text("Core Engine", size=tokens.FONT_SM),
-                        ft.Text(
-                            "google-colab-cli",
-                            size=tokens.FONT_SM,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                margin=ft.Margin(
+                    tokens.SPACE_LG,
+                    tokens.SPACE_XS,
+                    tokens.SPACE_LG,
+                    tokens.SPACE_XS,
                 ),
-                ft.Text(
-                    "Disclaimer: Unofficial client application. Not affiliated with, authorized, sponsored, or endorsed by Google LLC.",
-                    size=tokens.FONT_XXS,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                    italic=True,
-                ),
-            ],
-            spacing=tokens.SPACE_SM,
-        ),
-        page=page,
+            ),
+        ],
+        spacing=0,
     )

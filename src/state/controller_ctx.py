@@ -20,13 +20,15 @@ def _noop(*_args, **_kwargs) -> None:
 class ControllerMethods:
     """Callbacks from AppController exposed to the component tree."""
 
-    navigate_tab: Callable[[int], None] = field(default=_noop)
-    open_history: Callable[[], None] = field(default=_noop)
-    close_fullscreen: Callable[[], None] = field(default=_noop)
+    # Open a session in the app shell (name, mode: "notebook"|"terminal"|"files")
     open_session: Callable[[str, str], None] = field(default=_noop)
+    # Close the current session screen and return to home
     close_session: Callable[[], None] = field(default=_noop)
+    # Show a snackbar message
     show_snack: Callable[[str], None] = field(default=_noop)
+    # Show the new session bottom sheet (mode: "notebook"|"terminal"|"files")
     show_new_session_sheet: Callable[[str], None] = field(default=_noop)
+    # Toggle dark/light/system theme
     toggle_theme: Callable[[], None] = field(default=_noop)
 
 

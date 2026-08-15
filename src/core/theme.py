@@ -5,8 +5,8 @@ import flet as ft
 
 class AppColors:
     # ─── COLAB BRAND PALETTE ──────────────────────────────────────────────────
-    PRIMARY = "#D87607"
-    ACCENT = "#E58514"
+    # Google Colab primary: warm amber/orange #F9AB00
+    # Adapted into a premium two-tone palette for light & dark modes.
 
     # ─── LIGHT PALETTE ────────────────────────────────────────────────────────
     LIGHT_BG = "#FFFFFF"
@@ -16,7 +16,6 @@ class AppColors:
     LIGHT_HIGHLIGHT = "#D87607"  # Brand orange from icon
     LIGHT_PRIMARY_VARIANT = "#BA6200"  # Darker orange
     LIGHT_PRIMARY = "#D87607"  # Brand orange from icon
-    LIGHT_BORDER = "#E2E8F0"
 
     # ─── DARK PALETTE ─────────────────────────────────────────────────────────
     DARK_BG = "#1E1E2E"  # Deep charcoal
@@ -26,7 +25,6 @@ class AppColors:
     DARK_PRIMARY_VARIANT = "#D87607"  # Slightly deeper orange
     DARK_TEXT_DIM = "#8B8FA3"  # Muted gray
     DARK_HIGHLIGHT = "#E58514"  # Warm orange
-    DARK_BORDER = "#2D2D3F"
 
     # ─── Semantic colors ──────────────────────────────────────────────────────
     SUCCESS = "#4CAF50"  # Green — session running, auth OK

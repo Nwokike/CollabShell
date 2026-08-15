@@ -1,11 +1,10 @@
-"""Reusable widget factories and card layouts."""
+"""Reusable widget factories."""
 
 import logging
 
 import flet as ft
 
 from core import tokens
-from core.theme import AppColors
 
 logger = logging.getLogger(__name__)
 
@@ -28,44 +27,49 @@ def section_header(text: str) -> ft.Container:
     )
 
 
-def section_card(
-    title: str, icon: str, content: ft.Control, page: ft.Page | None = None
+def setting_tile(
+    icon: ft.Icons = None,
+    title: str = "",
+    subtitle: str = "",
+    on_click=None,
 ) -> ft.Container:
-    """Frosted card section matching DDGS and SpanInsights standard."""
     return ft.Container(
-        content=ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.Icon(icon, color=ft.Colors.PRIMARY, size=tokens.ICON_MD),
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    icon,
+                    size=tokens.ICON_LG,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                )
+                if icon
+                else ft.Container(width=0),
+                ft.Column(
+                    controls=[
                         ft.Text(
                             title,
                             size=tokens.FONT_MD,
-                            weight=ft.FontWeight.W_600,
+                            weight=ft.FontWeight.W_500,
+                        ),
+                        ft.Text(
+                            subtitle,
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
                         ),
                     ],
-                    spacing=tokens.SPACE_SM,
+                    spacing=tokens.SPACE_XXS,
+                    expand=True,
                 ),
-                ft.Divider(
-                    height=tokens.DIVIDER_THICKNESS,
-                    color=ft.Colors.with_opacity(
-                        tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE
-                    ),
-                ),
-                content,
             ],
-            spacing=tokens.SPACE_MD,
+            spacing=tokens.SPACE_LG,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=tokens.SPACE_LG,
-        border_radius=tokens.RADIUS_MD,
-        bgcolor=ft.Colors.with_opacity(tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(
-            tokens.DIVIDER_THICKNESS,
-            ft.Colors.with_opacity(tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE),
+        padding=ft.Padding(
+            left=tokens.SPACE_LG,
+            right=tokens.SPACE_LG,
+            top=14,
+            bottom=14,
         ),
-        margin=ft.Margin(
-            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
-        ),
+        on_click=on_click,
     )
 
 
@@ -87,6 +91,20 @@ def glass_card(content: ft.Control, **kwargs) -> ft.Container:
     )
 
 
+def solid_card(content: ft.Control, **kwargs) -> ft.Container:
+    return ft.Container(
+        content=content,
+        padding=ft.Padding(
+            left=tokens.SPACE_LG,
+            right=tokens.SPACE_LG,
+            top=tokens.SPACE_MD,
+            bottom=tokens.SPACE_MD,
+        ),
+        border_radius=tokens.RADIUS_LG,
+        **kwargs,
+    )
+
+
 def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     """Build a glass-container-wrapped banner ad (mobile only)."""
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
@@ -103,8 +121,8 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
 
         ad = fta.BannerAd(
             unit_id=unit_id,
-            width=tokens.BANNER_WIDTH,
-            height=tokens.BANNER_HEIGHT,
+            width=320,
+            height=50,
             on_error=lambda e: None,
         )
     except Exception as e:
@@ -132,6 +150,8 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
 
 def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
     """Build a colored hardware chip (CPU=gray, GPU=amber, TPU=blue)."""
+    from core.theme import AppColors
+
     label = "CPU" if accelerator == "NONE" else accelerator
     if variant == "TPU" or accelerator.upper() in ("V5E1", "V6E1"):
         color = AppColors.BADGE_TPU
@@ -157,6 +177,8 @@ def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
 
 def status_dot(is_running: bool = False) -> ft.Container:
     """Green pulsing dot for running, gray for idle."""
+    from core.theme import AppColors
+
     return ft.Container(
         width=tokens.ICON_SM - 6,
         height=tokens.ICON_SM - 6,
