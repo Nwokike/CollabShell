@@ -284,7 +284,10 @@ class AppController:
 
         # Android lifecycle handler
         async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
-            if e.state != ft.AppLifecycleState.RESUMED:
+            if e.state not in (
+                ft.AppLifecycleState.RESUME,
+                ft.AppLifecycleState.SHOW,
+            ):
                 return
 
             logger.info("[lifecycle] app resumed — re-probing connectivity")
