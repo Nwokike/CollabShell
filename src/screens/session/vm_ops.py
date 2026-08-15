@@ -11,13 +11,12 @@ from core import tokens
 
 logger = logging.getLogger("colab")
 
-_active_auth_dialog = {"current": None}
-
 
 def _close_active_auth(page: ft.Page):
-    if _active_auth_dialog["current"] and _active_auth_dialog["current"].open:
-        _active_auth_dialog["current"].open = False
-        page.update()
+    try:
+        page.pop_dialog()
+    except Exception:
+        pass
 
 
 async def on_mount_drive(
@@ -50,9 +49,7 @@ async def on_mount_drive(
         actions=[ft.TextButton("Cancel", on_click=lambda e: _close_active_auth(page))],
         modal=True,
     )
-    _active_auth_dialog["current"] = dialog
     page.show_dialog(dialog)
-    page.update()
 
     def _output_handler(out):
         if snack:
@@ -139,9 +136,7 @@ async def on_auth_gcp(
         actions=[ft.TextButton("Cancel", on_click=lambda e: _close_active_auth(page))],
         modal=True,
     )
-    _active_auth_dialog["current"] = dialog
     page.show_dialog(dialog)
-    page.update()
 
     def _output_handler(out):
         if snack:

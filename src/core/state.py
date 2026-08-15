@@ -46,6 +46,7 @@ class AppState:
     # ── UI ────────────────────────────────────────────────────────────────────
     theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
     is_loading: bool = False
+    app_ready: bool = False
     cli_available: bool = False
     update_available_version: str | None = None
     onboarding_done: bool = False
@@ -68,6 +69,7 @@ class AppState:
         self.log_events = []
         self.update_available_version = None
         self.onboarding_done = False
+        self.app_ready = False
         self.is_online = True
         self.ad_service = None
         self.notebook_cells = []

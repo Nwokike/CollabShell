@@ -488,25 +488,31 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
         expand=True,
     )
 
-    return ft.Column(
-        controls=[
-            ft.AppBar(
-                leading=ft.Container(
-                    content=ft.IconButton(
-                        icon=ft.Icons.ARROW_BACK_ROUNDED,
-                        on_click=lambda e: on_back(),
-                        icon_size=tokens.ICON_MD,
-                        tooltip="Back to Home",
-                    ),
-                    padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+    header_bar = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK_ROUNDED,
+                    on_click=lambda e: on_back(),
+                    icon_size=tokens.ICON_MD,
+                    tooltip="Back to Home",
                 ),
-                leading_width=48,
-                title=ft.Text(
+                ft.Text(
                     "Active Session", size=tokens.FONT_LG, weight=ft.FontWeight.W_700
                 ),
-                center_title=True,
-                bgcolor=ft.Colors.TRANSPARENT,
-            ),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=tokens.SPACE_SM,
+        ),
+        padding=ft.Padding(
+            tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
+        ),
+        bgcolor=ft.Colors.SURFACE,
+    )
+
+    return ft.Column(
+        controls=[
+            header_bar,
             status_header,
             tab_bar,
             content,

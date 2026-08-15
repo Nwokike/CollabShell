@@ -26,7 +26,9 @@ def HistoryScreen() -> ft.Control:
     async def _load_sessions():
         set_loading(True)
         try:
-            sess = await services.colab.list_sessions()
+            sess = state.active_sessions or await services.colab.list_sessions(
+                auth_method=state.auth_method
+            )
             names = [s.get("name", "") for s in (sess or []) if s.get("name")]
             set_sessions(names)
             if names and not selected_session:

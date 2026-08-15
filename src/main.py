@@ -235,6 +235,8 @@ class AppController:
             )
         except Exception:
             pass
+        finally:
+            state.app_ready = True
 
     def _register_lifecycle_handlers(self):
         page = self.page

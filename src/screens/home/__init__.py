@@ -213,7 +213,7 @@ def HomeScreen() -> ft.Control:
                             ft.Row(
                                 controls=[
                                     _action_button(
-                                        ft.Icons.CODE_ROUNDED,
+                                        ft.Icons.EDIT_NOTE_ROUNDED,
                                         "New Notebook",
                                         lambda e: _on_new_session("notebook"),
                                     ),

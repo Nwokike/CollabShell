@@ -40,6 +40,34 @@ def AppShell() -> ft.Control:
     controller.open_session = _open_session
     controller.close_session = _close_session
 
+    # ── 0. Initial App Loading Screen ─────────────────────────────────────────
+    if not state.app_ready:
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Icon(
+                        ft.Icons.TERMINAL_ROUNDED, size=72, color=ft.Colors.PRIMARY
+                    ),
+                    ft.Container(height=tokens.SPACE_LG),
+                    ft.ProgressRing(
+                        width=tokens.SPINNER_MD,
+                        height=tokens.SPINNER_MD,
+                        stroke_width=3,
+                    ),
+                    ft.Container(height=tokens.SPACE_SM),
+                    ft.Text(
+                        "Initializing Colab Shell...",
+                        size=tokens.FONT_SM,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            alignment=ft.Alignment.CENTER,
+            expand=True,
+        )
+
     # ── 1. Offline mode ───────────────────────────────────────────────────────
     if not state.is_online:
 
@@ -65,24 +93,31 @@ def AppShell() -> ft.Control:
         if active_session_mode == "files":
             return ft.Column(
                 controls=[
-                    ft.AppBar(
-                        leading=ft.Container(
-                            content=ft.IconButton(
-                                icon=ft.Icons.ARROW_BACK_ROUNDED,
-                                on_click=lambda e: set_active_session(None),
-                                icon_size=tokens.ICON_MD,
-                                tooltip="Back to Home",
-                            ),
-                            padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.IconButton(
+                                    icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                    on_click=lambda e: set_active_session(None),
+                                    icon_size=tokens.ICON_MD,
+                                    tooltip="Back to Home",
+                                ),
+                                ft.Text(
+                                    f"Files — {active_session}",
+                                    size=tokens.FONT_LG,
+                                    weight=ft.FontWeight.W_700,
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_SM,
                         ),
-                        leading_width=48,
-                        title=ft.Text(
-                            f"Files — {active_session}",
-                            size=tokens.FONT_LG,
-                            weight=ft.FontWeight.W_700,
+                        padding=ft.Padding(
+                            tokens.SPACE_SM,
+                            tokens.SPACE_SM,
+                            tokens.SPACE_LG,
+                            tokens.SPACE_SM,
                         ),
-                        center_title=True,
-                        bgcolor=ft.Colors.TRANSPARENT,
+                        bgcolor=ft.Colors.SURFACE,
                     ),
                     ft.Container(
                         content=FilesScreen(session_name=active_session),
@@ -102,24 +137,31 @@ def AppShell() -> ft.Control:
     if show_history:
         return ft.Column(
             controls=[
-                ft.AppBar(
-                    leading=ft.Container(
-                        content=ft.IconButton(
-                            icon=ft.Icons.ARROW_BACK_ROUNDED,
-                            on_click=lambda e: set_show_history(False),
-                            icon_size=tokens.ICON_MD,
-                            tooltip="Back",
-                        ),
-                        padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                on_click=lambda e: set_show_history(False),
+                                icon_size=tokens.ICON_MD,
+                                tooltip="Back",
+                            ),
+                            ft.Text(
+                                "Execution History",
+                                size=tokens.FONT_LG,
+                                weight=ft.FontWeight.W_700,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=tokens.SPACE_SM,
                     ),
-                    leading_width=48,
-                    title=ft.Text(
-                        "Execution History",
-                        size=tokens.FONT_LG,
-                        weight=ft.FontWeight.W_700,
+                    padding=ft.Padding(
+                        tokens.SPACE_SM,
+                        tokens.SPACE_SM,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_SM,
                     ),
-                    center_title=True,
-                    bgcolor=ft.Colors.TRANSPARENT,
+                    bgcolor=ft.Colors.SURFACE,
                 ),
                 ft.Container(content=HistoryScreen(), expand=True),
             ],
@@ -154,8 +196,8 @@ def AppShell() -> ft.Control:
                 label=constants.LBL_HOME,
             ),
             ft.NavigationBarDestination(
-                icon=ft.Icons.NOTE_OUTLINED,
-                selected_icon=ft.Icons.NOTE_ROUNDED,
+                icon=ft.Icons.EDIT_NOTE_ROUNDED,
+                selected_icon=ft.Icons.EDIT_NOTE_ROUNDED,
                 label="Notebooks",
             ),
             ft.NavigationBarDestination(
@@ -188,36 +230,36 @@ def AppShell() -> ft.Control:
         on_click=lambda e: controller.toggle_theme(),
     )
 
-    app_bar = ft.AppBar(
-        leading=ft.Container(
-            content=ft.Text(
-                tab_titles[selected_tab],
-                size=tokens.FONT_LG,
-                weight=ft.FontWeight.BOLD,
-                color=ft.Colors.ON_SURFACE,
-            ),
-            padding=ft.Padding(tokens.SPACE_LG, 0, 0, 0),
-            alignment=ft.Alignment.CENTER_LEFT,
+    header_bar = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Text(
+                    tab_titles[selected_tab],
+                    size=tokens.FONT_LG,
+                    weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.ON_SURFACE,
+                ),
+                ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.HISTORY_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Execution History",
+                    on_click=lambda e: set_show_history(True),
+                    visible=selected_tab == 0,
+                ),
+                theme_btn,
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        leading_width=140,
-        title=ft.Container(),
-        center_title=False,
-        actions=[
-            ft.IconButton(
-                icon=ft.Icons.HISTORY_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                tooltip="History",
-                on_click=lambda e: set_show_history(True),
-                visible=selected_tab == 0,
-            ),
-            theme_btn,
-        ],
-        bgcolor=ft.Colors.TRANSPARENT,
+        padding=ft.Padding(
+            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM
+        ),
+        bgcolor=ft.Colors.SURFACE,
     )
 
     return ft.Column(
         controls=[
-            app_bar,
+            header_bar,
             ft.Container(
                 content=tab_screens[selected_tab],
                 expand=True,
