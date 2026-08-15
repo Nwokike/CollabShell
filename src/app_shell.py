@@ -243,22 +243,37 @@ def AppShell() -> Control:
 
         from screens.session import SessionScreen
 
-        return SessionScreen(
-            session_name=state.active_session_name,
-            mode=state.session_mode,
-            on_back=controller.close_session,
-            key=ft.ValueKey(
-                f"session_{state.active_session_name}_{state.session_mode}"
+        return ft.SafeArea(
+            content=SessionScreen(
+                session_name=state.active_session_name,
+                mode=state.session_mode,
+                on_back=controller.close_session,
+                key=ft.ValueKey(
+                    f"session_{state.active_session_name}_{state.session_mode}"
+                ),
             ),
+            expand=True,
         )
 
     # ── 6. Main Tabbed Dashboard Views ────────────────────────────────────────
-    theme_btn = ft.IconButton(
-        icon=ft.Icons.DARK_MODE_ROUNDED
+    theme_icon = (
+        ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+        if state.theme_mode == ft.ThemeMode.SYSTEM
+        else ft.Icons.LIGHT_MODE_ROUNDED
         if state.theme_mode == ft.ThemeMode.LIGHT
-        else ft.Icons.LIGHT_MODE_ROUNDED,
+        else ft.Icons.DARK_MODE_ROUNDED
+    )
+    theme_tooltip = (
+        "System Theme"
+        if state.theme_mode == ft.ThemeMode.SYSTEM
+        else "Light Theme"
+        if state.theme_mode == ft.ThemeMode.LIGHT
+        else "Dark Theme"
+    )
+    theme_btn = ft.IconButton(
+        icon=theme_icon,
         icon_size=tokens.ICON_SM,
-        tooltip="Toggle Theme",
+        tooltip=theme_tooltip,
         on_click=lambda e: controller.toggle_theme(),
     )
 

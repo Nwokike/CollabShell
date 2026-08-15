@@ -31,6 +31,28 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
+
+from core.storage_patch import _memory_log_handler
+
+for log_name in [
+    "",
+    "colab",
+    "flet",
+    "router",
+    "services",
+    "core",
+    "colab_service",
+    "colab_session_ops",
+    "colab_auth",
+]:
+    lg = logging.getLogger(log_name)
+    if _memory_log_handler not in lg.handlers:
+        lg.addHandler(_memory_log_handler)
+    if lg.level == logging.NOTSET:
+        lg.setLevel(logging.INFO)
+    if log_name != "":
+        lg.propagate = False
+
 logger = logging.getLogger("colab")
 
 if sys.platform == "win32":
@@ -135,16 +157,22 @@ class AppController:
             )
 
         def _toggle_theme():
-            page.theme_mode = (
-                ft.ThemeMode.DARK
-                if page.theme_mode == ft.ThemeMode.LIGHT
-                else ft.ThemeMode.LIGHT
-            )
+            if page.theme_mode == ft.ThemeMode.SYSTEM:
+                page.theme_mode = ft.ThemeMode.LIGHT
+            elif page.theme_mode == ft.ThemeMode.LIGHT:
+                page.theme_mode = ft.ThemeMode.DARK
+            else:
+                page.theme_mode = ft.ThemeMode.SYSTEM
             state.theme_mode = page.theme_mode
+            theme_val = "system"
+            if page.theme_mode == ft.ThemeMode.LIGHT:
+                theme_val = "light"
+            elif page.theme_mode == ft.ThemeMode.DARK:
+                theme_val = "dark"
             page.run_task(
                 self.storage.set,
                 constants.STORAGE_THEME,
-                "dark" if page.theme_mode == ft.ThemeMode.DARK else "light",
+                theme_val,
             )
             page.update()
 
