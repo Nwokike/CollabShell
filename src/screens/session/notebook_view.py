@@ -274,28 +274,86 @@ def NotebookView(
         except Exception as ex:
             controller.show_snack(f"Error: {ex}")
 
-    async def _on_restart(e=None):
+    async def _do_restart():
         state.is_executing = False
         try:
             await services.colab.restart_session(
                 session_name, auth_method=state.auth_method
             )
-            controller.show_snack("✅ Session restarted")
+            controller.show_snack("✅ Kernel restarted")
         except Exception as ex:
             controller.show_snack(f"❌ Restart failed: {ex}")
 
-    async def _on_stop(e=None):
+    def _on_restart(e=None):
+        # Confirm before firing — all variables will be lost
+        session_exists = any(
+            s.get("name") == session_name for s in state.active_sessions
+        )
+        if not session_exists:
+            controller.show_snack("Session is no longer available.")
+            return
+
+        def _close(ev=None):
+            page.pop_dialog()
+
+        def _confirm_restart(ev):
+            page.pop_dialog()
+            page.run_task(_do_restart)
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Restart Kernel?"),
+                content=ft.Text(
+                    "This will restart the Python kernel. All variables will be lost."
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=_close),
+                    ft.FilledButton("Restart", on_click=_confirm_restart),
+                ],
+            )
+        )
+
+    async def _do_stop():
         try:
             await services.colab.stop_session(
                 session_name, auth_method=state.auth_method
             )
-            controller.show_snack("✅ Session stopped")
+            controller.show_snack("✅ Session terminated")
             state.active_sessions = await services.colab.list_sessions(
                 auth_method=state.auth_method
             )
             controller.close_session()
         except Exception as ex:
             controller.show_snack(f"❌ Stop failed: {ex}")
+
+    def _on_stop(e=None):
+        # Confirm before firing — resources will be released
+        session_exists = any(
+            s.get("name") == session_name for s in state.active_sessions
+        )
+        if not session_exists:
+            controller.show_snack("Session is no longer available.")
+            return
+
+        def _close(ev=None):
+            page.pop_dialog()
+
+        def _confirm_stop(ev):
+            page.pop_dialog()
+            page.run_task(_do_stop)
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Stop Session?"),
+                content=ft.Text(
+                    "This will terminate the session and release all resources."
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=_close),
+                    ft.FilledButton("Stop", on_click=_confirm_stop),
+                ],
+            )
+        )
 
     async def _on_keep_alive(e):
         state.keep_alive_enabled = e.control.value
@@ -319,8 +377,8 @@ def NotebookView(
         on_open_browser=lambda e: page.run_task(_on_open_browser, e),
         on_terminal=lambda e: on_switch_terminal(),
         on_view_logs=lambda e: None,
-        on_restart=lambda e: page.run_task(_on_restart, e),
-        on_stop=lambda e: page.run_task(_on_stop, e),
+        on_restart=lambda e: _on_restart(e),
+        on_stop=lambda e: _on_stop(e),
     )
 
     keep_alive_card = build_keep_alive_card(

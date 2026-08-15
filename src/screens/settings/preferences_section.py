@@ -1,4 +1,8 @@
-"""Display preferences settings section (light/dark/system themes)."""
+"""Display preferences settings section (light/dark/system themes).
+
+Uses @ft.component so that when theme changes, the buttons re-render
+with the new selected state (highlighting the active theme correctly).
+"""
 
 from __future__ import annotations
 
@@ -8,14 +12,23 @@ from core import constants, tokens
 from core.styles import glass_card, section_header
 
 
-def build_preferences_section(page: ft.Page, state, services) -> ft.Column:
-    def _make_theme_btn(label: str, mode: ft.ThemeMode) -> ft.Control:
-        is_sel = state.theme_mode == mode
+@ft.component
+def PreferencesSection(page: ft.Page, state, services) -> ft.Control:
+    # Local reactive state mirrors state.theme_mode so toggling re-renders.
+    current_mode, set_current_mode = ft.use_state(state.theme_mode)
 
-        def _select(e, m=mode):
+    def _make_theme_btn(label: str, mode: ft.ThemeMode) -> ft.Control:
+        is_sel = current_mode == mode
+
+        def _select(e, m=mode, lbl=label):
             page.theme_mode = m
             state.theme_mode = m
-            page.run_task(services.storage.set, constants.STORAGE_THEME, label.lower())
+            set_current_mode(m)  # triggers reactive re-render
+            page.run_task(
+                services.storage.set,
+                constants.STORAGE_THEME,
+                lbl.lower(),
+            )
             page.update()
 
         return ft.Container(
@@ -35,7 +48,9 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Column:
                         label,
                         size=tokens.FONT_XS,
                         color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE,
-                        weight=ft.FontWeight.W_600 if is_sel else ft.FontWeight.NORMAL,
+                        weight=ft.FontWeight.W_600
+                        if is_sel
+                        else ft.FontWeight.NORMAL,
                     ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -111,3 +126,8 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Column:
         ],
         spacing=0,
     )
+
+
+def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
+    """Shim so settings/__init__.py call signature is unchanged."""
+    return PreferencesSection(page=page, state=state, services=services)

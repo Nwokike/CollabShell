@@ -102,40 +102,253 @@ def FilesScreen(session_name: str) -> ft.Control:
 
     # ── Download ──────────────────────────────────────────────────────────────
     async def _download_selected(e=None):
-        names = list(selected)
-        if not names:
-            return
-        page.snack_bar = ft.SnackBar(ft.Text(f"⬇ Downloading {len(names)} file(s)..."))
-        page.snack_bar.open = True
-        page.update()
-        for name in names:
-            remote = f"{current_path.rstrip('/')}/{name}"
-            try:
-                import os
+        import os
+        import posixpath
 
-                dl_dir = "/storage/emulated/0/Download"
-                if not os.path.exists(dl_dir):
-                    dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-                os.makedirs(dl_dir, exist_ok=True)
-                await services.colab.download_file(
-                    session_name,
-                    remote_path=remote,
-                    local_dir=dl_dir,
-                    auth_method=state.auth_method,
+        selected_items = [f for f in listing if f["name"] in selected]
+        if not selected_items:
+            return
+
+        async def _do_downloads():
+            for item in selected_items:
+                name = item["name"]
+                is_dir = item.get("type") == "directory" or item.get("is_dir", False)
+                remote_path = posixpath.normpath(
+                    posixpath.join(current_path, name)
                 )
-            except Exception as ex:
+
+                size_bytes = item.get("size")
+                size_str = ""
+                if size_bytes is not None:
+                    if size_bytes < 1024:
+                        size_str = f" ({size_bytes} B)"
+                    elif size_bytes < 1024 * 1024:
+                        size_str = f" ({size_bytes / 1024:.1f} KB)"
+                    else:
+                        size_str = f" ({size_bytes / (1024 * 1024):.1f} MB)"
+                elif is_dir:
+                    size_str = " (folder)"
+
+                default_name = f"{name}.zip" if is_dir else name
+
+                if page.platform.is_mobile():
+                    dl_dir = "/storage/emulated/0/Download"
+                    if not os.path.exists(dl_dir):
+                        dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                    os.makedirs(dl_dir, exist_ok=True)
+                    # Auto-rename duplicates
+                    name_part, ext_part = os.path.splitext(default_name)
+                    counter = 1
+                    unique_name = default_name
+                    while os.path.exists(os.path.join(dl_dir, unique_name)):
+                        unique_name = f"{name_part} ({counter}){ext_part}"
+                        counter += 1
+                    local_path = os.path.join(dl_dir, unique_name)
+                else:
+                    try:
+                        local_path = await page.file_picker.save_file(
+                            dialog_title=f"Save {default_name}",
+                            file_name=default_name,
+                        )
+                    except (ValueError, Exception):
+                        dl_dir = "/storage/emulated/0/Download"
+                        if not os.path.exists(dl_dir):
+                            dl_dir = os.path.join(
+                                os.path.expanduser("~"), "Downloads"
+                            )
+                        os.makedirs(dl_dir, exist_ok=True)
+                        name_part, ext_part = os.path.splitext(default_name)
+                        counter = 1
+                        unique_name = default_name
+                        while os.path.exists(os.path.join(dl_dir, unique_name)):
+                            unique_name = f"{name_part} ({counter}){ext_part}"
+                            counter += 1
+                        local_path = os.path.join(dl_dir, unique_name)
+
+                if not local_path:
+                    continue
+
+                prog_bar = ft.ProgressBar(
+                    color=ft.Colors.PRIMARY,
+                    bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+                )
+                status_text = ft.Text(
+                    f"Downloading...{size_str}",
+                    size=tokens.FONT_XS,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                )
+                dl_dialog = ft.AlertDialog(
+                    title=ft.Text(
+                        f"Downloading {default_name}", size=tokens.FONT_SM
+                    ),
+                    content=ft.Column(
+                        [prog_bar, status_text],
+                        spacing=tokens.SPACE_SM,
+                        tight=True,
+                    ),
+                )
+                page.show_dialog(dl_dialog)
+
+                def _on_status(msg: str, _st=status_text):
+                    _st.value = msg
+                    try:
+                        _st.update()
+                    except Exception:
+                        pass
+
+                try:
+                    if is_dir:
+                        await services.colab.download_folder(
+                            remote_dir_path=remote_path,
+                            local_zip_path=local_path,
+                            session_name=session_name,
+                            auth_method=state.auth_method,
+                            on_status=_on_status,
+                        )
+                    else:
+                        await services.colab.download(
+                            remote_path,
+                            local_path,
+                            session_name=session_name,
+                            auth_method=state.auth_method,
+                        )
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"✅ Saved to {local_path}"),
+                        bgcolor=AppColors.SUCCESS,
+                    )
+                    page.snack_bar.open = True
+                    page.update()
+                except Exception as ex:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"❌ {ex}"), bgcolor=ft.Colors.ERROR
+                    )
+                    page.snack_bar.open = True
+                    page.update()
+                finally:
+                    dl_dialog.open = False
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+
+            set_selected(set())
+            set_mode(False)
+
+        ad_service = getattr(services, "ad_service", None)
+        if ad_service:
+            await ad_service.show_rewarded_interstitial(on_close=_do_downloads)
+        else:
+            await _do_downloads()
+
+    # ── Upload ────────────────────────────────────────────────────────────────
+    async def _upload(e=None):
+        import asyncio
+        import os
+        import posixpath
+
+        picked_files = await page.file_picker.pick_files(
+            dialog_title="Select file to upload",
+            with_data=bool(getattr(page, "web", False)),
+        )
+        if not picked_files:
+            return
+
+        for picked in picked_files:
+            remote_path = posixpath.normpath(
+                posixpath.join(current_path, picked.name)
+            )
+
+            if picked.bytes is not None:
+                # Android / Web: no local path — write bytes to temp file first
+                tmp_dir = os.path.join(os.path.expanduser("~"), ".colab_uploads")
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = os.path.join(tmp_dir, picked.name)
+
+                def _write_bytes(_p=tmp_path, _b=picked.bytes):
+                    with open(_p, "wb") as _f:
+                        _f.write(_b)
+
+                await asyncio.to_thread(_write_bytes)
+                local_path = tmp_path
+                cleanup = True
+                file_size = len(picked.bytes)
+            elif picked.path is not None:
+                local_path = picked.path
+                cleanup = False
+                file_size = os.path.getsize(picked.path)
+            else:
                 page.snack_bar = ft.SnackBar(
-                    ft.Text(f"❌ {name}: {ex}"), bgcolor=ft.Colors.ERROR
+                    ft.Text(
+                        "Could not read file — picker did not return content."
+                    ),
+                    bgcolor=ft.Colors.ERROR,
                 )
                 page.snack_bar.open = True
                 page.update()
-        page.snack_bar = ft.SnackBar(
-            ft.Text("✅ Download complete"), bgcolor=AppColors.SUCCESS
-        )
-        page.snack_bar.open = True
-        page.update()
-        set_selected(set())
-        set_mode(False)
+                continue
+
+            if file_size < 1024:
+                size_str = f" ({file_size} B)"
+            elif file_size < 1024 * 1024:
+                size_str = f" ({file_size / 1024:.1f} KB)"
+            else:
+                size_str = f" ({file_size / (1024 * 1024):.1f} MB)"
+
+            prog_bar = ft.ProgressBar(
+                color=ft.Colors.PRIMARY,
+                bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+            )
+            upload_dialog = ft.AlertDialog(
+                title=ft.Text(f"Uploading {picked.name}", size=tokens.FONT_SM),
+                content=ft.Column(
+                    [
+                        prog_bar,
+                        ft.Text(
+                            f"Uploading...{size_str}",
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+            )
+            state.is_uploading = True
+            page.show_dialog(upload_dialog)
+
+            try:
+                await services.colab.upload(
+                    local_path,
+                    remote_path,
+                    session_name=session_name,
+                    auth_method=state.auth_method,
+                )
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"✅ Uploaded to {remote_path}"),
+                    bgcolor=AppColors.SUCCESS,
+                )
+                page.snack_bar.open = True
+                page.update()
+            except Exception as ex:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"❌ {ex}"), bgcolor=ft.Colors.ERROR
+                )
+                page.snack_bar.open = True
+                page.update()
+            finally:
+                upload_dialog.open = False
+                try:
+                    page.update()
+                except Exception:
+                    pass
+                state.is_uploading = False
+                if cleanup:
+                    try:
+                        os.unlink(local_path)
+                    except Exception:
+                        pass
+
+        await _fetch(current_path)
 
     # ── Delete ────────────────────────────────────────────────────────────────
     async def _delete_selected(e=None):
@@ -343,7 +556,7 @@ def FilesScreen(session_name: str) -> ft.Control:
             bgcolor=ft.Colors.SURFACE,
         )
 
-    return ft.Column(
+    content_col = ft.Column(
         controls=[
             toolbar,
             ft.Divider(height=1, thickness=1),
@@ -351,5 +564,32 @@ def FilesScreen(session_name: str) -> ft.Control:
             ft.Container(content=body, expand=True, padding=0),
         ],
         spacing=0,
+        expand=True,
+    )
+
+    # ── Upload FAB (hidden in selection mode) ─────────────────────────────────
+    upload_fab = ft.FloatingActionButton(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.UPLOAD_FILE_ROUNDED, size=tokens.ICON_SM),
+                ft.Text("Upload", size=tokens.FONT_SM, weight=ft.FontWeight.W_500),
+            ],
+            spacing=tokens.SPACE_XS,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        bgcolor=ft.Colors.PRIMARY,
+        on_click=lambda e: page.run_task(_upload, e),
+        visible=not selection_mode,
+    )
+
+    return ft.Stack(
+        controls=[
+            content_col,
+            ft.Container(
+                content=upload_fab,
+                right=tokens.SPACE_LG,
+                bottom=tokens.SPACE_XL,
+            ),
+        ],
         expand=True,
     )
