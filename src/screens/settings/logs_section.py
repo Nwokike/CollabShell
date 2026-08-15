@@ -8,7 +8,7 @@ import flet as ft
 
 from core import tokens
 from core.storage_patch import MemoryLogHandler, resolve_storage_dir
-from core.styles import glass_card, section_header
+from core.styles import section_card
 from core.theme import AppColors
 
 
@@ -106,41 +106,37 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
     )
 
 
-def build_logs_section(page: ft.Page, state, services) -> ft.Column:
-    return ft.Column(
-        controls=[
-            section_header("TROUBLESHOOTING & LOGS"),
-            glass_card(
+def build_logs_section(page: ft.Page, state, services) -> ft.Container:
+    logs_count = len(MemoryLogHandler.get_logs())
+    return section_card(
+        "Troubleshooting & Logs",
+        ft.Icons.BUG_REPORT_ROUNDED,
+        ft.Row(
+            controls=[
                 ft.Column(
                     controls=[
                         ft.Text(
-                            "Live Activity Terminal",
+                            "Activity Terminal",
                             size=tokens.FONT_MD,
                             weight=ft.FontWeight.W_500,
                         ),
                         ft.Text(
-                            "View real-time connection activity, session logs, and diagnostic errors.",
+                            f"{logs_count} log entries recorded in memory",
                             size=tokens.FONT_XS,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
-                        ft.Container(height=tokens.SPACE_XS),
-                        ft.FilledButton(
-                            "Open Terminal",
-                            icon=ft.Icons.TERMINAL_ROUNDED,
-                            on_click=lambda e: page.show_dialog(
-                                build_logs_dialog(page)
-                            ),
-                        ),
                     ],
-                    spacing=tokens.SPACE_XS,
+                    spacing=tokens.SPACE_XXS,
+                    expand=True,
                 ),
-                margin=ft.Margin(
-                    tokens.SPACE_LG,
-                    tokens.SPACE_XS,
-                    tokens.SPACE_LG,
-                    tokens.SPACE_XS,
+                ft.FilledButton(
+                    "Open Terminal",
+                    icon=ft.Icons.TERMINAL_ROUNDED,
+                    on_click=lambda e: page.show_dialog(build_logs_dialog(page)),
                 ),
-            ),
-        ],
-        spacing=0,
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=tokens.SPACE_MD,
+        ),
+        page=page,
     )

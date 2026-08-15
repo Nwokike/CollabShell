@@ -27,6 +27,7 @@ def SettingsScreen() -> ft.Control:
 
     return ft.Column(
         controls=[
+            ft.Container(height=tokens.SPACE_XS),
             build_preferences_section(page, state, services),
             build_account_section(page, state, services, snack=controller.show_snack),
             build_banner_ad(page),
@@ -39,7 +40,7 @@ def SettingsScreen() -> ft.Control:
             build_about_section(page, state, services),
             ft.Container(height=tokens.SPACE_XXL),
         ],
-        spacing=tokens.SPACE_SM,
+        spacing=tokens.SPACE_XS,
         scroll=ft.ScrollMode.AUTO,
         expand=True,
     )
