@@ -1,8 +1,17 @@
-"""AppShell — Top-level shell managing navigation, tabs, and full-screen views."""
+"""AppShell — Top-level shell managing navigation, tabs, and full-screen views.
+
+Follows the SpanInsights & DDGS architecture:
+- Hooks into observable state
+- Attaches NavigationBar & AppBar to page.views[0] via use_effect
+- Dynamically renders active screen (Onboarding, Tabs, or Full-screen Views)
+"""
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
+from flet import Control
 
 from components.offline_flow import OfflineFlow
 from core import constants, tokens
@@ -15,17 +24,150 @@ from screens.session_selector import SessionSelectorTab
 from screens.settings import SettingsScreen
 from state import AppStateCtx, ControllerMethodsCtx
 
+logger = logging.getLogger("AppShell")
+
+_TAB_NAMES = (
+    constants.LBL_HOME,
+    constants.LBL_NOTEBOOKS,
+    constants.LBL_TERMINAL,
+    constants.LBL_FILES,
+    constants.LBL_SETTINGS,
+)
+_TAB_ICONS = (
+    ft.Icons.HOME_OUTLINED,
+    ft.Icons.EDIT_NOTE_ROUNDED,
+    ft.Icons.TERMINAL_OUTLINED,
+    ft.Icons.FOLDER_OUTLINED,
+    ft.Icons.SETTINGS_OUTLINED,
+)
+_TAB_SELECTED_ICONS = (
+    ft.Icons.HOME_ROUNDED,
+    ft.Icons.EDIT_NOTE_ROUNDED,
+    ft.Icons.TERMINAL_ROUNDED,
+    ft.Icons.FOLDER_ROUNDED,
+    ft.Icons.SETTINGS_ROUNDED,
+)
+
 
 @ft.component
-def AppShell() -> ft.Control:
+def AppShell() -> Control:
     """Root application shell with bottom navigation bar and reactive subviews."""
     state = ft.use_context(AppStateCtx)
     controller = ft.use_context(ControllerMethodsCtx)
-    page = ft.context.page
 
-    # ── 0. Initial App Loading Screen (Matching SpanInsights) ─────────────────
+    # ── Sync NavigationBar & AppBar on page.views[0] ─────────────
+    def _sync_bars():
+        from flet import context
+
+        page = context.page
+        if not page or not page.views:
+            return
+
+        # Hide bars during initial boot, onboarding, or full-screen views
+        if (
+            not state.app_ready
+            or not state.onboarding_done
+            or state.active_fullscreen is not None
+        ):
+            if page.views[0].navigation_bar is not None:
+                page.views[0].navigation_bar = None
+            if page.views[0].appbar is not None:
+                page.views[0].appbar = None
+            try:
+                page.update()
+            except Exception:
+                pass
+            return
+
+        def _on_tab_change(e):
+            idx = int(e.control.selected_index)
+            logger.info("Navigated to tab '%s' (index %d)", _TAB_NAMES[idx], idx)
+            controller.navigate_tab(idx)
+
+        destinations = [
+            ft.NavigationBarDestination(
+                icon=icon,
+                selected_icon=sel_icon,
+                label=label,
+            )
+            for icon, sel_icon, label in zip(
+                _TAB_ICONS, _TAB_SELECTED_ICONS, _TAB_NAMES, strict=True
+            )
+        ]
+        page.views[0].navigation_bar = ft.NavigationBar(
+            destinations=destinations,
+            selected_index=state.selected_tab,
+            on_change=_on_tab_change,
+            bgcolor=ft.Colors.SURFACE,
+            indicator_color=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
+            label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
+        )
+
+        def _get_theme_icon():
+            if page.theme_mode == ft.ThemeMode.DARK:
+                return ft.Icons.DARK_MODE_ROUNDED
+            elif page.theme_mode == ft.ThemeMode.LIGHT:
+                return ft.Icons.LIGHT_MODE_ROUNDED
+            return ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+
+        theme_btn = ft.IconButton(
+            icon=_get_theme_icon(),
+            icon_size=tokens.ICON_SM,
+            tooltip="Toggle Theme",
+            on_click=lambda e: controller.toggle_theme(),
+        )
+
+        history_btn = ft.IconButton(
+            icon=ft.Icons.HISTORY_ROUNDED,
+            icon_size=tokens.ICON_SM,
+            tooltip=constants.LBL_HISTORY,
+            on_click=lambda e: controller.open_history(),
+            visible=state.selected_tab == 0,
+        )
+
+        tag_text = (
+            _TAB_NAMES[state.selected_tab]
+            if 0 <= state.selected_tab < len(_TAB_NAMES)
+            else constants.APP_NAME
+        )
+        page_tag = ft.Container(
+            content=ft.Text(
+                tag_text,
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_SURFACE,
+            ),
+            padding=ft.Padding(16, 0, 0, 0),
+            alignment=ft.Alignment.CENTER_LEFT,
+        )
+
+        page.views[0].appbar = ft.AppBar(
+            leading=page_tag,
+            leading_width=140,
+            actions=[history_btn, theme_btn],
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+        )
+
+        try:
+            page.update()
+        except Exception:
+            pass
+
+    ft.use_effect(
+        _sync_bars,
+        [
+            state.app_ready,
+            state.selected_tab,
+            state.active_fullscreen,
+            state.onboarding_done,
+            state.theme_mode,
+        ],
+    )
+
+    # ── Screen switching ─────────────────────────────────────────
     if not state.app_ready:
-        return ft.Container(
+        screen = ft.Container(
             content=ft.Column(
                 [
                     ft.Image(
@@ -47,9 +189,10 @@ def AppShell() -> ft.Control:
             expand=True,
             alignment=ft.Alignment.CENTER,
         )
+    elif not state.is_online:
+        from flet import context
 
-    # ── 1. Offline mode ───────────────────────────────────────────────────────
-    if not state.is_online:
+        page = context.page
 
         async def _on_retry():
             try:
@@ -62,22 +205,51 @@ def AppShell() -> ft.Control:
             except Exception:
                 pass
 
-        return OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
-
-    # ── 2. Onboarding flow ────────────────────────────────────────────────────
-    if not state.onboarding_done:
-        return OnboardingScreen()
-
-    # ── 3. Active session fullscreen ──────────────────────────────────────────
-    if state.active_fullscreen == "session":
-        return SessionScreen(
+        screen = OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
+    elif not state.onboarding_done:
+        screen = OnboardingScreen()
+    elif state.active_fullscreen == "history":
+        screen = ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                on_click=lambda e: controller.close_fullscreen(),
+                                icon_size=tokens.ICON_MD,
+                                tooltip="Back",
+                            ),
+                            ft.Text(
+                                constants.LBL_HISTORY,
+                                size=tokens.FONT_LG,
+                                weight=ft.FontWeight.W_700,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=tokens.SPACE_SM,
+                    ),
+                    padding=ft.Padding(
+                        tokens.SPACE_SM,
+                        tokens.SPACE_SM,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_SM,
+                    ),
+                    bgcolor=ft.Colors.SURFACE,
+                ),
+                ft.Container(content=HistoryScreen(), expand=True),
+            ],
+            spacing=0,
+            expand=True,
+        )
+    elif state.active_fullscreen == "session":
+        screen = SessionScreen(
             session_name=state.active_session_name,
             mode=state.active_session_mode,
             on_back=controller.close_fullscreen,
         )
-
-    if state.active_fullscreen == "files":
-        return ft.Column(
+    elif state.active_fullscreen == "files":
+        screen = ft.Column(
             controls=[
                 ft.Container(
                     content=ft.Row(
@@ -113,143 +285,16 @@ def AppShell() -> ft.Control:
             spacing=0,
             expand=True,
         )
-
-    # ── 4. History Screen fullscreen ──────────────────────────────────────────
-    if state.active_fullscreen == "history":
-        return ft.Column(
-            controls=[
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.IconButton(
-                                icon=ft.Icons.ARROW_BACK_ROUNDED,
-                                on_click=lambda e: controller.close_fullscreen(),
-                                icon_size=tokens.ICON_MD,
-                                tooltip="Back",
-                            ),
-                            ft.Text(
-                                constants.LBL_HISTORY,
-                                size=tokens.FONT_LG,
-                                weight=ft.FontWeight.W_700,
-                            ),
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=tokens.SPACE_SM,
-                    ),
-                    padding=ft.Padding(
-                        tokens.SPACE_SM,
-                        tokens.SPACE_SM,
-                        tokens.SPACE_LG,
-                        tokens.SPACE_SM,
-                    ),
-                    bgcolor=ft.Colors.SURFACE,
-                ),
-                ft.Container(content=HistoryScreen(), expand=True),
-            ],
-            spacing=0,
-            expand=True,
-        )
-
-    # ── 5. Main Tabbed Navigation ─────────────────────────────────────────────
-    tab_titles = [
-        constants.LBL_HOME,
-        constants.LBL_NOTEBOOKS,
-        constants.LBL_TERMINAL,
-        constants.LBL_CLOUD_FILES,
-        constants.LBL_SETTINGS,
-    ]
-
-    if state.selected_tab == 1:
-        screen = SessionSelectorTab(mode="notebook", key=ft.ValueKey("notebooks"))
-    elif state.selected_tab == 2:
-        screen = SessionSelectorTab(mode="terminal", key=ft.ValueKey("terminal"))
-    elif state.selected_tab == 3:
-        screen = SessionSelectorTab(mode="files", key=ft.ValueKey("files"))
-    elif state.selected_tab == 4:
-        screen = SettingsScreen(key=ft.ValueKey("settings"))
     else:
-        screen = HomeScreen(key=ft.ValueKey("home"))
+        if state.selected_tab == 1:
+            screen = SessionSelectorTab(mode="notebook", key=ft.ValueKey("notebooks"))
+        elif state.selected_tab == 2:
+            screen = SessionSelectorTab(mode="terminal", key=ft.ValueKey("terminals"))
+        elif state.selected_tab == 3:
+            screen = SessionSelectorTab(mode="files", key=ft.ValueKey("files"))
+        elif state.selected_tab == 4:
+            screen = SettingsScreen(key=ft.ValueKey("settings"))
+        else:
+            screen = HomeScreen(key=ft.ValueKey("home"))
 
-    nav_bar = ft.NavigationBar(
-        selected_index=state.selected_tab,
-        on_change=lambda e: controller.navigate_tab(int(e.control.selected_index)),
-        destinations=[
-            ft.NavigationBarDestination(
-                icon=ft.Icons.HOME_OUTLINED,
-                selected_icon=ft.Icons.HOME_ROUNDED,
-                label=constants.LBL_HOME,
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.EDIT_NOTE_ROUNDED,
-                selected_icon=ft.Icons.EDIT_NOTE_ROUNDED,
-                label=constants.LBL_NOTEBOOKS,
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.TERMINAL_OUTLINED,
-                selected_icon=ft.Icons.TERMINAL_ROUNDED,
-                label=constants.LBL_TERMINAL,
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.FOLDER_OUTLINED,
-                selected_icon=ft.Icons.FOLDER_ROUNDED,
-                label=constants.LBL_FILES,
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.SETTINGS_OUTLINED,
-                selected_icon=ft.Icons.SETTINGS_ROUNDED,
-                label=constants.LBL_SETTINGS,
-            ),
-        ],
-        bgcolor=ft.Colors.SURFACE,
-        indicator_color=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
-        label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
-    )
-
-    theme_btn = ft.IconButton(
-        icon=ft.Icons.DARK_MODE_ROUNDED
-        if state.theme_mode == ft.ThemeMode.LIGHT
-        else ft.Icons.LIGHT_MODE_ROUNDED,
-        icon_size=tokens.ICON_SM,
-        tooltip="Toggle Theme",
-        on_click=lambda e: controller.toggle_theme(),
-    )
-
-    header_bar = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Text(
-                    tab_titles[state.selected_tab],
-                    size=tokens.FONT_LG,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                ft.Container(expand=True),
-                ft.IconButton(
-                    icon=ft.Icons.HISTORY_ROUNDED,
-                    icon_size=tokens.ICON_SM,
-                    tooltip=constants.LBL_HISTORY,
-                    on_click=lambda e: controller.open_history(),
-                    visible=state.selected_tab == 0,
-                ),
-                theme_btn,
-            ],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-        padding=ft.Padding(
-            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM
-        ),
-        bgcolor=ft.Colors.SURFACE,
-    )
-
-    return ft.Column(
-        controls=[
-            header_bar,
-            ft.Container(
-                content=screen,
-                expand=True,
-            ),
-            nav_bar,
-        ],
-        spacing=0,
-        expand=True,
-    )
+    return ft.SafeArea(content=screen, expand=True)

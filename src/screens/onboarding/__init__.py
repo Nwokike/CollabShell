@@ -237,7 +237,16 @@ def OnboardingScreen() -> ft.Control:
                             ft.Row(
                                 controls=[
                                     ft.TextButton(
-                                        "Back", on_click=_on_back, visible=page_idx > 0
+                                        "Back",
+                                        on_click=_on_back,
+                                        visible=page_idx > 0,
+                                    ),
+                                    ft.TextButton(
+                                        "Skip",
+                                        on_click=lambda e: page.run_task(
+                                            _on_get_started, e
+                                        ),
+                                        visible=page_idx < 2,
                                     ),
                                     ft.Container(expand=True),
                                     next_btn,
