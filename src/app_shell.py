@@ -40,32 +40,25 @@ def AppShell() -> ft.Control:
     controller.open_session = _open_session
     controller.close_session = _close_session
 
-    # ── 0. Initial App Loading Screen ─────────────────────────────────────────
+    # ── 0. Initial App Loading Screen (Matching SpanInsights) ─────────────────
     if not state.app_ready:
         return ft.Container(
             content=ft.Column(
                 [
-                    ft.Icon(
-                        ft.Icons.TERMINAL_ROUNDED, size=72, color=ft.Colors.PRIMARY
+                    ft.Image(
+                        src="icon.png",
+                        width=72,
+                        height=72,
+                        fit=ft.BoxFit.CONTAIN,
                     ),
-                    ft.Container(height=tokens.SPACE_LG),
-                    ft.ProgressRing(
-                        width=tokens.SPINNER_MD,
-                        height=tokens.SPINNER_MD,
-                        stroke_width=3,
-                    ),
-                    ft.Container(height=tokens.SPACE_SM),
-                    ft.Text(
-                        "Initializing Colab Shell...",
-                        size=tokens.FONT_SM,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                    ),
+                    ft.Container(height=24),
+                    ft.ProgressRing(width=28, height=28, stroke_width=3),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            alignment=ft.Alignment.CENTER,
             expand=True,
+            alignment=ft.Alignment.CENTER,
         )
 
     # ── 1. Offline mode ───────────────────────────────────────────────────────
@@ -78,7 +71,7 @@ def AppShell() -> ft.Control:
                 if state.is_online:
                     controller.show_snack("Back online!")
                 else:
-                    controller.show_snack("Still offline. Check your connection.")
+                    controller.show_snack(constants.ERR_NETWORK)
             except Exception:
                 pass
 
@@ -103,7 +96,7 @@ def AppShell() -> ft.Control:
                                     tooltip="Back to Home",
                                 ),
                                 ft.Text(
-                                    f"Files — {active_session}",
+                                    f"{constants.LBL_FILES} — {active_session}",
                                     size=tokens.FONT_LG,
                                     weight=ft.FontWeight.W_700,
                                 ),
@@ -147,7 +140,7 @@ def AppShell() -> ft.Control:
                                 tooltip="Back",
                             ),
                             ft.Text(
-                                "Execution History",
+                                constants.LBL_HISTORY,
                                 size=tokens.FONT_LG,
                                 weight=ft.FontWeight.W_700,
                             ),
@@ -179,11 +172,11 @@ def AppShell() -> ft.Control:
     ]
 
     tab_titles = [
-        "Home",
-        "Notebooks",
-        "Terminals",
-        "Cloud Files",
-        "Settings",
+        constants.LBL_HOME,
+        constants.LBL_NOTEBOOKS,
+        constants.LBL_TERMINAL,
+        constants.LBL_CLOUD_FILES,
+        constants.LBL_SETTINGS,
     ]
 
     nav_bar = ft.NavigationBar(
@@ -198,17 +191,17 @@ def AppShell() -> ft.Control:
             ft.NavigationBarDestination(
                 icon=ft.Icons.EDIT_NOTE_ROUNDED,
                 selected_icon=ft.Icons.EDIT_NOTE_ROUNDED,
-                label="Notebooks",
+                label=constants.LBL_NOTEBOOKS,
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.TERMINAL_OUTLINED,
                 selected_icon=ft.Icons.TERMINAL_ROUNDED,
-                label="Terminal",
+                label=constants.LBL_TERMINAL,
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.FOLDER_OUTLINED,
                 selected_icon=ft.Icons.FOLDER_ROUNDED,
-                label="Files",
+                label=constants.LBL_FILES,
             ),
             ft.NavigationBarDestination(
                 icon=ft.Icons.SETTINGS_OUTLINED,
@@ -243,7 +236,7 @@ def AppShell() -> ft.Control:
                 ft.IconButton(
                     icon=ft.Icons.HISTORY_ROUNDED,
                     icon_size=tokens.ICON_SM,
-                    tooltip="Execution History",
+                    tooltip=constants.LBL_HISTORY,
                     on_click=lambda e: set_show_history(True),
                     visible=selected_tab == 0,
                 ),

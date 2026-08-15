@@ -1,7 +1,9 @@
 """Application-wide constants."""
 
-APP_NAME = "Colab Shell: Notebook & TTY"
-APP_VERSION = "1.1.0"
+APP_NAME = "Colab Shell"
+APP_FULL_NAME = "Colab Shell: Notebook & TTY"
+APP_VERSION = "1.2.0"
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=ng.kiri.collabshell"
 
 # ── Storage keys ──────────────────────────────────────────────────────────────
 STORAGE_THEME = "colab_theme"
@@ -42,10 +44,16 @@ AUTH_METHODS = ["oauth2", "adc"]
 LBL_HOME = "Home"
 LBL_HISTORY = "History"
 LBL_SETTINGS = "Settings"
+LBL_NOTEBOOKS = "Notebooks"
+LBL_TERMINAL = "Terminal"
 LBL_NEW_SESSION = "New Session"
+LBL_NEW_NOTEBOOK = "New Notebook"
+LBL_NEW_TERMINAL = "New Terminal"
 LBL_QUICK_RUN = "Quick Run"
 LBL_FILES = "Files"
+LBL_CLOUD_FILES = "Cloud Files"
 LBL_SESSIONS = "Sessions"
+LBL_ACTIVE_SESSIONS = "Active Sessions"
 LBL_EXECUTE = "Execute"
 LBL_STOP = "Stop"
 LBL_RESTART = "Restart Kernel"

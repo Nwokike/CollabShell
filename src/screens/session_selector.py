@@ -5,7 +5,7 @@ from __future__ import annotations
 import flet as ft
 
 from components.session_card import build_session_card
-from core import tokens
+from core import constants, tokens
 from core.styles import build_banner_ad, section_header
 from state import AppStateCtx, ControllerMethodsCtx
 
@@ -31,7 +31,9 @@ def SessionSelectorTab(mode: str) -> ft.Control:
         content=ft.ListTile(
             leading=ft.Icon(ft.Icons.ADD_ROUNDED, color=ft.Colors.ON_SURFACE),
             title=ft.Text(
-                "New Session", color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600
+                constants.LBL_NEW_SESSION,
+                color=ft.Colors.ON_SURFACE,
+                weight=ft.FontWeight.W_600,
             ),
         ),
         on_click=_on_new,
@@ -82,7 +84,7 @@ def SessionSelectorTab(mode: str) -> ft.Control:
         controls=[
             new_session_btn,
             build_banner_ad(page),
-            section_header("ACTIVE SESSIONS"),
+            section_header(constants.LBL_ACTIVE_SESSIONS.upper()),
             ft.Column(controls=controls, spacing=0),
         ],
         spacing=0,

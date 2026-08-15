@@ -214,17 +214,17 @@ def HomeScreen() -> ft.Control:
                                 controls=[
                                     _action_button(
                                         ft.Icons.EDIT_NOTE_ROUNDED,
-                                        "New Notebook",
+                                        constants.LBL_NEW_NOTEBOOK,
                                         lambda e: _on_new_session("notebook"),
                                     ),
                                     _action_button(
                                         ft.Icons.TERMINAL_ROUNDED,
-                                        "New Terminal",
+                                        constants.LBL_NEW_TERMINAL,
                                         lambda e: _on_new_session("terminal"),
                                     ),
                                     _action_button(
                                         ft.Icons.FOLDER_ROUNDED,
-                                        "Files",
+                                        constants.LBL_FILES,
                                         lambda e: _on_new_session("files"),
                                     ),
                                 ],
@@ -247,7 +247,7 @@ def HomeScreen() -> ft.Control:
                 content=ft.Row(
                     controls=[
                         ft.Text(
-                            "ACTIVE SESSIONS",
+                            constants.LBL_ACTIVE_SESSIONS,
                             size=tokens.FONT_SM,
                             weight=ft.FontWeight.W_700,
                             color=ft.Colors.PRIMARY,
