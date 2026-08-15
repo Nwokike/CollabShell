@@ -12,8 +12,10 @@ import sys
 
 import flet as ft
 
+from core.logging_config import setup_logging
 from core.storage_patch import apply_storage_patches
 
+setup_logging()
 apply_storage_patches()
 
 from app_shell import AppShell
@@ -26,11 +28,6 @@ from services.colab import ColabService
 from services.storage_service import StorageService
 from state import ControllerMethods, ControllerMethodsCtx, ServiceCtx, Services
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger("colab")
 
 if sys.platform == "win32":
@@ -364,7 +361,17 @@ class AppController:
         page.on_app_lifecycle_state_change = _on_lifecycle_change
 
     def _on_error(self, e):
-        logger.error("Global Page Error: %s", getattr(e, "data", e))
+        err_msg = getattr(e, "data", str(e))
+        logger.error("Page error: %s", err_msg)
+        try:
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text(f"Error: {err_msg[:120]}"),
+                bgcolor=ft.Colors.ERROR,
+            )
+            self.page.snack_bar.open = True
+            self.page.update()
+        except Exception:
+            pass
 
 
 async def main(page: ft.Page):
