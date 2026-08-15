@@ -204,39 +204,53 @@ class AppController:
     async def _bootstrap_state(self):
         """Check initial connectivity and authenticate."""
         try:
-            connectivity = await self.page.connectivity.get_connectivity()
-            state.is_online = ft.ConnectivityType.NONE not in connectivity
-        except Exception as exc:
-            logger.warning("Connectivity check failed: %s", exc)
+            try:
+                connectivity = await self.page.connectivity.get_connectivity()
+                state.is_online = ft.ConnectivityType.NONE not in connectivity
+            except Exception as exc:
+                logger.warning("Connectivity check failed: %s", exc)
+                state.is_online = True
 
-        if not state.is_online:
-            return
+            if not state.is_online:
+                return
 
-        try:
-            auth_info = await self.colab_service.check_auth()
-            state.is_authenticated = auth_info.get("authenticated", False)
-            state.auth_email = auth_info.get("email", "")
+            try:
+                auth_info = await self.colab_service.check_auth()
+                state.is_authenticated = auth_info.get("authenticated", False)
+                state.auth_email = auth_info.get("email", "")
+                if state.is_authenticated:
+                    state.onboarding_done = True
+                    await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
+                else:
+                    onboarding_done = await self.storage.get(
+                        constants.STORAGE_ONBOARDING_DONE
+                    )
+                    state.onboarding_done = onboarding_done == "true"
+            except Exception as ex:
+                logger.warning("Auth check failed: %s", ex)
+                state.is_authenticated = False
+                state.onboarding_done = False
+
+            # Preload active sessions ONLY if authenticated
             if state.is_authenticated:
-                state.onboarding_done = True
-                await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
+                try:
+                    state.active_sessions = (
+                        await self.colab_service.list_sessions(
+                            auth_method=state.auth_method
+                        )
+                        or []
+                    )
+                except Exception as ex:
+                    logger.warning("Preload sessions failed: %s", ex)
+                    state.active_sessions = []
             else:
-                onboarding_done = await self.storage.get(
-                    constants.STORAGE_ONBOARDING_DONE
-                )
-                state.onboarding_done = onboarding_done == "true"
-        except Exception as ex:
-            logger.warning("Auth check failed: %s", ex)
-
-        # Preload active sessions
-        try:
-            state.active_sessions = (
-                await self.colab_service.list_sessions(auth_method=state.auth_method)
-                or []
-            )
-        except Exception:
-            pass
+                state.active_sessions = []
         finally:
             state.app_ready = True
+            try:
+                self.page.update()
+            except Exception:
+                pass
 
     def _register_lifecycle_handlers(self):
         page = self.page

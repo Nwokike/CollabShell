@@ -149,13 +149,14 @@ async def authenticate_oauth2_impl(service, code: str) -> dict:
 
 
 async def check_auth_impl(service) -> dict:
-    """Check if current credentials are valid."""
+    """Check if current credentials are valid without ever triggering interactive CLI terminal prompt."""
 
     def _check():
         import urllib.parse
         import urllib.request
-
-        from colab_cli.auth import TOKEN_CONFIG_PATH, AuthProvider, get_credentials
+        from google.auth.transport.requests import Request as _Req
+        from google.oauth2.credentials import Credentials
+        from colab_cli.auth import PUBLIC_SCOPES, TOKEN_CONFIG_PATH
 
         if not os.path.exists(TOKEN_CONFIG_PATH):
             return {
@@ -166,11 +167,31 @@ async def check_auth_impl(service) -> dict:
             }
 
         try:
-            sess = get_credentials(provider=AuthProvider.OAUTH2)
-            creds = sess.credentials
-            from google.auth.transport.requests import Request as _Req
+            creds = Credentials.from_authorized_user_file(
+                TOKEN_CONFIG_PATH, PUBLIC_SCOPES
+            )
+            if not creds:
+                return {
+                    "authenticated": False,
+                    "email": "",
+                    "expires_in": "",
+                    "auth_method": "oauth2",
+                }
 
-            creds.refresh(_Req())
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(_Req())
+                    # Persist refreshed token
+                    with open(TOKEN_CONFIG_PATH, "w") as f:
+                        f.write(creds.to_json())
+                except Exception as ref_err:
+                    logger.warning("Token refresh failed: %s", ref_err)
+                    return {
+                        "authenticated": False,
+                        "email": "",
+                        "expires_in": "",
+                        "auth_method": "oauth2",
+                    }
 
             token = creds.token
             if not token:
