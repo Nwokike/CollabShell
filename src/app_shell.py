@@ -23,23 +23,6 @@ def AppShell() -> ft.Control:
     controller = ft.use_context(ControllerMethodsCtx)
     page = ft.context.page
 
-    selected_tab, set_selected_tab = ft.use_state(0)
-    active_session, set_active_session = ft.use_state(None)
-    active_session_mode, set_session_mode = ft.use_state("notebook")
-    show_history, set_show_history = ft.use_state(False)
-
-    # Wire controller methods into our local state
-    def _open_session(name: str, mode: str):
-        set_session_mode(mode)
-        set_active_session(name)
-        set_show_history(False)
-
-    def _close_session():
-        set_active_session(None)
-
-    controller.open_session = _open_session
-    controller.close_session = _close_session
-
     # ── 0. Initial App Loading Screen (Matching SpanInsights) ─────────────────
     if not state.app_ready:
         return ft.Container(
@@ -86,52 +69,14 @@ def AppShell() -> ft.Control:
         return OnboardingScreen()
 
     # ── 3. Active session fullscreen ──────────────────────────────────────────
-    if active_session is not None:
-        if active_session_mode == "files":
-            return ft.Column(
-                controls=[
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.IconButton(
-                                    icon=ft.Icons.ARROW_BACK_ROUNDED,
-                                    on_click=lambda e: set_active_session(None),
-                                    icon_size=tokens.ICON_MD,
-                                    tooltip="Back to Home",
-                                ),
-                                ft.Text(
-                                    f"{constants.LBL_FILES} — {active_session}",
-                                    size=tokens.FONT_LG,
-                                    weight=ft.FontWeight.W_700,
-                                ),
-                            ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=tokens.SPACE_SM,
-                        ),
-                        padding=ft.Padding(
-                            tokens.SPACE_SM,
-                            tokens.SPACE_SM,
-                            tokens.SPACE_LG,
-                            tokens.SPACE_SM,
-                        ),
-                        bgcolor=ft.Colors.SURFACE,
-                    ),
-                    ft.Container(
-                        content=FilesScreen(session_name=active_session),
-                        expand=True,
-                    ),
-                ],
-                spacing=0,
-                expand=True,
-            )
+    if state.active_fullscreen == "session":
         return SessionScreen(
-            session_name=active_session,
-            mode=active_session_mode,
-            on_back=lambda: set_active_session(None),
+            session_name=state.active_session_name,
+            mode=state.active_session_mode,
+            on_back=controller.close_fullscreen,
         )
 
-    # ── 4. History Screen fullscreen ──────────────────────────────────────────
-    if show_history:
+    if state.active_fullscreen == "files":
         return ft.Column(
             controls=[
                 ft.Container(
@@ -139,7 +84,46 @@ def AppShell() -> ft.Control:
                         controls=[
                             ft.IconButton(
                                 icon=ft.Icons.ARROW_BACK_ROUNDED,
-                                on_click=lambda e: set_show_history(False),
+                                on_click=lambda e: controller.close_fullscreen(),
+                                icon_size=tokens.ICON_MD,
+                                tooltip="Back to Home",
+                            ),
+                            ft.Text(
+                                f"{constants.LBL_FILES} — {state.active_session_name}",
+                                size=tokens.FONT_LG,
+                                weight=ft.FontWeight.W_700,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=tokens.SPACE_SM,
+                    ),
+                    padding=ft.Padding(
+                        tokens.SPACE_SM,
+                        tokens.SPACE_SM,
+                        tokens.SPACE_LG,
+                        tokens.SPACE_SM,
+                    ),
+                    bgcolor=ft.Colors.SURFACE,
+                ),
+                ft.Container(
+                    content=FilesScreen(session_name=state.active_session_name),
+                    expand=True,
+                ),
+            ],
+            spacing=0,
+            expand=True,
+        )
+
+    # ── 4. History Screen fullscreen ──────────────────────────────────────────
+    if state.active_fullscreen == "history":
+        return ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                on_click=lambda e: controller.close_fullscreen(),
                                 icon_size=tokens.ICON_MD,
                                 tooltip="Back",
                             ),
@@ -184,8 +168,8 @@ def AppShell() -> ft.Control:
     ]
 
     nav_bar = ft.NavigationBar(
-        selected_index=selected_tab,
-        on_change=lambda e: set_selected_tab(int(e.control.selected_index)),
+        selected_index=state.selected_tab,
+        on_change=lambda e: controller.navigate_tab(int(e.control.selected_index)),
         destinations=[
             ft.NavigationBarDestination(
                 icon=ft.Icons.HOME_OUTLINED,
@@ -231,7 +215,7 @@ def AppShell() -> ft.Control:
         content=ft.Row(
             controls=[
                 ft.Text(
-                    tab_titles[selected_tab],
+                    tab_titles[state.selected_tab],
                     size=tokens.FONT_LG,
                     weight=ft.FontWeight.BOLD,
                     color=ft.Colors.ON_SURFACE,
@@ -241,8 +225,8 @@ def AppShell() -> ft.Control:
                     icon=ft.Icons.HISTORY_ROUNDED,
                     icon_size=tokens.ICON_SM,
                     tooltip=constants.LBL_HISTORY,
-                    on_click=lambda e: set_show_history(True),
-                    visible=selected_tab == 0,
+                    on_click=lambda e: controller.open_history(),
+                    visible=state.selected_tab == 0,
                 ),
                 theme_btn,
             ],
@@ -258,7 +242,7 @@ def AppShell() -> ft.Control:
         controls=[
             header_bar,
             ft.Container(
-                content=tab_screens[selected_tab],
+                content=tab_screens[state.selected_tab],
                 expand=True,
             ),
             nav_bar,

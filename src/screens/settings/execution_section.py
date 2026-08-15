@@ -1,4 +1,4 @@
-"""Hardware defaults settings section."""
+"""Execution settings section (timeout and log export format)."""
 
 from __future__ import annotations
 
@@ -8,57 +8,58 @@ from core import constants, tokens
 from core.styles import glass_card, section_header, tip_text
 
 
-def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
-    async def _on_gpu_default(e):
-        state.default_gpu = e.control.value or ""
-        await services.storage.set(constants.STORAGE_DEFAULT_GPU, state.default_gpu)
+def build_execution_section(page: ft.Page, state, services) -> ft.Column:
+    async def _on_timeout_change(e):
+        try:
+            state.default_timeout = int(e.control.value)
+            await services.storage.set(
+                constants.STORAGE_DEFAULT_TIMEOUT, str(state.default_timeout)
+            )
+        except (ValueError, TypeError):
+            pass
 
-    async def _on_tpu_default(e):
-        state.default_tpu = e.control.value or ""
-        await services.storage.set(constants.STORAGE_DEFAULT_TPU, state.default_tpu)
+    async def _on_log_format_change(e):
+        state.default_log_format = e.control.value
+        await services.storage.set(
+            constants.STORAGE_LOG_FORMAT, state.default_log_format
+        )
 
     return ft.Column(
         controls=[
-            section_header("HARDWARE DEFAULTS"),
+            section_header("EXECUTION"),
             glass_card(
                 ft.Column(
                     controls=[
                         ft.Row(
                             controls=[
                                 ft.Icon(
-                                    ft.Icons.MEMORY_ROUNDED,
+                                    ft.Icons.TIMER_ROUNDED,
                                     size=tokens.ICON_LG,
                                     color=ft.Colors.ON_SURFACE_VARIANT,
                                 ),
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Default GPU",
+                                            "Default Timeout",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
-                                        tip_text(
-                                            "Pre-selected GPU when creating new sessions"
-                                        ),
+                                        tip_text(constants.TIP_TIMEOUT),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Dropdown(
-                                    value=state.default_gpu or "",
+                                    value=str(state.default_timeout),
                                     options=[
-                                        ft.dropdown.Option("", "None (CPU)"),
-                                        ft.dropdown.Option("T4", "T4 · Free"),
-                                        ft.dropdown.Option("L4", "L4 · Pro"),
-                                        ft.dropdown.Option("G4", "G4 · Pro"),
-                                        ft.dropdown.Option("A100", "A100 · Pro+"),
-                                        ft.dropdown.Option("H100", "H100 · Pro+"),
+                                        ft.dropdown.Option(str(t), f"{t}s")
+                                        for t in constants.TIMEOUT_OPTIONS
                                     ],
-                                    width=tokens.INPUT_WIDTH_LG,
+                                    width=tokens.INPUT_WIDTH_SM,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_change=lambda e: page.run_task(
-                                        _on_gpu_default, e
+                                        _on_timeout_change, e
                                     ),
                                 ),
                             ],
@@ -69,36 +70,37 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
                         ft.Row(
                             controls=[
                                 ft.Icon(
-                                    ft.Icons.BOLT_ROUNDED,
+                                    ft.Icons.SAVE_ALT_ROUNDED,
                                     size=tokens.ICON_LG,
                                     color=ft.Colors.ON_SURFACE_VARIANT,
                                 ),
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Default TPU",
+                                            "Log Export Format",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         tip_text(
-                                            "Pre-selected TPU when creating new sessions"
+                                            "Default format when exporting session logs"
                                         ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Dropdown(
-                                    value=state.default_tpu or "",
+                                    value=state.default_log_format,
                                     options=[
-                                        ft.dropdown.Option("", "None"),
-                                        ft.dropdown.Option("v5e1", "v5e1 · Free"),
-                                        ft.dropdown.Option("v6e1", "v6e1 · Free"),
+                                        ft.dropdown.Option("ipynb", ".ipynb"),
+                                        ft.dropdown.Option("md", ".md"),
+                                        ft.dropdown.Option("jsonl", ".jsonl"),
+                                        ft.dropdown.Option("txt", ".txt"),
                                     ],
-                                    width=tokens.INPUT_WIDTH_LG,
+                                    width=tokens.INPUT_WIDTH_SM,
                                     border_radius=tokens.RADIUS_MD,
                                     text_size=tokens.FONT_SM,
                                     on_change=lambda e: page.run_task(
-                                        _on_tpu_default, e
+                                        _on_log_format_change, e
                                     ),
                                 ),
                             ],

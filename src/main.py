@@ -93,6 +93,25 @@ class AppController:
         await self._restore_preferences()
 
         # ── Controller Methods for UI ─────────────────────────────────────────
+        def _navigate_tab(tab_idx: int):
+            state.selected_tab = tab_idx
+            state.active_fullscreen = None
+            page.update()
+
+        def _open_history():
+            state.active_fullscreen = "history"
+            page.update()
+
+        def _open_session(name: str, mode: str = "notebook"):
+            state.active_session_name = name
+            state.active_session_mode = mode
+            state.active_fullscreen = "files" if mode == "files" else "session"
+            page.update()
+
+        def _close_fullscreen():
+            state.active_fullscreen = None
+            page.update()
+
         def _show_snack(msg: str):
             page.snack_bar = ft.SnackBar(content=ft.Text(msg))
             page.snack_bar.open = True
@@ -109,6 +128,7 @@ class AppController:
                 snack_func=_show_snack,
                 mode=mode,
                 ignore_warning=False,
+                on_session_created=lambda name: _open_session(name, mode),
             )
 
         def _toggle_theme():
@@ -126,6 +146,11 @@ class AppController:
             page.update()
 
         methods = ControllerMethods(
+            navigate_tab=_navigate_tab,
+            open_history=_open_history,
+            close_fullscreen=_close_fullscreen,
+            open_session=_open_session,
+            close_session=_close_fullscreen,
             show_snack=_show_snack,
             show_new_session_sheet=_show_new_session_sheet,
             toggle_theme=_toggle_theme,
@@ -168,6 +193,10 @@ class AppController:
                 self.page.theme_mode = theme_map[saved_theme]
                 state.theme_mode = self.page.theme_mode
 
+            saved_auth_method = await self.storage.get(constants.STORAGE_AUTH_METHOD)
+            if saved_auth_method:
+                state.auth_method = saved_auth_method
+
             saved_keep_alive = await self.storage.get(constants.STORAGE_KEEP_ALIVE)
             if saved_keep_alive is not None:
                 state.keep_alive_enabled = saved_keep_alive == "true"
@@ -193,11 +222,19 @@ class AppController:
                 except ValueError:
                     pass
 
+            saved_log_format = await self.storage.get(constants.STORAGE_LOG_FORMAT)
+            if saved_log_format:
+                state.default_log_format = saved_log_format
+
             saved_drive_path = await self.storage.get(
                 constants.STORAGE_DRIVE_MOUNT_PATH
             )
             if saved_drive_path:
                 state.drive_mount_path = saved_drive_path
+
+            saved_logtostderr = await self.storage.get(constants.STORAGE_LOGTOSTDERR)
+            if saved_logtostderr is not None:
+                state.logtostderr = saved_logtostderr == "true"
         except Exception as e:
             logger.warning("Failed to restore some preferences: %s", e)
 
@@ -210,6 +247,7 @@ class AppController:
             logger.warning("Connectivity check failed: %s", exc)
 
         if not state.is_online:
+            state.app_ready = True
             return
 
         try:

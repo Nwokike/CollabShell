@@ -1,12 +1,20 @@
-from typing import ClassVar
-
 """Observable application state."""
+
+from __future__ import annotations
+
+from typing import ClassVar
 
 import flet as ft
 
 
 @ft.observable
 class AppState:
+    # ── Navigation & Screen state ─────────────────────────────────────────────
+    selected_tab: int = 0
+    active_fullscreen: str | None = None  # None | "history" | "session" | "files"
+    active_session_name: str = ""
+    active_session_mode: str = "notebook"  # "notebook" | "terminal" | "files"
+
     # ── Session state ─────────────────────────────────────────────────────────
     active_sessions: ClassVar[list] = []
     selected_session_name: str = ""
@@ -62,6 +70,10 @@ class AppState:
     ad_service = None
 
     def __init__(self):
+        self.selected_tab = 0
+        self.active_fullscreen = None
+        self.active_session_name = ""
+        self.active_session_mode = "notebook"
         self.active_sessions = []
         self.exec_output_lines = []
         self.file_listing = []
