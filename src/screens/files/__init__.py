@@ -9,7 +9,6 @@ import flet as ft
 from components.file_item import build_file_item
 from core import tokens
 from core.styles import build_banner_ad
-from core.theme import AppColors
 from screens.files.actions import (
     do_delete_async,
     do_new_folder_async,
@@ -42,8 +41,8 @@ def FilesScreen(session_name: str) -> ft.Control:
         set_is_loading(True)
         set_error_msg("")
         try:
-            files = await services.colab.list_files(
-                session_name, path=path, auth_method=state.auth_method
+            files = await services.colab.ls(
+                path, session_name=session_name, auth_method=state.auth_method
             )
             set_listing(files or [])
         except Exception as ex:
@@ -124,7 +123,9 @@ def FilesScreen(session_name: str) -> ft.Control:
 
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text("New Folder", size=tokens.FONT_MD, weight=ft.FontWeight.W_600),
+                title=ft.Text(
+                    "New Folder", size=tokens.FONT_MD, weight=ft.FontWeight.W_600
+                ),
                 content=tf,
                 actions=[
                     ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
@@ -231,8 +232,12 @@ def FilesScreen(session_name: str) -> ft.Control:
                             ft.IconButton(
                                 ft.Icons.CHECKLIST_ROUNDED,
                                 tooltip="Select items",
-                                icon_color=ft.Colors.PRIMARY if selection_mode else None,
-                                on_click=lambda e: set_selection_mode(not selection_mode),
+                                icon_color=ft.Colors.PRIMARY
+                                if selection_mode
+                                else None,
+                                on_click=lambda e: set_selection_mode(
+                                    not selection_mode
+                                ),
                             ),
                             ft.IconButton(
                                 ft.Icons.CREATE_NEW_FOLDER_ROUNDED,
@@ -325,8 +330,8 @@ def FilesScreen(session_name: str) -> ft.Control:
                 item=item,
                 is_selected=item["name"] in selected,
                 selection_mode=selection_mode,
-                on_tap=lambda i=item: _on_file_tap(i),
-                on_long_press=lambda i=item: (
+                on_tap=lambda e, i=item: _on_file_tap(i),
+                on_long_press=lambda e, i=item: (
                     set_selection_mode(True),
                     _toggle_select(i["name"]),
                 ),

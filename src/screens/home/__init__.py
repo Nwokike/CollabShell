@@ -1,6 +1,6 @@
 """HomeScreen — session list, quick actions, offline banner, and feature overview."""
 
-from __future__ import annotations
+import logging
 
 import flet as ft
 
@@ -12,6 +12,8 @@ from core.styles import build_banner_ad, glass_card
 from core.theme import AppColors
 from screens.home.cards import action_button, feature_card, step_row
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
+
+logger = logging.getLogger("HomeScreen")
 
 
 @ft.component
@@ -28,16 +30,17 @@ def HomeScreen() -> ft.Control:
     async def _load_sessions():
         set_loading(True)
         try:
-            data = await services.colab.list_sessions()
+            data = await services.colab.list_sessions(auth_method=state.auth_method)
             state.active_sessions = data or []
             set_sessions(list(state.active_sessions))
             # Clean up orphaned notebooks
             try:
                 names = [s.get("name") for s in state.active_sessions if s.get("name")]
                 await services.storage.cleanup_orphaned_notebooks(names)
-            except Exception:
-                pass
+            except Exception as ex:
+                logger.warning("Orphaned notebook cleanup non-fatal error: %s", ex)
         except Exception:
+            logger.exception("Failed to load active sessions")
             state.active_sessions = []
             set_sessions([])
         finally:

@@ -1,4 +1,4 @@
-"""Hardware defaults settings section."""
+"""Hardware defaults settings section — ported from views/settings/hardware_section.py."""
 
 from __future__ import annotations
 
@@ -9,28 +9,15 @@ from core.styles import glass_card, section_header, tip_text
 
 
 def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
-    async def _on_gpu_change(e):
+    """Build hardware defaults section matching 1:1 original layout and tiers."""
+
+    async def _on_gpu_default(e):
         state.default_gpu = e.control.value or ""
         await services.storage.set(constants.STORAGE_DEFAULT_GPU, state.default_gpu)
 
-    async def _on_tpu_change(e):
+    async def _on_tpu_default(e):
         state.default_tpu = e.control.value or ""
         await services.storage.set(constants.STORAGE_DEFAULT_TPU, state.default_tpu)
-
-    async def _on_timeout_change(e):
-        try:
-            val = int(e.control.value)
-            state.default_timeout = val
-            await services.storage.set(constants.STORAGE_DEFAULT_TIMEOUT, str(val))
-        except (ValueError, TypeError):
-            pass
-
-    gpu_options = [ft.dropdown.Option("", "None")] + [
-        ft.dropdown.Option(g, g) for g in constants.GPU_OPTIONS
-    ]
-    tpu_options = [ft.dropdown.Option("", "None")] + [
-        ft.dropdown.Option(t, t) for t in constants.TPU_OPTIONS
-    ]
 
     return ft.Column(
         controls=[
@@ -38,32 +25,89 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
             glass_card(
                 ft.Column(
                     controls=[
-                        ft.Dropdown(
-                            label="Default GPU",
-                            options=gpu_options,
-                            value=state.default_gpu or "",
-                            border_radius=tokens.RADIUS_MD,
-                            on_select=lambda e: page.run_task(_on_gpu_change, e),
+                        # Default GPU row
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.DEVELOPER_BOARD_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Default GPU",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Pre-selected GPU when creating new sessions"
+                                        ),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
+                                ),
+                                ft.Dropdown(
+                                    value=state.default_gpu or "",
+                                    options=[
+                                        ft.dropdown.Option("", "None (CPU)"),
+                                        ft.dropdown.Option("T4", "T4 · Free"),
+                                        ft.dropdown.Option("L4", "L4 · Pro"),
+                                        ft.dropdown.Option("G4", "G4 · Pro"),
+                                        ft.dropdown.Option("A100", "A100 · Pro+"),
+                                        ft.dropdown.Option("H100", "H100 · Pro+"),
+                                    ],
+                                    width=tokens.INPUT_WIDTH_LG,
+                                    border_radius=tokens.RADIUS_MD,
+                                    text_size=tokens.FONT_SM,
+                                    on_select=lambda e: page.run_task(
+                                        _on_gpu_default, e
+                                    ),
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_LG,
                         ),
-                        tip_text("Default GPU accelerator for new sessions"),
                         ft.Divider(height=tokens.SPACE_SM),
-                        ft.Dropdown(
-                            label="Default TPU",
-                            options=tpu_options,
-                            value=state.default_tpu or "",
-                            border_radius=tokens.RADIUS_MD,
-                            on_select=lambda e: page.run_task(_on_tpu_change, e),
-                        ),
-                        tip_text("Default TPU accelerator for new sessions"),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        ft.TextField(
-                            label="Execution Timeout (seconds)",
-                            value=str(state.default_timeout),
-                            prefix_icon=ft.Icons.TIMER_ROUNDED,
-                            keyboard_type=ft.KeyboardType.NUMBER,
-                            border_radius=tokens.RADIUS_MD,
-                            text_size=tokens.FONT_SM,
-                            on_blur=lambda e: page.run_task(_on_timeout_change, e),
+                        # Default TPU row
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.BOLT_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Default TPU",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Pre-selected TPU when creating new sessions"
+                                        ),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
+                                ),
+                                ft.Dropdown(
+                                    value=state.default_tpu or "",
+                                    options=[
+                                        ft.dropdown.Option("", "None"),
+                                        ft.dropdown.Option("v5e1", "v5e1 · Free"),
+                                        ft.dropdown.Option("v6e1", "v6e1 · Free"),
+                                    ],
+                                    width=tokens.INPUT_WIDTH_LG,
+                                    border_radius=tokens.RADIUS_MD,
+                                    text_size=tokens.FONT_SM,
+                                    on_select=lambda e: page.run_task(
+                                        _on_tpu_default, e
+                                    ),
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_LG,
                         ),
                     ],
                     spacing=tokens.SPACE_SM,
@@ -78,3 +122,6 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
         ],
         spacing=0,
     )
+
+
+__all__ = ["build_hardware_section"]

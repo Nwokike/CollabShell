@@ -14,6 +14,9 @@ def build_advanced_section(page: ft.Page, state, services) -> ft.Column:
         await services.storage.set(
             constants.STORAGE_LOGTOSTDERR, str(e.control.value).lower()
         )
+        from core.storage_patch import set_log_to_stderr
+
+        set_log_to_stderr(e.control.value)
 
     return ft.Column(
         controls=[

@@ -34,7 +34,7 @@ def _file_icon(name: str, is_dir: bool) -> ft.Icons:
     return icon_map.get(ext, ft.Icons.INSERT_DRIVE_FILE_ROUNDED)
 
 
-def _format_size(size_bytes: int | float | None) -> str:
+def _format_size(size_bytes: float | None) -> str:
     """Format file size to human-readable string."""
     if size_bytes is None or size_bytes == 0:
         return ""
@@ -97,14 +97,18 @@ def build_file_item(
     if selection_mode or is_sel:
         controls.append(
             ft.Icon(
-                ft.Icons.CHECK_CIRCLE_ROUNDED if is_sel else ft.Icons.RADIO_BUTTON_UNCHECKED,
+                ft.Icons.CHECK_CIRCLE_ROUNDED
+                if is_sel
+                else ft.Icons.RADIO_BUTTON_UNCHECKED,
                 size=tokens.ICON_MD,
                 color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE_VARIANT,
             )
         )
 
     return ft.Container(
-        bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY) if is_sel else ft.Colors.TRANSPARENT,
+        bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY)
+        if is_sel
+        else ft.Colors.TRANSPARENT,
         border_radius=tokens.RADIUS_MD,
         content=ft.Row(
             controls=controls,

@@ -1,3 +1,16 @@
+"""Notebook cell — declarative component built on Flet 0.86.x observables.
+
+`CellData` is an @ft.observable model. Mutating any field (source, outputs,
+is_running, is_editing) notifies subscribers, and the `NotebookCell`
+component re-renders itself automatically — no refs, no frozen-control
+mutation, no manual page.update().
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+
 import flet as ft
 
 from components.notebook_cell.actions import copy_code, copy_output, make_actions_row
@@ -6,54 +19,82 @@ from core import tokens
 from core.theme import AppColors
 
 
-def build_notebook_cell(
-    page: ft.Page,
-    cell: dict,
-    on_run=None,
-    on_stop=None,
-    on_delete=None,
-    on_move_up=None,
-    on_move_down=None,
-    on_change=None,
-    on_clear_output=None,
-    on_open_terminal=None,
-) -> tuple[ft.Container, dict]:
-    """Builds a single notebook cell (Code or Markdown).
+@ft.observable
+class CellData:
+    """Observable notebook cell model (code or markdown)."""
 
-    Returns (container, refs_dict) where refs_dict holds Ref objects
-    for mutable parts of the cell (play_btn, stop_row, output).
-    """
-    cell_type = cell.get("type", "code")
-    source = cell.get("source", "")
-    outputs = cell.get("outputs", [])
-    is_running = cell.get("is_running", False)
+    def __init__(
+        self,
+        cell_id: str | None = None,
+        cell_type: str = "code",
+        source: str = "",
+        outputs: list | None = None,
+        is_running: bool = False,
+        is_editing: bool | None = None,
+    ):
+        self.id = cell_id or str(uuid.uuid4())
+        self.type = cell_type
+        self.source = source
+        self.outputs = list(outputs or [])  # wrapped as ObservableList
+        self.is_running = is_running
+        # Bumped on every outputs mutation so use_memo can re-parse cheaply
+        self.outputs_rev = 0
+        # Markdown cells start in edit mode when empty
+        self.is_editing = (
+            (not bool(source.strip())) if is_editing is None else is_editing
+        )
 
-    editor_ref = ft.Ref[ft.TextField]()
-    play_btn_ref = ft.Ref[ft.IconButton]()
-    stop_row_ref = ft.Ref[ft.Row]()
-    output_ref = ft.Ref[ft.ListView]()
-    output_panel_ref = ft.Ref[ft.Container]()
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "source": self.source,
+            "outputs": list(self.outputs),
+            "is_running": False,
+            "is_editing": self.is_editing,
+        }
 
-    refs = {
-        "play_btn": play_btn_ref,
-        "stop_row": stop_row_ref,
-        "output": output_ref,
-        "output_panel": output_panel_ref,
-        "code_input": editor_ref,
-    }
+    @classmethod
+    def from_dict(cls, d: dict) -> "CellData":
+        return cls(
+            cell_id=d.get("id"),
+            cell_type=d.get("type", "code"),
+            source=d.get("source", ""),
+            outputs=d.get("outputs", []),
+            is_running=False,
+            is_editing=d.get("is_editing"),
+        )
 
-    def _handle_change(e):
-        if editor_ref.current:
-            cell["source"] = editor_ref.current.value
-            if on_change:
-                on_change()
 
-    async def _copy_output(e=None):
-        await copy_output(page, cell.get("outputs", []))
+@ft.component
+def NotebookCell(
+    cell: CellData,
+    on_run: Callable[[], None] | None = None,
+    on_stop: Callable[[], None] | None = None,
+    on_delete: Callable[[], None] | None = None,
+    on_move_up: Callable[[], None] | None = None,
+    on_move_down: Callable[[], None] | None = None,
+    on_source_change: Callable[[str], None] | None = None,
+    on_clear_output: Callable[[], None] | None = None,
+    on_open_terminal: Callable[[], None] | None = None,
+) -> ft.Control:
+    """Renders one notebook cell. Re-renders reactively when `cell` changes."""
+    page = ft.context.page
+
+    # Hooks must run unconditionally in the same order on every render,
+    # regardless of cell type.
+    parse_cache = ft.use_ref(lambda: {"rev": -1, "count": 0, "controls": []})
+
+    def _commit_source(value: str):
+        cell.source = value
+        if on_source_change:
+            on_source_change(value)
+
+    async def _copy_output_task(e=None):
+        await copy_output(page, list(cell.outputs))
 
     async def _copy_code_task(e=None):
-        code_val = editor_ref.current.value if editor_ref.current else source
-        await copy_code(page, code_val)
+        await copy_code(page, cell.source)
 
     def _make_actions_row():
         return make_actions_row(
@@ -63,132 +104,103 @@ def build_notebook_cell(
             on_copy=lambda: page.run_task(_copy_code_task),
         )
 
-    if cell_type == "markdown":
-        is_editing_initial = cell.get("is_editing", not bool(source.strip()))
-        edit_container = ft.Container(visible=is_editing_initial)
-        render_container = ft.Container(visible=not is_editing_initial)
-        markdown_ref = ft.Ref[ft.Markdown]()
-
-        def _edit(e=None):
-            if not cell.get("is_editing"):
-                cell["is_editing"] = True
-                edit_container.visible = True
-                render_container.visible = False
-                if on_change:
-                    on_change()
-                page.update()
-
-        def _render(e=None):
-            if editor_ref.current:
-                cell["source"] = editor_ref.current.value
-            new_source = cell.get("source", "")
-            if markdown_ref.current:
-                markdown_ref.current.value = new_source
-            cell["is_editing"] = False
-            edit_container.visible = False
-            render_container.visible = True
-            if on_change:
-                on_change()
-            page.update()
-
-        edit_container.content = ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.TextField(
-                            ref=editor_ref,
-                            value=source,
-                            multiline=True,
-                            min_lines=2,
-                            max_lines=8,
-                            text_size=tokens.FONT_SM,
-                            border_color=ft.Colors.TRANSPARENT,
-                            bgcolor=ft.Colors.TRANSPARENT,
-                            on_change=_handle_change,
-                            on_blur=_render,
-                            hint_text="Type markdown here...",
-                            content_padding=tokens.SPACE_SM,
-                            expand=True,
-                        ),
-                    ],
-                ),
-                ft.Row(
-                    controls=[
-                        ft.Row(
-                            controls=[
-                                ft.Icon(
-                                    ft.Icons.MODE_EDIT_OUTLINE_ROUNDED,
-                                    size=tokens.FONT_MD,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                ),
-                                ft.Text(
-                                    "Markdown",
-                                    size=tokens.FONT_XS,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                    weight=ft.FontWeight.W_600,
-                                ),
-                            ],
-                            spacing=tokens.SPACE_XS,
-                        ),
-                        ft.Container(expand=True),
-                        ft.IconButton(
-                            icon=ft.Icons.CHECK_ROUNDED,
-                            icon_size=tokens.ICON_SM,
-                            icon_color=AppColors.SUCCESS,
-                            tooltip="Done / Render Markdown",
-                            on_click=_render,
-                        ),
-                        _make_actions_row(),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            ],
-            spacing=0,
-        )
-
-        render_container.content = ft.Column(
-            controls=[
-                ft.GestureDetector(
-                    on_tap=_edit,
-                    content=ft.Container(
-                        content=ft.Markdown(
-                            ref=markdown_ref,
-                            value=source,
-                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                            selectable=True,
-                            on_tap_link=lambda e: page.run_task(
-                                ft.UrlLauncher().launch_url, e.data
-                            ),
-                        ),
-                        padding=tokens.SPACE_SM,
+    # ── Markdown cell ─────────────────────────────────────────────────────────
+    if cell.type == "markdown":
+        if cell.is_editing:
+            content = ft.Column(
+                controls=[
+                    ft.TextField(
+                        value=cell.source,
+                        multiline=True,
+                        min_lines=2,
+                        max_lines=8,
+                        text_size=tokens.FONT_SM,
+                        border_color=ft.Colors.TRANSPARENT,
+                        bgcolor=ft.Colors.TRANSPARENT,
+                        on_change=lambda e: _commit_source(e.control.value or ""),
+                        on_blur=lambda e: setattr(cell, "is_editing", False),
+                        hint_text="Type markdown here...",
+                        content_padding=tokens.SPACE_SM,
                         expand=True,
-                        width=float("inf"),
                     ),
-                ),
-                ft.Container(
-                    content=ft.Row(
+                    ft.Row(
                         controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(
+                                        ft.Icons.MODE_EDIT_OUTLINE_ROUNDED,
+                                        size=tokens.FONT_MD,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                    ft.Text(
+                                        "Markdown",
+                                        size=tokens.FONT_XS,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        weight=ft.FontWeight.W_600,
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_XS,
+                            ),
                             ft.Container(expand=True),
                             ft.IconButton(
-                                ft.Icons.EDIT_ROUNDED,
+                                icon=ft.Icons.CHECK_ROUNDED,
                                 icon_size=tokens.ICON_SM,
-                                tooltip="Edit Markdown",
-                                on_click=_edit,
+                                icon_color=AppColors.SUCCESS,
+                                tooltip="Done / Render Markdown",
+                                on_click=lambda e: setattr(
+                                    cell, "is_editing", False
+                                ),
                             ),
                             _make_actions_row(),
                         ],
-                        alignment=ft.MainAxisAlignment.END,
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding(
-                        tokens.SPACE_SM, 0, tokens.SPACE_SM, tokens.SPACE_SM
+                ],
+                spacing=0,
+            )
+        else:
+            content = ft.Column(
+                controls=[
+                    ft.GestureDetector(
+                        on_tap=lambda e: setattr(cell, "is_editing", True),
+                        content=ft.Container(
+                            content=ft.Markdown(
+                                value=cell.source,
+                                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                                selectable=True,
+                                on_tap_link=lambda e: page.run_task(
+                                    ft.UrlLauncher().launch_url, e.data
+                                ),
+                            ),
+                            padding=tokens.SPACE_SM,
+                            expand=True,
+                            width=float("inf"),
+                        ),
                     ),
-                ),
-            ],
-            spacing=0,
-        )
-
-        content = ft.Column([edit_container, render_container], spacing=0)
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Container(expand=True),
+                                ft.IconButton(
+                                    ft.Icons.EDIT_ROUNDED,
+                                    icon_size=tokens.ICON_SM,
+                                    tooltip="Edit Markdown",
+                                    on_click=lambda e: setattr(
+                                        cell, "is_editing", True
+                                    ),
+                                ),
+                                _make_actions_row(),
+                            ],
+                            alignment=ft.MainAxisAlignment.END,
+                        ),
+                        padding=ft.Padding(
+                            tokens.SPACE_SM, 0, tokens.SPACE_SM, tokens.SPACE_SM
+                        ),
+                    ),
+                ],
+                spacing=0,
+            )
 
         return ft.Container(
             content=content,
@@ -196,17 +208,38 @@ def build_notebook_cell(
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
             border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
-        ), refs
+        )
 
-    # ── Code Cell ──
-    output_controls = parse_outputs_to_controls(outputs)
+    # ── Code cell ─────────────────────────────────────────────────────────────
+    # Incremental output parsing: only new entries are converted to controls on
+    # each streaming chunk (O(new) instead of re-parsing the whole stream).
+    def _get_output_controls() -> list[ft.Control]:
+        cache = parse_cache.current
+        if cache["rev"] == cell.outputs_rev:
+            return cache["controls"]
+        outs = list(cell.outputs)
+        if len(outs) <= cache["count"] and cache["rev"] != -1:
+            # Cleared, truncated, or capped rotation — full re-parse
+            cache["controls"] = parse_outputs_to_controls(outs)[:1000]
+            cache["count"] = len(outs)
+        else:
+            new_entries = outs[cache["count"] :]
+            room = 1000 - len(cache["controls"])
+            if new_entries and room > 0:
+                cache["controls"].extend(
+                    parse_outputs_to_controls(new_entries)[:room]
+                )
+            cache["count"] = len(outs)
+        cache["rev"] = cell.outputs_rev
+        return cache["controls"]
 
-    # Dynamic height calculation for compact output boxes (1-2 lines default, max 220px)
+    output_controls = _get_output_controls()
+
+    # Dynamic height for compact output boxes (legacy behavior: 36..220px)
     line_count = 0
     for ctrl in output_controls:
         txt = getattr(ctrl, "value", "") or ""
         line_count += max(txt.count("\n") + 1, 1)
-
     calc_height = min(max(line_count * 20 + 16, 36), 220) if output_controls else None
 
     output_actions = ft.Row(
@@ -231,7 +264,7 @@ def build_notebook_cell(
                         ft.Icons.COPY_ALL_ROUNDED,
                         icon_size=tokens.ICON_SM,
                         tooltip="Copy Output",
-                        on_click=lambda e: page.run_task(_copy_output, e),
+                        on_click=lambda e: page.run_task(_copy_output_task, e),
                     ),
                     ft.IconButton(
                         ft.Icons.CLEAR_ALL_ROUNDED,
@@ -249,11 +282,9 @@ def build_notebook_cell(
     )
 
     output_panel = ft.Container(
-        ref=output_panel_ref,
         content=ft.Column(
             controls=[
                 ft.ListView(
-                    ref=output_ref,
                     controls=output_controls,
                     spacing=tokens.SPACE_XXS,
                     auto_scroll=True,
@@ -267,68 +298,62 @@ def build_notebook_cell(
         padding=tokens.SPACE_SM,
         bgcolor=AppColors.TERMINAL_BG,
         border_radius=tokens.RADIUS_SM,
-        visible=bool(output_controls) or is_running,
+        visible=bool(output_controls) or cell.is_running,
         width=float("inf"),
     )
 
-    play_button = ft.IconButton(
-        ft.Icons.PLAY_ARROW_ROUNDED,
-        ref=play_btn_ref,
-        icon_size=tokens.ICON_MD,
-        icon_color=AppColors.SUCCESS,
-        on_click=lambda e: on_run() if on_run else None,
-        tooltip="Run Cell",
-        visible=not is_running,
-    )
-
-    stop_row = ft.Row(
-        ref=stop_row_ref,
-        controls=[
-            ft.ProgressRing(
-                width=tokens.ICON_SM,
-                height=tokens.ICON_SM,
-                stroke_width=2,
-            ),
-            ft.IconButton(
-                ft.Icons.STOP_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                icon_color=AppColors.ERROR,
-                on_click=lambda e: on_stop() if on_stop else None,
-                tooltip="Stop",
-            ),
-        ],
-        spacing=tokens.SPACE_XS,
-        visible=is_running,
-    )
-
-    unified_editor_box = ft.Container(
+    editor_box = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Row(
-                    controls=[
-                        ft.TextField(
-                            ref=editor_ref,
-                            value=source,
-                            multiline=True,
-                            min_lines=1,
-                            max_lines=10,
-                            text_style=ft.TextStyle(
-                                font_family="RobotoMono", size=tokens.FONT_SM
-                            ),
-                            border_color=ft.Colors.TRANSPARENT,
-                            bgcolor=ft.Colors.TRANSPARENT,
-                            on_change=_handle_change,
-                            hint_text="Write Python code here.\nPrefix with ! to run a terminal command\ne.g. !pip install requests",
-                            content_padding=tokens.SPACE_SM,
-                            expand=True,
-                        ),
-                    ],
+                ft.TextField(
+                    value=cell.source,
+                    multiline=True,
+                    min_lines=1,
+                    max_lines=10,
+                    text_style=ft.TextStyle(
+                        font_family="RobotoMono", size=tokens.FONT_SM
+                    ),
+                    border_color=ft.Colors.TRANSPARENT,
+                    bgcolor=ft.Colors.TRANSPARENT,
+                    on_change=lambda e: _commit_source(e.control.value or ""),
+                    hint_text=(
+                        "Write Python code here.\nPrefix with ! to run a terminal"
+                        " command\ne.g. !pip install requests"
+                    ),
+                    content_padding=tokens.SPACE_SM,
+                    expand=True,
                 ),
                 ft.Container(
                     content=ft.Row(
                         controls=[
-                            play_button,
-                            stop_row,
+                            ft.IconButton(
+                                ft.Icons.PLAY_ARROW_ROUNDED,
+                                icon_size=tokens.ICON_MD,
+                                icon_color=AppColors.SUCCESS,
+                                on_click=lambda e: on_run() if on_run else None,
+                                tooltip="Run Cell",
+                                visible=not cell.is_running,
+                            ),
+                            ft.Row(
+                                controls=[
+                                    ft.ProgressRing(
+                                        width=tokens.ICON_SM,
+                                        height=tokens.ICON_SM,
+                                        stroke_width=2,
+                                    ),
+                                    ft.IconButton(
+                                        ft.Icons.STOP_ROUNDED,
+                                        icon_size=tokens.ICON_SM,
+                                        icon_color=AppColors.ERROR,
+                                        on_click=lambda e: (
+                                            on_stop() if on_stop else None
+                                        ),
+                                        tooltip="Stop",
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_XS,
+                                visible=cell.is_running,
+                            ),
                             ft.Container(expand=True),
                             _make_actions_row(),
                         ],
@@ -346,19 +371,17 @@ def build_notebook_cell(
         bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.ON_SURFACE),
     )
 
-    content = ft.Column(
-        controls=[
-            unified_editor_box,
-            ft.Container(
-                content=output_panel,
-                padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
-            ),
-        ],
-        spacing=0,
-    )
-
-    container = ft.Container(
-        content=content,
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                editor_box,
+                ft.Container(
+                    content=output_panel,
+                    padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
+                ),
+            ],
+            spacing=0,
+        ),
         padding=tokens.SPACE_SM,
         border=ft.Border(
             left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
@@ -366,4 +389,5 @@ def build_notebook_cell(
         margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
     )
 
-    return container, refs
+
+__all__ = ["CellData", "NotebookCell"]

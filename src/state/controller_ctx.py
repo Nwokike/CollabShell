@@ -26,8 +26,8 @@ class ControllerMethods:
     open_session: Callable[[str, str], None] = field(default=_noop)
     # Close the current session screen and return to home
     close_session: Callable[[], None] = field(default=_noop)
-    # Open the history log viewer screen
-    open_history: Callable[[], None] = field(default=_noop)
+    # Open the history log viewer screen (optionally preselected for a session)
+    open_history: Callable[[str], None] = field(default=_noop)
     # Close the history screen and return to home
     close_history: Callable[[], None] = field(default=_noop)
     # Show a snackbar message

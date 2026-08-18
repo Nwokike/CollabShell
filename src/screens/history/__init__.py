@@ -1,16 +1,21 @@
 """HistoryScreen — session event log viewer with filters and export."""
 
-from __future__ import annotations
-
+import logging
 import os
 
 import flet as ft
 
 from components.brand_header import build_brand_header
 from core import tokens
+from core.notifications import show_notification
 from core.styles import build_banner_ad, glass_card, section_header
-from core.theme import AppColors
 from state import AppStateCtx, ServiceCtx
+
+logger = logging.getLogger("HistoryScreen")
+
+
+def _snack(page: ft.Page, message: str, is_error: bool = False):
+    show_notification(page, message, is_error=is_error)
 
 
 @ft.component
@@ -30,13 +35,20 @@ def HistoryScreen() -> ft.Control:
         set_loading(True)
         try:
             log_names = await services.colab.list_log_sessions()
-            active_names = [s.get("name", "") for s in (state.active_sessions or []) if s.get("name")]
+            active_names = [
+                s.get("name", "")
+                for s in (state.active_sessions or [])
+                if s.get("name")
+            ]
             all_names = list(dict.fromkeys(log_names + active_names))
             set_sessions(all_names)
             if all_names and not selected_session:
-                set_selected_session(all_names[0])
-                await _load_events(all_names[0])
+                preferred = state.selected_session_name
+                initial = preferred if preferred in all_names else all_names[0]
+                set_selected_session(initial)
+                await _load_events(initial)
         except Exception:
+            logger.exception("Failed to load history sessions")
             set_sessions([])
         finally:
             set_loading(False)
@@ -50,6 +62,7 @@ def HistoryScreen() -> ft.Control:
             ev = await services.colab.get_log(session_name)
             set_events(ev or [])
         except Exception:
+            logger.exception("Failed to load history events for %s", session_name)
             set_events([])
         finally:
             set_loading(False)
@@ -65,32 +78,30 @@ def HistoryScreen() -> ft.Control:
         fmt = state.default_log_format or "ipynb"
         if not events or not selected_session:
             return
-        try:
-            dl_dir = "/storage/emulated/0/Download"
-            if not os.path.exists(dl_dir):
-                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-            os.makedirs(dl_dir, exist_ok=True)
-            fname = f"{selected_session}.{fmt}"
-            path = os.path.join(dl_dir, fname)
 
-            success = await services.colab.export_log(selected_session, path)
-            if success:
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"✅ Exported to {path}"), bgcolor=AppColors.SUCCESS
-                )
-            else:
-                page.snack_bar = ft.SnackBar(
-                    ft.Text("❌ Export failed: No events to export"),
-                    bgcolor=ft.Colors.ERROR,
-                )
-            page.snack_bar.open = True
-            page.update()
-        except Exception as ex:
-            page.snack_bar = ft.SnackBar(
-                ft.Text(f"❌ Export failed: {ex}"), bgcolor=ft.Colors.ERROR
-            )
-            page.snack_bar.open = True
-            page.update()
+        async def _do_export():
+            try:
+                dl_dir = "/storage/emulated/0/Download"
+                if not os.path.exists(dl_dir):
+                    dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                os.makedirs(dl_dir, exist_ok=True)
+                fname = f"{selected_session}.{fmt}"
+                path = os.path.join(dl_dir, fname)
+
+                success = await services.colab.export_log(selected_session, path)
+                if success:
+                    _snack(page, f"✅ Exported to {path}")
+                else:
+                    _snack(
+                        page, "❌ Export failed: No events to export", is_error=True
+                    )
+            except Exception as ex:
+                _snack(page, f"❌ Export failed: {ex}", is_error=True)
+
+        if services.ad_service:
+            await services.ad_service.show_rewarded_interstitial(on_close=_do_export)
+        else:
+            await _do_export()
 
     # ── Filter events ─────────────────────────────────────────────────────────
     filtered = [
@@ -153,9 +164,7 @@ def HistoryScreen() -> ft.Control:
             ),
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
             border_radius=tokens.RADIUS_MD,
-            border=ft.Border.all(
-                1, ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
-            ),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)),
             margin=ft.Margin(0, tokens.SPACE_XXS, 0, tokens.SPACE_XXS),
         )
 

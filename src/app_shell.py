@@ -15,7 +15,7 @@ from flet import Control
 
 from components.offline_flow import OfflineFlow
 from core import constants, tokens
-from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
+from state import AppStateCtx, ControllerMethodsCtx
 
 logger = logging.getLogger("AppShell")
 
@@ -41,7 +41,6 @@ def AppShell() -> Control:
     """Top-level shell. Reads observable state; renders Onboarding, Subview, or Dashboard."""
     controller = ft.use_context(ControllerMethodsCtx)
     state = ft.use_context(AppStateCtx)
-    services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
     # ── 1. NavigationBar sync via use_effect (Deliberate Page Chrome) ──────────
@@ -151,6 +150,27 @@ def AppShell() -> Control:
         return OnboardingScreen(key=ft.ValueKey("onboarding"))
 
     # ── 5. Fullscreen Subviews (History / Active Session) ─────────────────────
+    theme_icon = (
+        ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+        if state.theme_mode == ft.ThemeMode.SYSTEM
+        else ft.Icons.LIGHT_MODE_ROUNDED
+        if state.theme_mode == ft.ThemeMode.LIGHT
+        else ft.Icons.DARK_MODE_ROUNDED
+    )
+    theme_tooltip = (
+        "System Theme"
+        if state.theme_mode == ft.ThemeMode.SYSTEM
+        else "Light Theme"
+        if state.theme_mode == ft.ThemeMode.LIGHT
+        else "Dark Theme"
+    )
+    theme_btn = ft.IconButton(
+        icon=theme_icon,
+        icon_size=tokens.ICON_SM,
+        tooltip=theme_tooltip,
+        on_click=lambda e: controller.toggle_theme(),
+    )
+
     if state.active_subview == "history":
         from screens.history import HistoryScreen
 
@@ -171,6 +191,8 @@ def AppShell() -> Control:
                                     size=tokens.FONT_LG,
                                     weight=ft.FontWeight.W_700,
                                 ),
+                                ft.Container(expand=True),
+                                theme_btn,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=tokens.SPACE_SM,
@@ -178,7 +200,7 @@ def AppShell() -> Control:
                         padding=ft.Padding(
                             tokens.SPACE_SM,
                             tokens.SPACE_SM,
-                            tokens.SPACE_LG,
+                            tokens.SPACE_MD,
                             tokens.SPACE_SM,
                         ),
                         bgcolor=ft.Colors.SURFACE,
@@ -215,6 +237,8 @@ def AppShell() -> Control:
                                         size=tokens.FONT_LG,
                                         weight=ft.FontWeight.W_700,
                                     ),
+                                    ft.Container(expand=True),
+                                    theme_btn,
                                 ],
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=tokens.SPACE_SM,
@@ -222,7 +246,7 @@ def AppShell() -> Control:
                             padding=ft.Padding(
                                 tokens.SPACE_SM,
                                 tokens.SPACE_SM,
-                                tokens.SPACE_LG,
+                                tokens.SPACE_MD,
                                 tokens.SPACE_SM,
                             ),
                             bgcolor=ft.Colors.SURFACE,
@@ -307,21 +331,15 @@ def AppShell() -> Control:
     if state.current_tab == 1:
         from screens.session_selector import SessionSelectorTab
 
-        screen = SessionSelectorTab(
-            mode="notebook", key=ft.ValueKey("notebook_tab")
-        )
+        screen = SessionSelectorTab(mode="notebook", key=ft.ValueKey("notebook_tab"))
     elif state.current_tab == 2:
         from screens.session_selector import SessionSelectorTab
 
-        screen = SessionSelectorTab(
-            mode="terminal", key=ft.ValueKey("terminal_tab")
-        )
+        screen = SessionSelectorTab(mode="terminal", key=ft.ValueKey("terminal_tab"))
     elif state.current_tab == 3:
         from screens.session_selector import SessionSelectorTab
 
-        screen = SessionSelectorTab(
-            mode="files", key=ft.ValueKey("files_tab")
-        )
+        screen = SessionSelectorTab(mode="files", key=ft.ValueKey("files_tab"))
     elif state.current_tab == 4:
         from screens.settings import SettingsScreen
 

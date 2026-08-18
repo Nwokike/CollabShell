@@ -5,6 +5,7 @@ from __future__ import annotations
 import flet as ft
 
 from core import constants, tokens
+from core.notifications import show_notification
 from core.styles import glass_card, section_header, tip_text
 
 
@@ -35,19 +36,13 @@ def build_data_section(page: ft.Page, state, services) -> ft.Column:
                     except Exception:
                         pass
 
-                page.snack_bar = ft.SnackBar(
-                    ft.Text("✅ Local preferences and cache cleared."),
-                    duration=2500,
+                show_notification(
+                    page, "✅ Local preferences and cache cleared."
                 )
-                page.snack_bar.open = True
-                page.update()
             except Exception as ex:
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"❌ Clear failed: {ex}"),
-                    bgcolor=ft.Colors.ERROR,
+                show_notification(
+                    page, f"❌ Clear failed: {ex}", is_error=True
                 )
-                page.snack_bar.open = True
-                page.update()
 
         dialog = ft.AlertDialog(
             title=ft.Text("Clear All Local Data?"),

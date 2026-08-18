@@ -154,9 +154,10 @@ async def check_auth_impl(service) -> dict:
     def _check():
         import urllib.parse
         import urllib.request
+
+        from colab_cli.auth import PUBLIC_SCOPES, TOKEN_CONFIG_PATH
         from google.auth.transport.requests import Request as _Req
         from google.oauth2.credentials import Credentials
-        from colab_cli.auth import PUBLIC_SCOPES, TOKEN_CONFIG_PATH
 
         if not os.path.exists(TOKEN_CONFIG_PATH):
             return {

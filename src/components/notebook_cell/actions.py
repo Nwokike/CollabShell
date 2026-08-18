@@ -45,14 +45,21 @@ def make_actions_row(on_move_up=None, on_move_down=None, on_delete=None, on_copy
     return ft.Row(controls=controls, spacing=0)
 
 
+def _snack(page: ft.Page, message: str, is_error: bool = False):
+    """Show a floating SnackBar on page."""
+    from core.notifications import show_notification
+
+    show_notification(page, message, is_error=is_error)
+
+
 async def copy_code(page: ft.Page, code: str):
     """Copy cell source code to clipboard."""
     if not code or not code.strip():
-        page.show_dialog(ft.SnackBar(ft.Text("Cell code is empty.")))
+        _snack(page, "Cell code is empty.")
         return
     try:
         await ft.Clipboard().set(code.strip())
-        page.show_dialog(ft.SnackBar(ft.Text("Cell code copied to clipboard!")))
+        _snack(page, "📋 Cell code copied to clipboard!")
     except Exception as ex:
         logger.error("Copy code failed: %s", ex)
 
@@ -60,7 +67,7 @@ async def copy_code(page: ft.Page, code: str):
 async def copy_output(page: ft.Page, outputs: list):
     """Copy notebook output text to clipboard supporting all output types."""
     if not outputs:
-        page.show_dialog(ft.SnackBar(ft.Text("No output to copy.")))
+        _snack(page, "No output to copy.")
         return
 
     text_to_copy = ""
@@ -109,8 +116,8 @@ async def copy_output(page: ft.Page, outputs: list):
     if final_text:
         try:
             await ft.Clipboard().set(final_text)
-            page.show_dialog(ft.SnackBar(ft.Text("Output copied to clipboard!")))
+            _snack(page, "📋 Output copied to clipboard!")
         except Exception as ex:
             logger.error("Copy output failed: %s", ex)
     else:
-        page.show_dialog(ft.SnackBar(ft.Text("No text in output to copy.")))
+        _snack(page, "No text in output to copy.")

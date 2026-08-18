@@ -14,9 +14,7 @@ def action_button(icon, label: str, on_click, color=None) -> ft.Control:
         content=ft.Column(
             controls=[
                 ft.Container(
-                    content=ft.Icon(
-                        icon, size=tokens.ICON_XL, color=active_color
-                    ),
+                    content=ft.Icon(icon, size=tokens.ICON_XL, color=active_color),
                     width=tokens.CARD_ICON_CONTAINER,
                     height=tokens.CARD_ICON_CONTAINER,
                     border_radius=tokens.RADIUS_MD,
@@ -43,23 +41,17 @@ def action_button(icon, label: str, on_click, color=None) -> ft.Control:
     )
 
 
-def feature_card(
-    icon: str, title: str, desc: str, color
-) -> ft.Container:
+def feature_card(icon: str, title: str, desc: str, color) -> ft.Container:
     """Card explaining a feature capability of the app."""
     return ft.Container(
         content=ft.Row(
             controls=[
                 ft.Container(
-                    content=ft.Icon(
-                        icon, size=tokens.ICON_LG, color=color
-                    ),
+                    content=ft.Icon(icon, size=tokens.ICON_LG, color=color),
                     width=tokens.ICON_CONTAINER_SM,
                     height=tokens.ICON_CONTAINER_SM,
                     border_radius=tokens.RADIUS_MD,
-                    bgcolor=ft.Colors.with_opacity(
-                        tokens.OPACITY_ACCENT, color
-                    ),
+                    bgcolor=ft.Colors.with_opacity(tokens.OPACITY_ACCENT, color),
                     alignment=ft.Alignment.CENTER,
                 ),
                 ft.Column(
@@ -86,14 +78,10 @@ def feature_card(
         ),
         padding=tokens.SPACE_LG,
         border_radius=tokens.RADIUS_MD,
-        bgcolor=ft.Colors.with_opacity(
-            tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE
-        ),
+        bgcolor=ft.Colors.with_opacity(tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE),
         border=ft.Border.all(
             tokens.DIVIDER_THICKNESS,
-            ft.Colors.with_opacity(
-                tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE
-            ),
+            ft.Colors.with_opacity(tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE),
         ),
     )
 

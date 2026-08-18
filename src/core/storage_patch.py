@@ -57,6 +57,35 @@ if _memory_log_handler not in root_logger.handlers:
     root_logger.addHandler(_memory_log_handler)
 
 
+_stderr_log_handler: logging.StreamHandler | None = None
+
+
+def set_log_to_stderr(enabled: bool):
+    """Live-toggle routing of all app logs to stderr (Settings → Advanced).
+
+    Adds or removes a dedicated stderr handler on the root logger so the
+    toggle takes effect immediately, without a restart.
+    """
+    global _stderr_log_handler
+    import sys
+
+    root = logging.getLogger()
+    if enabled and _stderr_log_handler is None:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+        root.addHandler(handler)
+        _stderr_log_handler = handler
+    elif not enabled and _stderr_log_handler is not None:
+        root.removeHandler(_stderr_log_handler)
+        _stderr_log_handler = None
+
+
 def apply_storage_patches():
     # 1. Resolve storage directory — shared with StorageService
     storage_dir = resolve_storage_dir()

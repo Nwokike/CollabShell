@@ -38,25 +38,24 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
                         color=ft.Colors.PRIMARY
                         if is_sel
                         else ft.Colors.ON_SURFACE_VARIANT,
-                        size=tokens.ICON_MD,
+                        size=tokens.ICON_LG,
                     ),
                     ft.Text(
                         label,
                         size=tokens.FONT_SM,
                         color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE,
-                        weight=ft.FontWeight.W_600
-                        if is_sel
-                        else ft.FontWeight.NORMAL,
+                        weight=ft.FontWeight.W_600 if is_sel else ft.FontWeight.W_500,
                     ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=tokens.SPACE_XXS,
+                spacing=tokens.SPACE_XS,
+                alignment=ft.MainAxisAlignment.CENTER,
             ),
             expand=True,
             padding=ft.Padding(
-                tokens.SPACE_SM,
+                tokens.SPACE_XS,
                 tokens.SPACE_MD,
-                tokens.SPACE_SM,
+                tokens.SPACE_XS,
                 tokens.SPACE_MD,
             ),
             border_radius=tokens.RADIUS_MD,

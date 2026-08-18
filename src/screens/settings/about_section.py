@@ -91,7 +91,9 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                                     "Privacy Policy",
                                     icon=ft.Icons.PRIVACY_TIP_ROUNDED,
                                     style=ft.ButtonStyle(color=ft.Colors.PRIMARY),
-                                    on_click=lambda e: page.run_task(_launch_privacy, e),
+                                    on_click=lambda e: page.run_task(
+                                        _launch_privacy, e
+                                    ),
                                 ),
                                 ft.TextButton(
                                     "Terms of Service",
@@ -135,7 +137,9 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                                     "CollabShell Pro",
                                     size=tokens.FONT_MD,
                                     weight=ft.FontWeight.W_600,
-                                    color=ft.Colors.with_opacity(0.6, ft.Colors.ON_SURFACE),
+                                    color=ft.Colors.with_opacity(
+                                        0.6, ft.Colors.ON_SURFACE
+                                    ),
                                 ),
                                 ft.Text(
                                     "Zero ads • Unlimited sessions • Priority support",
@@ -168,7 +172,9 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                     spacing=tokens.SPACE_MD,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                padding=ft.Padding(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD),
+                padding=ft.Padding(
+                    tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
+                ),
                 margin=ft.Margin(
                     tokens.SPACE_LG,
                     tokens.SPACE_XS,

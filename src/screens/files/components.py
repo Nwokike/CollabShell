@@ -7,7 +7,7 @@ import flet as ft
 from core import tokens
 
 
-def fmt_size(size_bytes: int | float | None) -> str:
+def fmt_size(size_bytes: float | None) -> str:
     """Format file bytes into human-readable B / KB / MB string."""
     if size_bytes is None:
         return ""

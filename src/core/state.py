@@ -50,7 +50,7 @@ class AppState:
     keep_alive_on_disconnect: bool = True
     default_log_format: str = "ipynb"
     drive_mount_path: str = "/content/drive"
-    logtostderr: bool = False
+    logtostderr: bool = True
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     is_authenticated: bool = False

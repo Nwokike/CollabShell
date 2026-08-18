@@ -38,11 +38,9 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
     async def _copy(e):
         try:
             await ft.Clipboard().set(log_control.value)
-            page.snack_bar = ft.SnackBar(
-                ft.Text("Logs copied to clipboard"), bgcolor=AppColors.SUCCESS
-            )
-            page.snack_bar.open = True
-            page.update()
+            from core.notifications import show_notification
+
+            show_notification(page, "Logs copied to clipboard")
         except Exception:
             pass
 

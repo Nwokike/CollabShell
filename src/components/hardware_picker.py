@@ -83,7 +83,7 @@ def build_hardware_picker(
         label="TPU Model",
         options=[
             ft.dropdown.Option(key="v5e1", text="v5e1  ·  Free tier"),
-            ft.dropdown.Option(key="v6e1", text="v6e1"),
+            ft.dropdown.Option(key="v6e1", text="v6e1  ·  Free tier"),
         ],
         value="v5e1",
         leading_icon=ft.Icons.BOLT_ROUNDED,

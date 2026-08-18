@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import flet as ft
 
-from components.brand_header import build_brand_header
 from core import tokens
 from core.styles import build_banner_ad
 from screens.settings.about_section import build_about_section
@@ -28,7 +27,6 @@ def SettingsScreen() -> ft.Control:
 
     return ft.Column(
         controls=[
-            build_brand_header(),
             build_preferences_section(page, state, services),
             build_account_section(page, state, services),
             build_banner_ad(page),

@@ -19,39 +19,44 @@ apply_storage_patches()
 from app_shell import AppShell
 from components.new_session_sheet import show_new_session_sheet
 from core import constants, tokens
+from core.notifications import show_notification
 from core.state import state
+from core.stdin_hook import setup_global_stdin_hook
+from core.storage_patch import _memory_log_handler
 from core.theme import AppTheme
 from services.ad_service import AdService
 from services.colab import ColabService
 from services.storage_service import StorageService
 from state import ControllerMethods, ControllerMethodsCtx, ServiceCtx, Services
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+log_fmt = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 
-from core.storage_patch import _memory_log_handler
+# Ensure stdout handler is attached to root
+has_stream = any(
+    isinstance(h, logging.StreamHandler)
+    and not isinstance(h, type(_memory_log_handler))
+    for h in root_logger.handlers
+)
+if not has_stream:
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(log_fmt)
+    stdout_handler.setLevel(logging.INFO)
+    root_logger.addHandler(stdout_handler)
 
-for log_name in [
-    "",
-    "colab",
-    "flet",
-    "router",
-    "services",
-    "core",
-    "colab_service",
-    "colab_session_ops",
-    "colab_auth",
-]:
-    lg = logging.getLogger(log_name)
-    if _memory_log_handler not in lg.handlers:
-        lg.addHandler(_memory_log_handler)
-    if lg.level == logging.NOTSET:
-        lg.setLevel(logging.INFO)
-    if log_name != "":
-        lg.propagate = False
+# Attach memory log handler to root so all logs are captured for History/Logs view
+if _memory_log_handler not in root_logger.handlers:
+    root_logger.addHandler(_memory_log_handler)
+
+logging.captureWarnings(True)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("flet_controls").setLevel(logging.WARNING)
 
 logger = logging.getLogger("colab")
 
@@ -90,6 +95,15 @@ class AppController:
         page.padding = 0
         page.spacing = 0
 
+        loop = asyncio.get_running_loop()
+
+        def _async_exception_handler(l, context):
+            exc = context.get("exception")
+            msg = context.get("message", "Unhandled async exception")
+            logger.error("Unhandled async exception: %s", msg, exc_info=exc)
+
+        loop.set_exception_handler(_async_exception_handler)
+
         page.on_error = self._on_error
 
         # ── Global Services ───────────────────────────────────────────────────
@@ -102,6 +116,16 @@ class AppController:
         page.connectivity = connectivity
         state.connectivity = connectivity
 
+        def _on_connectivity_change(e):
+            try:
+                types = getattr(e, "connectivity", None) or [e.data]
+                state.is_online = ft.ConnectivityType.NONE not in types
+            except Exception:
+                state.is_online = True
+            page.update()
+
+        connectivity.on_change = _on_connectivity_change
+
         self.storage = StorageService(page)
         self.ad_service = AdService(page)
         state.ad_service = self.ad_service
@@ -109,40 +133,142 @@ class AppController:
         page.run_task(self.ad_service.preload_interstitial)
 
         self.colab_service = ColabService()
-        page.run_task(self.colab_service.init)
+
+        async def _init_cli():
+            try:
+                await self.colab_service.init()
+                state.cli_available = self.colab_service.is_available
+                # Keep the CLI's own logging in sync with the app preference
+                cli_state = getattr(self.colab_service, "_cli_state", None)
+                if cli_state is not None:
+                    cli_state.logtostderr = state.logtostderr
+            except Exception as ex:
+                logger.warning("CLI init failed: %s", ex)
+                state.cli_available = False
+
+        page.run_task(_init_cli)
+
+        # Global stdin fallback for kernel prompts outside notebook cells
+        setup_global_stdin_hook(
+            page, self.colab_service, lambda m: show_notification(page, m)
+        )
 
         # ── Restore Preferences ───────────────────────────────────────────────
         await self._restore_preferences()
 
-        # ── Controller Methods for UI ─────────────────────────────────────────
-        def _show_snack(msg: str):
-            page.snack_bar = ft.SnackBar(content=ft.Text(msg))
-            page.snack_bar.open = True
-            page.update()
+        # Apply the restored log-to-stderr preference immediately
+        from core.storage_patch import set_log_to_stderr
 
-        def _navigate_tab(idx: int):
-            state.active_subview = ""
-            state.current_tab = idx
-            page.update()
+        set_log_to_stderr(state.logtostderr)
 
-        def _open_session(name: str, mode: str = "notebook"):
-            state.active_session_name = name
-            state.session_mode = mode
-            state.active_subview = "session"
-            page.update()
+        # ── Routing (deep links + internal navigation share one entry point) ──
+        import urllib.parse
 
-        def _close_session():
+        _TAB_ROUTES = {
+            "/": 0,
+            "/home": 0,
+            "/notebooks_tab": 1,
+            "/terminals_tab": 2,
+            "/files_tab": 3,
+            "/settings": 4,
+        }
+        _TAB_ROUTE_NAMES = [
+            "/home",
+            "/notebooks_tab",
+            "/terminals_tab",
+            "/files_tab",
+            "/settings",
+        ]
+
+        def _apply_route(route: str):
+            """Map a route string onto app state. Idempotent — safe to run
+            twice, so it serves both page.on_route_change (deep links,
+            system back) and direct internal navigation."""
+            try:
+                parsed = urllib.parse.urlparse(route)
+                path = parsed.path or "/"
+                query = dict(urllib.parse.parse_qsl(parsed.query))
+            except Exception:
+                path, query = route or "/", {}
+
+            if path in _TAB_ROUTES:
+                state.active_subview = ""
+                state.active_session_name = ""
+                state.current_tab = _TAB_ROUTES[path]
+                return
+            if path == "/session":
+                name = query.get("session", "")
+                if name:
+                    state.active_session_name = name
+                    state.session_mode = (
+                        "terminal" if query.get("tab") == "terminal" else "notebook"
+                    )
+                    state.active_subview = "session"
+                return
+            if path == "/terminal":
+                name = query.get("session", "")
+                if name:
+                    state.active_session_name = name
+                    state.session_mode = "terminal"
+                    state.active_subview = "session"
+                return
+            if path == "/files":
+                name = query.get("session", "")
+                if name:
+                    state.active_session_name = name
+                    state.session_mode = "files"
+                    state.active_subview = "session"
+                return
+            if path == "/history":
+                state.selected_session_name = query.get("session", "")
+                state.active_subview = "history"
+                return
+            # /onboarding, /offline and unknown routes fall back to home;
+            # the shell's state gates decide what actually renders.
             state.active_subview = ""
             state.active_session_name = ""
-            page.update()
+            state.current_tab = 0
 
-        def _open_history():
-            state.active_subview = "history"
-            page.update()
+        def _navigate(route: str):
+            _apply_route(route)
+            try:
+                page.route = route
+            except Exception:
+                pass
+
+        def _on_route_change(e):
+            _apply_route(getattr(e, "route", "/"))
+
+        page.on_route_change = _on_route_change
+
+        # ── Controller Methods for UI ─────────────────────────────────────────
+        def _show_snack(msg: str, is_error: bool = False, is_warning: bool = False):
+            show_notification(page, msg, is_error=is_error, is_warning=is_warning)
+
+        def _navigate_tab(idx: int):
+            if 0 <= idx < len(_TAB_ROUTE_NAMES):
+                _navigate(_TAB_ROUTE_NAMES[idx])
+
+        def _open_session(name: str, mode: str = "notebook"):
+            encoded = urllib.parse.quote(name)
+            if mode == "files":
+                _navigate(f"/files?session={encoded}")
+            elif mode == "terminal":
+                _navigate(f"/terminal?session={encoded}")
+            else:
+                _navigate(f"/session?session={encoded}")
+
+        def _close_session():
+            _navigate("/home")
+
+        def _open_history(session_name: str = ""):
+            if session_name:
+                _navigate(f"/history?session={urllib.parse.quote(session_name)}")
+            else:
+                _navigate("/history")
 
         def _close_history():
-            state.active_subview = ""
-            page.update()
+            _navigate("/home")
 
         def _show_new_session_sheet(mode: str = "notebook"):
             show_new_session_sheet(
@@ -254,6 +380,12 @@ class AppController:
             )
             if saved_drive_path:
                 state.drive_mount_path = saved_drive_path
+
+            saved_logtostderr = await self.storage.get(constants.STORAGE_LOGTOSTDERR)
+            if saved_logtostderr is not None:
+                state.logtostderr = saved_logtostderr == "true"
+            else:
+                state.logtostderr = True
         except Exception as e:
             logger.warning("Failed to restore some preferences: %s", e)
 
@@ -395,8 +527,28 @@ class AppController:
 
         page.on_app_lifecycle_state_change = _on_lifecycle_change
 
+        # Android hardware BACK: close the active subview (session/history)
+        # before letting the system pop the root view.
+        async def _on_view_pop(e):
+            if state.active_subview:
+                _navigate("/home")
+            elif len(page.views) > 1:
+                page.views.pop()
+                page.route = page.views[-1].route
+
+        page.on_view_pop = _on_view_pop
+
     def _on_error(self, e):
         logger.error("Global Page Error: %s", getattr(e, "data", e))
+        try:
+            show_notification(
+                self.page,
+                "Something went wrong. Please try again.",
+                is_error=True,
+                persist=True,
+            )
+        except Exception:
+            pass
 
 
 async def main(page: ft.Page):

@@ -10,10 +10,14 @@ import posixpath
 import flet as ft
 
 from core import tokens
-from core.theme import AppColors
+from core.notifications import show_notification
 from screens.files.components import fmt_size
 
 logger = logging.getLogger("ColabFilesActions")
+
+
+def _snack(page: ft.Page, message: str, is_error: bool = False):
+    show_notification(page, message, is_error=is_error)
 
 
 async def handle_upload_async(
@@ -56,12 +60,11 @@ async def handle_upload_async(
             cleanup = False
             file_size = os.path.getsize(picked.path)
         else:
-            page.snack_bar = ft.SnackBar(
-                ft.Text("Could not read file — picker did not return content."),
-                bgcolor=ft.Colors.ERROR,
+            _snack(
+                page,
+                "Could not read file — picker did not return content.",
+                is_error=True,
             )
-            page.snack_bar.open = True
-            page.update()
             continue
 
         size_str = fmt_size(file_size)
@@ -95,19 +98,10 @@ async def handle_upload_async(
                 session_name=session_name,
                 auth_method=auth_method,
             )
-            page.snack_bar = ft.SnackBar(
-                ft.Text(f"✅ Uploaded to {remote_path}"),
-                bgcolor=AppColors.SUCCESS,
-            )
-            page.snack_bar.open = True
-            page.update()
+            _snack(page, f"✅ Uploaded to {remote_path}")
         except Exception as ex:
             logger.error("Upload failed: %s", ex)
-            page.snack_bar = ft.SnackBar(
-                ft.Text(f"❌ {ex}"), bgcolor=ft.Colors.ERROR
-            )
-            page.snack_bar.open = True
-            page.update()
+            _snack(page, f"❌ {ex}", is_error=True)
         finally:
             upload_dialog.open = False
             try:
@@ -226,19 +220,10 @@ async def handle_download_async(
                         session_name=session_name,
                         auth_method=auth_method,
                     )
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"✅ Saved to {local_path}"),
-                    bgcolor=AppColors.SUCCESS,
-                )
-                page.snack_bar.open = True
-                page.update()
+                _snack(page, f"✅ Saved to {local_path}")
             except Exception as ex:
                 logger.error("Download failed: %s", ex)
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"❌ {ex}"), bgcolor=ft.Colors.ERROR
-                )
-                page.snack_bar.open = True
-                page.update()
+                _snack(page, f"❌ {ex}", is_error=True)
             finally:
                 dl_dialog.open = False
                 try:
@@ -271,24 +256,20 @@ async def do_delete_async(
     for name in names:
         remote = posixpath.normpath(posixpath.join(current_path, name))
         try:
-            await colab_service.delete_file(
-                session_name, path=remote, auth_method=auth_method
+            await colab_service.rm(
+                remote, session_name=session_name, auth_method=auth_method
             )
         except Exception as ex:
             failed.append(f"{name}: {ex}")
 
     if failed:
-        page.snack_bar = ft.SnackBar(
-            ft.Text(f"❌ Some deletes failed:\n{chr(10).join(failed)}"),
-            bgcolor=ft.Colors.ERROR,
+        _snack(
+            page,
+            f"❌ Some deletes failed:\n{chr(10).join(failed)}",
+            is_error=True,
         )
-        page.snack_bar.open = True
     else:
-        page.snack_bar = ft.SnackBar(
-            ft.Text(f"✅ Deleted {len(names)} item(s)"),
-            bgcolor=AppColors.SUCCESS,
-        )
-        page.snack_bar.open = True
+        _snack(page, f"✅ Deleted {len(names)} item(s)")
 
     clear_selection_fn()
     await fetch_listing_fn(current_path)
@@ -316,16 +297,9 @@ async def do_new_folder_async(
             session_name=session_name,
             auth_method=auth_method,
         )
-        page.snack_bar = ft.SnackBar(
-            ft.Text(f"✅ Created folder: {folder_name}"),
-            bgcolor=AppColors.SUCCESS,
-        )
-        page.snack_bar.open = True
+        _snack(page, f"✅ Created folder: {folder_name}")
     except Exception as ex:
         logger.error("Create folder failed: %s", ex)
-        page.snack_bar = ft.SnackBar(
-            ft.Text(f"❌ {ex}"), bgcolor=ft.Colors.ERROR
-        )
-        page.snack_bar.open = True
+        _snack(page, f"❌ {ex}", is_error=True)
     finally:
         await fetch_listing_fn(current_path)

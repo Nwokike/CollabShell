@@ -9,11 +9,15 @@ Restored from views/settings/auth_section.py:
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from core import constants, tokens
 from core.styles import glass_card, section_header, tip_text
 from core.theme import AppColors
+
+logger = logging.getLogger("AccountSection")
 
 
 def build_account_section(page: ft.Page, state, services) -> ft.Column:
@@ -38,16 +42,37 @@ def build_account_section(page: ft.Page, state, services) -> ft.Column:
         page.update()
 
     async def _on_reauth(e):
-        controller_snack = getattr(state, "_snack", None)
-        try:
-            await services.colab.clear_token()
-        except Exception:
-            pass
-        state.is_authenticated = False
-        state.auth_email = ""
-        state.onboarding_done = False
-        await services.storage.set(constants.STORAGE_ONBOARDING_DONE, "false")
-        page.update()
+        def _close_confirm(ev=None):
+            page.pop_dialog()
+
+        async def _confirm_reauth(ev=None):
+            page.pop_dialog()
+            try:
+                await services.colab.clear_token()
+            except Exception as ex:
+                logger.warning("Failed to clear token during reauth: %s", ex)
+            state.is_authenticated = False
+            state.auth_email = ""
+            state.onboarding_done = False
+            await services.storage.set(constants.STORAGE_ONBOARDING_DONE, "false")
+            page.update()
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Re-Authenticate?", weight=ft.FontWeight.BOLD),
+                content=ft.Text(
+                    "This will clear your stored Google Colab credentials and return you to the onboarding screen. Do you want to continue?"
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=_close_confirm),
+                    ft.FilledButton(
+                        "Continue",
+                        on_click=lambda ev: page.run_task(_confirm_reauth),
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
 
     async def _on_whoami(e):
         try:
