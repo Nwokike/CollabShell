@@ -124,6 +124,72 @@ def TerminalPanel(
         )
 
         entry = TerminalEntry(new_id, mt)
+
+        def _safe_run_task(task_fn, *args):
+            try:
+                if getattr(page, "_session", getattr(page, "session", None)):
+                    page.run_task(task_fn, *args)
+            except RuntimeError:
+                pass
+
+        def _write_to_terminal(text: str):
+            if (
+                getattr(mt._terminal, "_channel", None) is not None
+                and getattr(mt._terminal, "_channel_ready", False)
+                and getattr(mt._terminal, "_dart_ready", False)
+            ):
+                mt.send_bytes(text.encode("utf-8", errors="ignore"))
+            else:
+                mt.write(text)
+
+        def _on_stdout(text: str):
+            if entry.ready and _is_mounted(mt):
+                try:
+                    _write_to_terminal(text)
+                    return
+                except Exception as ex:
+                    logger.debug("Buffering stdout: %s", ex)
+            entry.pending_stdout.append(text)
+
+        def _on_status(msg: str, ok: bool):
+            if ps.active_id == entry.id:
+                ps.status = msg
+                ps.status_ok = ok
+                ps.connecting = not ok
+
+        def _on_bytes(payload: bytes | str):
+            if not ps.is_fullscreen and payload:
+                ps.is_fullscreen = True
+            if entry.client:
+                data = (
+                    payload
+                    if isinstance(payload, bytes)
+                    else payload.encode("utf-8", errors="ignore")
+                )
+                _safe_run_task(entry.client.send_input, data)
+
+        def _on_resize(ev):
+            if entry.client and ev.data:
+                try:
+                    info = json.loads(ev.data)
+                    _safe_run_task(
+                        entry.client.set_size,
+                        info.get("rows", 24),
+                        info.get("cols", 80),
+                    )
+                except Exception as ex:
+                    logger.debug("Error handling terminal resize: %s", ex)
+
+        # Wire every handler BEFORE the widget enters the observable tree.
+        # Appending to ps.terminals triggers a component re-render that freezes
+        # the rendered subtree; declared props (on_data/on_resize) can only be
+        # assigned while the control is still unfrozen.
+        mt.set_on_bytes(_on_bytes)
+        mt.on_data = lambda e: _on_bytes(
+            e.data if isinstance(e.data, str) else str(e.data)
+        )
+        mt.on_resize = _on_resize
+
         ps.terminals.append(entry)
         ps.status = f"Connecting Terminal {new_id}…"
         ps.status_ok = False
@@ -142,70 +208,9 @@ def TerminalPanel(
                 session_info["token"],
             )
 
-            def _write_to_terminal(text: str):
-                if (
-                    getattr(mt._terminal, "_channel", None) is not None
-                    and getattr(mt._terminal, "_channel_ready", False)
-                    and getattr(mt._terminal, "_dart_ready", False)
-                ):
-                    mt.send_bytes(text.encode("utf-8", errors="ignore"))
-                else:
-                    mt.write(text)
-
-            def _on_stdout(text: str):
-                if entry.ready and _is_mounted(mt):
-                    try:
-                        _write_to_terminal(text)
-                        return
-                    except Exception as ex:
-                        logger.debug("Buffering stdout: %s", ex)
-                entry.pending_stdout.append(text)
-
-            def _on_status(msg: str, ok: bool):
-                if ps.active_id == entry.id:
-                    ps.status = msg
-                    ps.status_ok = ok
-                    ps.connecting = not ok
-
             client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
             entry.client = client
 
-            def _safe_run_task(task_fn, *args):
-                try:
-                    if getattr(page, "_session", getattr(page, "session", None)):
-                        page.run_task(task_fn, *args)
-                except RuntimeError:
-                    pass
-
-            def _on_bytes(payload: bytes | str):
-                if not ps.is_fullscreen and payload:
-                    ps.is_fullscreen = True
-                if entry.client:
-                    data = (
-                        payload
-                        if isinstance(payload, bytes)
-                        else payload.encode("utf-8", errors="ignore")
-                    )
-                    _safe_run_task(entry.client.send_input, data)
-
-            mt.set_on_bytes(_on_bytes)
-            mt.on_data = lambda e: _on_bytes(
-                e.data if isinstance(e.data, str) else str(e.data)
-            )
-
-            def _on_resize(ev):
-                if entry.client and ev.data:
-                    try:
-                        info = json.loads(ev.data)
-                        _safe_run_task(
-                            entry.client.set_size,
-                            info.get("rows", 24),
-                            info.get("cols", 80),
-                        )
-                    except Exception as ex:
-                        logger.debug("Error handling terminal resize: %s", ex)
-
-            mt.on_resize = _on_resize
             await client.connect()
             entry.ready = True
 

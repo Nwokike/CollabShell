@@ -5,6 +5,8 @@ from __future__ import annotations
 import flet as ft
 
 from core import tokens
+from screens.files.modal import show_manage_files_modal
+from screens.session.fab_menu import build_session_fab
 from screens.session.layout import build_status_header
 from screens.session.notebook_view import NotebookView
 from screens.session.terminal_panel import TerminalPanel, TerminalPanelState
@@ -24,6 +26,53 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     # Stable panel state survives re-renders; the TerminalPanel component
     # subscribes to it and manages its own WebSocket lifecycle.
     terminal_ps_ref = ft.use_ref(lambda: TerminalPanelState())
+
+    # ── FAB (overflow menu reachable from both Notebook and Terminal tabs) ──
+    # NotebookView registers its action handlers into this ref and reports its
+    # cell count via set_cells_version so the FAB menu stays in sync.
+    cells_version, set_cells_version = ft.use_state(0)
+    nb_actions_ref = ft.use_ref(dict)
+
+    def _sync_fab():
+        if not page or not page.views:
+            return
+        actions = nb_actions_ref.current
+
+        def _call(name: str):
+            fn = actions.get(name)
+            if fn:
+                fn()
+
+        fab = build_session_fab(
+            has_session=bool(session_name),
+            has_cells=cells_version > 0,
+            on_export_ipynb=lambda e: _call("export_ipynb"),
+            on_import_ipynb=lambda e: _call("import_ipynb"),
+            on_clear_all=lambda e: _call("clear_all"),
+            on_manage_files=lambda e: show_manage_files_modal(
+                page,
+                services.colab,
+                session_name,
+                auth_method=state.auth_method,
+                ad_service=services.ad_service,
+                state=state,
+            ),
+        )
+        try:
+            page.views[0].floating_action_button = fab
+            page.update()
+        except Exception:
+            pass
+
+    def _cleanup_fab():
+        if page and page.views:
+            try:
+                page.views[0].floating_action_button = None
+                page.update()
+            except Exception:
+                pass
+
+    ft.use_effect(_sync_fab, [session_name, cells_version], cleanup=_cleanup_fab)
 
     def _switch_to_terminal():
         if not terminal_ready:
@@ -83,6 +132,10 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 content=NotebookView(
                     session_name=session_name,
                     on_switch_terminal=_switch_to_terminal,
+                    register_actions=lambda actions: nb_actions_ref.current.update(
+                        actions
+                    ),
+                    on_cells_change=set_cells_version,
                 ),
                 expand=True,
                 visible=active_tab == 0,

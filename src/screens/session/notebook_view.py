@@ -27,7 +27,12 @@ _MAX_OUTPUT_ENTRIES = 5000
 
 
 @ft.component
-def NotebookView(session_name: str, on_switch_terminal) -> ft.Control:
+def NotebookView(
+    session_name: str,
+    on_switch_terminal,
+    register_actions=None,
+    on_cells_change=None,
+) -> ft.Control:
     state = ft.use_context(AppStateCtx)
     services = ft.use_context(ServiceCtx)
     controller = ft.use_context(ControllerMethodsCtx)
@@ -40,6 +45,8 @@ def NotebookView(session_name: str, on_switch_terminal) -> ft.Control:
     def _publish(new_list: list):
         cells_ref.current = new_list
         set_cells(list(new_list))
+        if on_cells_change:
+            on_cells_change(len(new_list))
 
     async def _load():
         loaded = await services.storage.load_notebook(session_name)
@@ -218,6 +225,16 @@ def NotebookView(session_name: str, on_switch_terminal) -> ft.Control:
                     )
         except Exception as ex:
             controller.show_snack(f"❌ Import failed: {ex}", is_error=True)
+
+    # Expose notebook actions to the SessionScreen FAB overflow menu.
+    if register_actions:
+        register_actions(
+            {
+                "export_ipynb": lambda: page.run_task(_export_ipynb),
+                "import_ipynb": lambda: page.run_task(_import_ipynb),
+                "clear_all": _clear_all_outputs,
+            }
+        )
 
     # ── Keep-alive & Action row ───────────────────────────────────────────────
     async def _on_toggle_keep_alive(e):

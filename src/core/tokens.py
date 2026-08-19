@@ -1,6 +1,7 @@
 """Design tokens — unified spacing, typography, radii, icons, and layout dimensions."""
 
 # ── Spacing ───────────────────────────────────────────────────────────────────
+SPACE_NONE = 0
 SPACE_MICRO = 1
 SPACE_NANO = 2
 SPACE_XXS = 2
