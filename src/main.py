@@ -236,6 +236,9 @@ class AppController:
             except Exception:
                 pass
 
+        # Expose for handlers registered in other methods (e.g. on_view_pop).
+        self._navigate = _navigate
+
         def _on_route_change(e):
             _apply_route(getattr(e, "route", "/"))
 
@@ -531,7 +534,7 @@ class AppController:
         # before letting the system pop the root view.
         async def _on_view_pop(e):
             if state.active_subview:
-                _navigate("/home")
+                self._navigate("/home")
             elif len(page.views) > 1:
                 page.views.pop()
                 page.route = page.views[-1].route

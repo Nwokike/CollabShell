@@ -55,7 +55,7 @@ class CellData:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "CellData":
+    def from_dict(cls, d: dict) -> CellData:
         return cls(
             cell_id=d.get("id"),
             cell_type=d.get("type", "code"),
