@@ -213,7 +213,7 @@ async def check_auth_impl(service) -> dict:
             try:
                 expires_min = int(expires_in) // 60
                 expires_str = f"{expires_min}m"
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 expires_str = str(expires_in)
 
             return {

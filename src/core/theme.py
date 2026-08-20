@@ -63,7 +63,7 @@ class AppColors:
     DARK_GLASS_BORDER = "#2D2D3F"  # dark hairline
 
 
-def _resolve_page(page: "ft.Page | None") -> "ft.Page | None":
+def _resolve_page(page: ft.Page | None) -> ft.Page | None:
     """Return the given page, else the running app's page (None if unavailable)."""
     if page is not None:
         return page
@@ -73,7 +73,7 @@ def _resolve_page(page: "ft.Page | None") -> "ft.Page | None":
         return None
 
 
-def is_light_theme(page: "ft.Page | None" = None) -> bool:
+def is_light_theme(page: ft.Page | None = None) -> bool:
     """Resolve the *effective* light/dark mode, handling SYSTEM via platform brightness.
 
     ``page.theme_mode`` only holds the *requested* mode — in ``SYSTEM`` mode it
@@ -109,12 +109,12 @@ def is_light_theme(page: "ft.Page | None" = None) -> bool:
     return True  # brightness not yet reported — Colab's default surface is light
 
 
-def adaptive_glass_bg(page: "ft.Page | None" = None):
+def adaptive_glass_bg(page: ft.Page | None = None):
     """Return the card background color for the active theme mode."""
     return AppColors.LIGHT_GLASS_BG if is_light_theme(page) else AppColors.DARK_GLASS_BG
 
 
-def adaptive_glass_border(page: "ft.Page | None" = None):
+def adaptive_glass_border(page: ft.Page | None = None):
     """Return the card hairline border color for the active theme mode."""
     return (
         AppColors.LIGHT_GLASS_BORDER

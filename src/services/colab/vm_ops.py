@@ -16,7 +16,7 @@ async def mount_drive_impl(
     await service._ensure_online()
     code = f"from google.colab import drive\ndrive.mount('{path}')"
     try:
-        await service.exec_code(
+        outputs = await service.exec_code(
             code,
             session_name,
             timeout=600,
@@ -25,9 +25,12 @@ async def mount_drive_impl(
             intercept_oauth=True,
             stdin_hook=stdin_hook,
         )
+        for out in outputs or []:
+            if out.get("output_type") == "error":
+                raise RuntimeError(out.get("evalue") or "Drive mount failed on the VM")
         return True
-    except Exception as e:
-        logger.error("mount_drive failed: %s", e)
+    except Exception:
+        logger.exception("mount_drive failed")
         return False
 
 
@@ -58,8 +61,8 @@ except:
             on_output=on_output,
         )
         return True
-    except Exception as e:
-        logger.error("install_packages failed: %s", e)
+    except Exception:
+        logger.exception("install_packages failed")
         return False
 
 
@@ -74,7 +77,7 @@ async def auth_gcp_on_vm_impl(
     await service._ensure_online()
     code = "import os\nos.environ['USE_AUTH_EPHEM'] = '0'\nfrom google.colab import auth\nauth.authenticate_user()"
     try:
-        await service.exec_code(
+        outputs = await service.exec_code(
             code,
             session_name,
             timeout=600,
@@ -83,7 +86,10 @@ async def auth_gcp_on_vm_impl(
             intercept_oauth=True,
             stdin_hook=stdin_hook,
         )
+        for out in outputs or []:
+            if out.get("output_type") == "error":
+                raise RuntimeError(out.get("evalue") or "GCP auth failed on the VM")
         return True
-    except Exception as e:
-        logger.error("auth_gcp_on_vm failed: %s", e)
+    except Exception:
+        logger.exception("auth_gcp_on_vm failed")
         return False

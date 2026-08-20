@@ -70,13 +70,17 @@ async def on_mount_drive(
                 page.loop.call_soon_threadsafe(snack, f"Drive: {line[:120]}")
 
     try:
-        await colab_service.mount_drive(
+        ok = await colab_service.mount_drive(
             session_name,
             path=state.drive_mount_path,
             auth_method=state.auth_method,
             on_output=_output_handler,
             stdin_hook=stdin_hook,
         )
+        if not ok:
+            raise RuntimeError(
+                "Drive mount did not complete. Check authorization and retry."
+            )
         if dialog.open:
             dialog.title = ft.Text("Success")
             dialog.content = ft.Row(
@@ -175,12 +179,14 @@ async def on_auth_gcp(
                 page.loop.call_soon_threadsafe(snack, f"Auth GCP: {line[:120]}")
 
     try:
-        await colab_service.auth_gcp_on_vm(
+        ok = await colab_service.auth_gcp_on_vm(
             session_name,
             auth_method=state.auth_method,
             on_output=_output_handler,
             stdin_hook=stdin_hook,
         )
+        if not ok:
+            raise RuntimeError("GCP authentication did not complete. Retry.")
         if dialog.open:
             dialog.title = ft.Text("Success")
             dialog.content = ft.Row(

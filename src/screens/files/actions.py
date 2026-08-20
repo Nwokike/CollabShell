@@ -183,7 +183,7 @@ async def handle_download_async(
                         dialog_title=f"Save {default_name}",
                         file_name=default_name,
                     )
-                except (ValueError, Exception):
+                except ValueError, Exception:
                     dl_dir = "/storage/emulated/0/Download"
                     if not os.path.exists(dl_dir):
                         dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")

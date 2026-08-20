@@ -13,6 +13,7 @@ import logging
 from collections.abc import Callable
 
 import flet as ft
+from flet.components.component import Renderer
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
 from core import tokens
@@ -129,16 +130,23 @@ def TerminalPanel(
             return
 
         theme_name = _active_theme_name(page)
-        mt = MobileTerminal(
-            show_search=False,
-            show_settings=False,
-            scrollback=10000,
-            font_family="JetBrains Mono",
-            font_size=11.0,
-            theme=BUILTIN_THEMES.get(theme_name),
-            auto_focus=False,
-            expand=True,
-        )
+        # MobileTerminal builds its ExtraKeysBar, whose CTRL/ALT buttons are
+        # @ft.component functions. Those require an active renderer, which this
+        # async task doesn't have — bind a throwaway one for construction only.
+        # Reactivity is unaffected: Component.update() creates its own renderer
+        # on every re-render, so the ModifierKey buttons keep repainting when
+        # ModifierState changes.
+        with Renderer().with_context():
+            mt = MobileTerminal(
+                show_search=False,
+                show_settings=False,
+                scrollback=10000,
+                font_family="JetBrains Mono",
+                font_size=11.0,
+                theme=BUILTIN_THEMES.get(theme_name),
+                auto_focus=False,
+                expand=True,
+            )
 
         entry = TerminalEntry(new_id, mt)
         # New terminals inherit the panel's current settings.

@@ -112,7 +112,7 @@ def HistoryScreen() -> ft.Control:
     try:
         limit = None if max_lines == "all" else int(max_lines)
         display_events = filtered if limit is None else filtered[-limit:]
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         display_events = filtered
 
     # ── Event item ────────────────────────────────────────────────────
