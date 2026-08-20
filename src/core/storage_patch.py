@@ -38,7 +38,7 @@ class MemoryLogHandler(logging.Handler):
             if len(MemoryLogHandler._logs) > MemoryLogHandler._MAX_LOGS:
                 MemoryLogHandler._logs.pop(0)
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     @classmethod
     def get_logs(cls) -> list[str]:
@@ -310,4 +310,4 @@ def apply_storage_patches():
 
         _LockedFileStore._write_data = patched_write_data
     except Exception:
-        pass
+        logger.exception("Suppressed exception")

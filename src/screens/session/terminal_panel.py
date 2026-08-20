@@ -247,7 +247,7 @@ def TerminalPanel(
                     try:
                         _write_to_terminal(chunk)
                     except Exception:
-                        pass
+                        logger.exception("Suppressed exception")
                 entry.pending_stdout.clear()
 
             if entry.client:
@@ -272,8 +272,7 @@ def TerminalPanel(
             try:
                 entry.client.close()
             except Exception:
-                pass
-
+                logger.exception("Suppressed exception")
         if not ps.terminals:
             page.run_task(_create_terminal)
             return
@@ -288,7 +287,7 @@ def TerminalPanel(
                 try:
                     t.client.close()
                 except Exception:
-                    pass
+                    logger.exception("Suppressed exception")
 
     async def _init_panel():
         _close_all_clients()

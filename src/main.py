@@ -243,7 +243,7 @@ class AppController:
             try:
                 page.route = route
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
 
         # Expose for handlers registered in other methods (e.g. on_view_pop).
         self._navigate = _navigate
@@ -450,7 +450,7 @@ class AppController:
             try:
                 self.page.update()
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
 
     def _register_lifecycle_handlers(self):
         page = self.page
@@ -560,7 +560,7 @@ class AppController:
                 persist=True,
             )
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
 
 async def main(page: ft.Page):

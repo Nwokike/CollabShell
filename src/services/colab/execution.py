@@ -80,7 +80,7 @@ async def exec_code_impl(
                 try:
                     runtime.kernel_client.interrupt()
                 except Exception:
-                    pass
+                    logger.exception("Suppressed exception")
                 raise RuntimeError("Execution cancelled by user")
             if on_output:
                 text = ""

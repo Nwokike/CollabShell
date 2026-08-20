@@ -108,7 +108,7 @@ async def new_session_impl(
                     try:
                         st.client.unassign(endpoint)
                     except Exception:
-                        pass
+                        logger.exception("Suppressed exception")
                     raise RuntimeError(
                         "Keep-alive pre-flight failed: OAuth credentials are "
                         "missing a Colab scope. Please re-authenticate."
@@ -263,8 +263,7 @@ async def stop_session_impl(
             runtime = ColabRuntime(s.url, s.token, kernel_id=s.kernel_id)
             runtime.stop(shutdown_kernel=True)
         except Exception:
-            pass
-
+            logger.exception("Suppressed exception")
         st.client.unassign(s.endpoint)
         st.store.remove(session_name)
         st.history.log_event(

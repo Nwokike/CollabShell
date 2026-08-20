@@ -60,7 +60,7 @@ def AppShell() -> Control:
                 try:
                     page.update()
                 except Exception:
-                    pass
+                    logger.exception("Suppressed exception")
             return
 
         def _on_tab_change(e):
@@ -89,7 +89,7 @@ def AppShell() -> Control:
         try:
             page.update()
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_navigation_bar,
@@ -139,7 +139,7 @@ def AppShell() -> Control:
                 else:
                     controller.show_snack(constants.ERR_NETWORK)
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
 
         return OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
 

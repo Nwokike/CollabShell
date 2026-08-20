@@ -128,15 +128,14 @@ async def handle_upload_async(
             try:
                 page.update()
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
             if state:
                 state.is_uploading = False
             if cleanup:
                 try:
                     os.unlink(local_path)
                 except Exception:
-                    pass
-
+                    logger.exception("Suppressed exception")
     await fetch_listing_fn(current_path)
 
 
@@ -223,7 +222,7 @@ async def handle_download_async(
                 try:
                     _st.update()
                 except Exception:
-                    pass
+                    logger.exception("Suppressed exception")
 
             try:
                 if is_dir:
@@ -250,8 +249,7 @@ async def handle_download_async(
                 try:
                     page.update()
                 except Exception:
-                    pass
-
+                    logger.exception("Suppressed exception")
         clear_selection_fn()
 
     if ad_service:

@@ -98,7 +98,7 @@ class AdService:
                 await self._consent_manager.show_privacy_options_form()
                 self._can_request_ads = await self._consent_manager.can_request_ads()
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     # ── Ad Controls ───────────────────────────────────────────────────────────
 

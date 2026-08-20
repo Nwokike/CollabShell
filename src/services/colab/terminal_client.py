@@ -172,6 +172,6 @@ class ColabTerminalClient:
             try:
                 self.ws.close()
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
             self.ws = None
         logger.info("Colab terminal client closed.")

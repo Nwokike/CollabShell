@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from core import constants, tokens
 from core.styles import glass_card, section_header
 from core.theme import AppColors
+
+logger = logging.getLogger(__name__)
 
 
 def _get_cli_version() -> str:
@@ -26,13 +30,13 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
         try:
             await ft.UrlLauncher().launch_url(constants.PRIVACY_POLICY_URL)
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     async def _launch_terms(e=None):
         try:
             await ft.UrlLauncher().launch_url(constants.TERMS_OF_SERVICE_URL)
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     return ft.Column(
         controls=[

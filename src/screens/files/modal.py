@@ -288,7 +288,7 @@ def show_manage_files_modal(
         try:
             dlg.update()
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     async def _fetch_listing(path: str):
         nonlocal is_loading, listing, current_path

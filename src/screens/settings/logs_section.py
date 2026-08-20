@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import flet as ft
@@ -10,6 +11,8 @@ from core import tokens
 from core.storage_patch import MemoryLogHandler, resolve_storage_dir
 from core.styles import glass_card, section_header
 from core.theme import AppColors
+
+logger = logging.getLogger(__name__)
 
 
 def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
@@ -42,7 +45,7 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
 
             show_notification(page, "Logs copied to clipboard")
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     return ft.AlertDialog(
         modal=True,

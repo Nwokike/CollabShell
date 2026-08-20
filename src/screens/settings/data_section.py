@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from core import constants, tokens
 from core.notifications import show_notification
 from core.styles import glass_card, section_header, tip_text
+
+logger = logging.getLogger(__name__)
 
 
 def build_data_section(page: ft.Page, state, services) -> ft.Column:
@@ -34,8 +38,7 @@ def build_data_section(page: ft.Page, state, services) -> ft.Column:
                     try:
                         await services.storage.delete(key)
                     except Exception:
-                        pass
-
+                        logger.exception("Suppressed exception")
                 show_notification(page, "✅ Local preferences and cache cleared.")
             except Exception as ex:
                 show_notification(page, f"❌ Clear failed: {ex}", is_error=True)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from core import tokens
@@ -13,6 +15,8 @@ from screens.session.notebook_view import NotebookView
 from screens.session.terminal_panel import TerminalPanel, TerminalPanelState
 from screens.session.vm_ops import on_auth_gcp, on_mount_drive
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
+
+logger = logging.getLogger(__name__)
 
 
 @ft.component
@@ -74,7 +78,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     or []
                 )
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
             controller.close_session()
         except Exception as ex:
             controller.show_snack(f"❌ {ex}", is_error=True)
@@ -182,7 +186,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             page.views[0].floating_action_button = fab
             page.update()
         except Exception:
-            pass
+            logger.exception("Suppressed exception")
 
     def _cleanup_fab():
         if page and page.views:
@@ -190,7 +194,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 page.views[0].floating_action_button = None
                 page.update()
             except Exception:
-                pass
+                logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_fab,

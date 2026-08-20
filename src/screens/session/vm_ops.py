@@ -17,7 +17,7 @@ def _close_active_auth(page: ft.Page):
     try:
         page.pop_dialog()
     except Exception:
-        pass
+        logger.exception("Suppressed exception")
 
 
 async def on_mount_drive(

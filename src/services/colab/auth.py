@@ -121,8 +121,7 @@ async def authenticate_oauth2_impl(service, code: str) -> dict:
             try:
                 os.remove(verifier_path)
             except Exception:
-                pass
-
+                logger.exception("Suppressed exception")
         os.makedirs(os.path.dirname(TOKEN_CONFIG_PATH), exist_ok=True)
         with open(TOKEN_CONFIG_PATH, "w") as f:
             f.write(creds.to_json())
