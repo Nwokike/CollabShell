@@ -11,8 +11,27 @@ def build_notebook_toolbar(
     on_import_ipynb=None,
     on_open_terminal=None,
 ) -> ft.Container:
-    """Bottom toolbar for adding cells. Import/export/clear-all moved to the
-    session FAB overflow menu to avoid duplicate controls."""
+    """Bottom toolbar for adding cells. Import/export are also exposed here
+    (in addition to the session FAB overflow menu) so they're easy to reach."""
+    trailing = [
+        ft.IconButton(
+            ft.Icons.UPLOAD_FILE_ROUNDED,
+            tooltip="Import IPYNB",
+            on_click=on_import_ipynb,
+            icon_size=tokens.ICON_SM,
+        )
+        if on_import_ipynb
+        else ft.Container(),
+        ft.IconButton(
+            ft.Icons.DOWNLOAD_ROUNDED,
+            tooltip="Export IPYNB",
+            on_click=on_export_ipynb,
+            icon_size=tokens.ICON_SM,
+        )
+        if on_export_ipynb
+        else ft.Container(),
+    ]
+
     return ft.Container(
         content=ft.Row(
             controls=[
@@ -35,6 +54,7 @@ def build_notebook_toolbar(
                     ),
                 ),
                 ft.Container(expand=True),
+                *trailing,
             ],
             alignment=ft.MainAxisAlignment.START,
             spacing=tokens.SPACE_SM,

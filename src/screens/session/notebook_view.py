@@ -374,6 +374,8 @@ def NotebookView(
     toolbar = build_notebook_toolbar(
         on_add_code=lambda e: _add_cell("code"),
         on_add_markdown=lambda e: _add_cell("markdown"),
+        on_export_ipynb=lambda e: page.run_task(_export_ipynb, e),
+        on_import_ipynb=lambda e: page.run_task(_import_ipynb, e),
     )
 
     # ── Render cells ──────────────────────────────────────────────────────────
