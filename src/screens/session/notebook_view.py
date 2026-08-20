@@ -20,6 +20,7 @@ from components.notebook_toolbar import build_notebook_toolbar
 from core import constants, tokens
 from core.stdin_hook import show_stdin_dialog
 from core.styles import build_banner_ad
+from screens.files.modal import show_manage_files_modal
 from screens.session.layout import build_action_row, build_keep_alive_card
 from screens.session.vm_ops import on_auth_gcp, on_mount_drive
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
@@ -336,7 +337,14 @@ def NotebookView(
 
     action_row = build_action_row(
         page,
-        on_files=lambda e: controller.open_session(session_name, "files"),
+        on_files=lambda e: show_manage_files_modal(
+            page,
+            services.colab,
+            session_name,
+            auth_method=state.auth_method,
+            ad_service=services.ad_service,
+            state=state,
+        ),
         on_mount_drive=lambda e: page.run_task(
             on_mount_drive,
             page=page,
