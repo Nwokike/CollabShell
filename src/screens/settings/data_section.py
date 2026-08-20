@@ -36,13 +36,9 @@ def build_data_section(page: ft.Page, state, services) -> ft.Column:
                     except Exception:
                         pass
 
-                show_notification(
-                    page, "✅ Local preferences and cache cleared."
-                )
+                show_notification(page, "✅ Local preferences and cache cleared.")
             except Exception as ex:
-                show_notification(
-                    page, f"❌ Clear failed: {ex}", is_error=True
-                )
+                show_notification(page, f"❌ Clear failed: {ex}", is_error=True)
 
         dialog = ft.AlertDialog(
             title=ft.Text("Clear All Local Data?"),

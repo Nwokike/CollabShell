@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import posixpath
+
 import flet as ft
 
 from core import tokens
+
+
+def parent_path(path: str) -> str | None:
+    """Parent directory of `path`, or None when already at filesystem root."""
+    norm = posixpath.normpath(path or "/")
+    if norm == "/":
+        return None
+    parent = posixpath.dirname(norm)
+    return parent if parent else "/"
 
 
 def fmt_size(size_bytes: float | None) -> str:
@@ -57,18 +68,32 @@ def build_empty_dir_view(on_upload) -> ft.Control:
 
 
 def build_breadcrumbs(path: str, on_navigate) -> ft.Control:
-    """Interactive POSIX directory path breadcrumbs with chevrons."""
-    parts = [p for p in path.split("/") if p]
-    crumbs = [
-        ft.TextButton(
+    """Interactive POSIX directory path breadcrumbs with chevrons.
+
+    The root crumb navigates to the true filesystem root ("/") so users can
+    browse above /content (the ColabService.ls backend supports any path).
+    """
+    norm = posixpath.normpath(path or "/")
+    parts = [p for p in norm.split("/") if p]
+    at_root = not parts
+    root_crumb: ft.Control = (
+        ft.Text(
             "/",
-            on_click=lambda e: on_navigate("/content"),
+            size=tokens.FONT_SM,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.ON_SURFACE,
+        )
+        if at_root
+        else ft.TextButton(
+            "/",
+            on_click=lambda e: on_navigate("/"),
             style=ft.ButtonStyle(
                 padding=ft.Padding(4, 2, 4, 2),
                 color=ft.Colors.PRIMARY,
             ),
         )
-    ]
+    )
+    crumbs = [root_crumb]
     built = ""
     for i, part in enumerate(parts):
         built += f"/{part}"

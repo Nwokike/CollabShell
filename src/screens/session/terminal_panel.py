@@ -1,6 +1,6 @@
 """Native Colab Terminal panel — declarative component using flet_terminal.
 
-Panel state (tabs, active tab, fullscreen, status) is an @ft.observable
+Panel state (tabs, active tab, status) is an @ft.observable
 model; the `TerminalPanel` component re-renders reactively on every change.
 WebSocket clients live in the panel state and are closed on unmount.
 """
@@ -16,9 +16,15 @@ import flet as ft
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
 from core import tokens
-from core.theme import AppColors
+from core.state import state as app_state
+from core.theme import AppColors, is_light_theme
 
 logger = logging.getLogger("colab")
+
+
+def _active_theme_name(page: ft.Page | None = None) -> str:
+    """Terminal theme that follows the app's light/dark mode."""
+    return "Colab Light" if is_light_theme(page) else "JetBrains Dark"
 
 
 def _is_mounted(control) -> bool:
@@ -78,10 +84,16 @@ class TerminalPanelState:
         self.terminals: list = []
         self.active_id = 1
         self.next_id = 1
-        self.is_fullscreen = False
         self.status = "Ready"
         self.status_ok = False
         self.connecting = False
+        # Active terminal settings (drive the FAB menu; session/session_sync
+        # bumps terminal_settings_rev after a change so checkmarks refresh).
+        self.theme = "JetBrains Dark"
+        self.cursor = "block"
+        self.blink = True
+        self.search = False
+        self.zoom = 11.0
 
 
 @ft.component
@@ -90,13 +102,18 @@ def TerminalPanel(
     session_name: str,
     colab_service,
     snack: Callable[[str], None] | None = None,
+    register_actions: Callable[[dict], None] | None = None,
 ) -> ft.Control:
-    """Multi-terminal panel with tab management, fullscreen, and WS lifecycle.
+    """Multi-terminal panel with tab management, theming, and WS lifecycle.
 
     `ps` is passed as an observable argument so Flet auto-subscribes this
-    component to it — any mutation re-renders the panel.
+    component to it — any mutation re-renders the panel. The terminal color
+    theme follows the app's light/dark mode.
     """
     page = ft.context.page
+
+    def _active_entry():
+        return next((t for t in ps.terminals if t.id == ps.active_id), None)
 
     # ── Terminal lifecycle ────────────────────────────────────────────────────
     async def _create_terminal():
@@ -112,18 +129,25 @@ def TerminalPanel(
                 snack("Session not found in store.")
             return
 
+        theme_name = _active_theme_name(page)
         mt = MobileTerminal(
             show_search=False,
-            show_settings=True,
+            show_settings=False,
             scrollback=10000,
             font_family="JetBrains Mono",
             font_size=11.0,
-            theme=BUILTIN_THEMES.get("JetBrains Dark", None),
+            theme=BUILTIN_THEMES.get(theme_name),
             auto_focus=False,
             expand=True,
         )
 
         entry = TerminalEntry(new_id, mt)
+        # New terminals inherit the panel's current settings.
+        mt.set_cursor_style(ps.cursor)
+        if not ps.blink:
+            mt.toggle_cursor_blink()
+        while mt.font_size < ps.zoom:
+            mt.zoom_in()
 
         def _safe_run_task(task_fn, *args):
             try:
@@ -158,8 +182,6 @@ def TerminalPanel(
                 ps.connecting = not ok
 
         def _on_bytes(payload: bytes | str):
-            if not ps.is_fullscreen and payload:
-                ps.is_fullscreen = True
             if entry.client:
                 data = (
                     payload
@@ -223,7 +245,8 @@ def TerminalPanel(
                 entry.pending_stdout.clear()
 
             if entry.client:
-                _safe_run_task(entry.client.send_input, "\r")
+                # Colab PTYs open in /root; move to the shared data dir.
+                _safe_run_task(entry.client.send_input, "cd /content\r\n")
 
         except Exception as ex:
             logger.error("Terminal %s init failed: %s", new_id, ex)
@@ -262,14 +285,123 @@ def TerminalPanel(
                     pass
 
     async def _init_panel():
-        ps.is_fullscreen = False
         _close_all_clients()
         ps.terminals.clear()
         await _create_terminal()
 
+    # ── Actions exposed to the SessionScreen FAB overflow menu ───────────────
+    def _changed_settings():
+        app_state.terminal_settings_rev += 1
+
+    def _for_each_mt(fn):
+        for t in ps.terminals:
+            fn(t.mt)
+
+    def _set_theme(name: str):
+        ps.theme = name
+        _for_each_mt(lambda mt: mt.set_theme(name))
+        _changed_settings()
+
+    def _set_cursor(style: str):
+        ps.cursor = style
+        _for_each_mt(lambda mt: mt.set_cursor_style(style))
+        _changed_settings()
+
+    def _zoom_in():
+        _for_each_mt(lambda mt: mt.zoom_in())
+        entry = _active_entry()
+        if entry:
+            ps.zoom = entry.mt.font_size
+        _changed_settings()
+
+    def _zoom_out():
+        _for_each_mt(lambda mt: mt.zoom_out())
+        entry = _active_entry()
+        if entry:
+            ps.zoom = entry.mt.font_size
+        _changed_settings()
+
+    def _zoom_reset():
+        _for_each_mt(lambda mt: mt.reset_zoom())
+        entry = _active_entry()
+        if entry:
+            ps.zoom = entry.mt.font_size
+        _changed_settings()
+
+    def _toggle_blink():
+        _for_each_mt(lambda mt: mt.toggle_cursor_blink())
+        ps.blink = not ps.blink
+        _changed_settings()
+
+    def _toggle_search():
+        ps.search = not ps.search
+        want = ps.search
+        _for_each_mt(
+            lambda mt: mt.toggle_search() if mt.show_search != want else None
+        )
+        _changed_settings()
+
+    def _clear_terminal():
+        entry = _active_entry()
+        if entry and entry.client:
+            # Ctrl+L: bash clears the screen and redraws the prompt at top.
+            page.run_task(entry.client.send_input, b"\x0c")
+
+    async def _copy_selection():
+        entry = _active_entry()
+        if not entry:
+            return
+        text = await entry.mt.get_selection_async()
+        if not text:
+            if snack:
+                snack("Nothing selected — long-press or drag to select text.")
+            return
+        try:
+            await ft.Clipboard().set(text)
+            entry.mt.clear_selection()
+            if snack:
+                snack("📋 Copied to clipboard")
+        except Exception as ex:
+            if snack:
+                snack(f"Copy failed: {ex}", is_error=True)
+
+    if register_actions:
+        register_actions(
+            {
+                "new_terminal": lambda: page.run_task(_create_terminal),
+                "clear_terminal": _clear_terminal,
+                "copy": lambda: page.run_task(_copy_selection),
+                "paste": lambda: (
+                    _active_entry().mt.paste() if _active_entry() else None
+                ),
+                # Settings (consumed by the FAB menu, with live checkmarks)
+                "theme": _set_theme,
+                "cursor": _set_cursor,
+                "zoom_in": _zoom_in,
+                "zoom_out": _zoom_out,
+                "zoom_reset": _zoom_reset,
+                "toggle_blink": _toggle_blink,
+                "toggle_search": _toggle_search,
+                "font_size": lambda: (
+                    _active_entry().mt.font_size if _active_entry() else ps.zoom
+                ),
+            }
+        )
+
     # Self-initialize on mount; close all sockets on unmount.
     ft.on_mounted(lambda: page.run_task(_init_panel))
     ft.use_effect(lambda: None, [], cleanup=_close_all_clients)
+
+    # Follow the app's light/dark mode: re-apply the terminal theme whenever
+    # the requested mode changes or the OS flips brightness in SYSTEM mode.
+    def _apply_app_theme():
+        name = _active_theme_name(page)
+        for t in ps.terminals:
+            t.mt.set_theme(name)
+        ps.theme = name
+        _changed_settings()
+
+    ft.use_effect(_apply_app_theme, [app_state.theme_mode, app_state.theme_revision])
 
     # ── Render ────────────────────────────────────────────────────────────────
     status_bar = ft.Container(
@@ -290,16 +422,6 @@ def TerminalPanel(
                         else ft.Colors.ON_SURFACE_VARIANT
                     ),
                     expand=True,
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.FULLSCREEN_EXIT_ROUNDED
-                    if ps.is_fullscreen
-                    else ft.Icons.FULLSCREEN_ROUNDED,
-                    icon_size=tokens.ICON_SM,
-                    tooltip="Toggle Fullscreen",
-                    on_click=lambda e: setattr(
-                        ps, "is_fullscreen", not ps.is_fullscreen
-                    ),
                 ),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -373,7 +495,6 @@ def TerminalPanel(
         ),
         padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
         bgcolor=ft.Colors.with_opacity(0.04, ft.Colors.ON_SURFACE),
-        visible=not ps.is_fullscreen,
     )
 
     # Stable MobileTerminal instances wrapped in declarative visibility boxes

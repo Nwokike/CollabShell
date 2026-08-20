@@ -35,6 +35,8 @@ class AppState:
     current_tab: int = 0  # 0=Home, 1=Notebooks, 2=Terminal, 3=Files, 4=Settings
     active_subview: str = ""  # "", "session", "history"
     theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
+    theme_revision: int = 0  # bumped on platform-brightness change (SYSTEM mode)
+    terminal_settings_rev: int = 0  # bumped when terminal settings change (FAB rebuild)
     is_loading: bool = False
     app_ready: bool = False
     cli_available: bool = False

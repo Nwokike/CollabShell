@@ -106,6 +106,15 @@ class AppController:
 
         page.on_error = self._on_error
 
+        def _on_platform_brightness(e):
+            # In SYSTEM mode the host OS can flip light/dark at runtime. Bump the
+            # observable revision so adaptive (hardcoded-hex) surfaces re-render;
+            # the client re-themes all semantic-token colors automatically.
+            state.theme_revision += 1
+            page.update()
+
+        page.on_platform_brightness_change = _on_platform_brightness
+
         # ── Global Services ───────────────────────────────────────────────────
         file_picker = ft.FilePicker()
         page.services.append(file_picker)

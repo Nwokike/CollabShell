@@ -9,6 +9,7 @@ import flet as ft
 from components.file_item import build_file_item
 from core import tokens
 from core.styles import build_banner_ad
+from core.theme import adaptive_glass_bg, adaptive_glass_border
 from screens.files.actions import (
     do_delete_async,
     do_new_folder_async,
@@ -18,6 +19,7 @@ from screens.files.actions import (
 from screens.files.components import (
     build_breadcrumbs,
     build_empty_dir_view,
+    parent_path,
 )
 from state import AppStateCtx, ServiceCtx
 
@@ -66,10 +68,12 @@ def FilesScreen(session_name: str) -> ft.Control:
 
     # ── Item tap / selection handlers ─────────────────────────────────────────
     def _on_file_tap(item: dict):
-        if item.get("type") == "directory" or item.get("is_dir", False):
-            _navigate(posixpath.normpath(posixpath.join(current_path, item["name"])))
-        elif selection_mode:
+        is_dir = item.get("type") == "directory" or item.get("is_dir", False)
+        if selection_mode:
+            # Folders are selectable too (downloaded as zip).
             _toggle_select(item["name"])
+        elif is_dir:
+            _navigate(posixpath.normpath(posixpath.join(current_path, item["name"])))
         else:
             set_selection_mode(True)
             set_selected({item["name"]})
@@ -173,41 +177,56 @@ def FilesScreen(session_name: str) -> ft.Control:
         )
 
     # ── Toolbar ───────────────────────────────────────────────────────────────
-    if selection_mode and selected:
+    if selection_mode:
+        has_sel = bool(selected)
         toolbar = ft.Container(
             content=ft.Row(
                 controls=[
                     ft.Text(
-                        f"{len(selected)} selected",
+                        f"{len(selected)} selected"
+                        if has_sel
+                        else "Tap items to select",
                         size=tokens.FONT_SM,
                         weight=ft.FontWeight.W_600,
-                        color=ft.Colors.PRIMARY,
+                        color=ft.Colors.PRIMARY if has_sel else ft.Colors.ON_SURFACE_VARIANT,
                         expand=True,
                     ),
                     ft.IconButton(
                         ft.Icons.DOWNLOAD_ROUNDED,
                         tooltip="Download",
-                        on_click=lambda e: page.run_task(
-                            handle_download_async,
-                            page,
-                            services.colab,
-                            services.ad_service,
-                            current_path,
-                            selected,
-                            listing,
-                            session_name,
-                            state.auth_method,
-                            _clear_selection,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT
+                        if not has_sel
+                        else ft.Colors.PRIMARY,
+                        on_click=(
+                            None
+                            if not has_sel
+                            else lambda e: page.run_task(
+                                handle_download_async,
+                                page,
+                                services.colab,
+                                services.ad_service,
+                                current_path,
+                                selected,
+                                listing,
+                                session_name,
+                                state.auth_method,
+                                _clear_selection,
+                            )
                         ),
                     ),
                     ft.IconButton(
                         ft.Icons.DELETE_OUTLINE_ROUNDED,
-                        icon_color=ft.Colors.ERROR,
+                        icon_color=ft.Colors.ERROR
+                        if has_sel
+                        else ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Delete",
-                        on_click=lambda e: _open_delete_dialog(),
+                        on_click=(
+                            None if not has_sel else lambda e: _open_delete_dialog()
+                        ),
                     ),
                     ft.IconButton(
                         ft.Icons.CLOSE_ROUNDED,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Cancel selection",
                         on_click=lambda e: _clear_selection(),
                     ),
@@ -217,12 +236,28 @@ def FilesScreen(session_name: str) -> ft.Control:
             padding=ft.Padding(
                 tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
             ),
-            bgcolor=ft.Colors.SECONDARY_CONTAINER,
+            bgcolor=adaptive_glass_bg(),
+            border=ft.Border.all(1, adaptive_glass_border()),
+            border_radius=tokens.RADIUS_MD,
+            margin=ft.Margin(tokens.SPACE_XS, tokens.SPACE_XS, tokens.SPACE_XS, 0),
         )
     else:
+        up_target = parent_path(current_path)
         toolbar = ft.Container(
             content=ft.Row(
                 controls=[
+                    ft.IconButton(
+                        ft.Icons.ARROW_UPWARD_ROUNDED,
+                        tooltip="Go up",
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT
+                        if up_target is None
+                        else None,
+                        on_click=(
+                            None
+                            if up_target is None
+                            else lambda e: _navigate(up_target)
+                        ),
+                    ),
                     ft.Container(
                         content=build_breadcrumbs(current_path, _navigate),
                         expand=True,
@@ -348,16 +383,13 @@ def FilesScreen(session_name: str) -> ft.Control:
         )
 
     # ── Upload FAB (hidden during multi-selection) ────────────────────────────
+    # Extended FAB: string content + icon renders the labeled pill. A Row in
+    # `content` collapses to a bare circle on Flet 0.86.x.
     upload_fab = ft.FloatingActionButton(
-        content=ft.Row(
-            controls=[
-                ft.Icon(ft.Icons.UPLOAD_FILE_ROUNDED, size=tokens.ICON_SM),
-                ft.Text("Upload", size=tokens.FONT_SM, weight=ft.FontWeight.W_500),
-            ],
-            spacing=tokens.SPACE_XS,
-            alignment=ft.MainAxisAlignment.CENTER,
-        ),
+        content="Upload",
+        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
         bgcolor=ft.Colors.PRIMARY,
+        tooltip="Upload files",
         on_click=lambda e: page.run_task(
             handle_upload_async,
             page,

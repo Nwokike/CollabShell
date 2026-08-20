@@ -23,19 +23,21 @@ def show_notification(
     if not page:
         return
 
-    bgcolor = None
     if is_error:
         bgcolor = AppColors.ERROR
     elif is_warning:
         bgcolor = AppColors.WARNING
     elif is_success:
         bgcolor = AppColors.SUCCESS
+    else:
+        # Never leave bgcolor None: the SnackBar then falls back to the
+        # theme's inverseSurface while ON_SURFACE text stays same-tone,
+        # producing black-on-black (light mode) / white-on-white (dark).
+        bgcolor = AppColors.DARK_BG
 
     try:
         snack = ft.SnackBar(
-            content=ft.Text(
-                message, color=ft.Colors.WHITE if bgcolor else ft.Colors.ON_SURFACE
-            ),
+            content=ft.Text(message, color=ft.Colors.WHITE),
             bgcolor=bgcolor,
             show_close_icon=True,
             behavior=ft.SnackBarBehavior.FLOATING,

@@ -74,6 +74,8 @@ def setting_tile(
 
 
 def glass_card(content: ft.Control, **kwargs) -> ft.Container:
+    from core.theme import adaptive_glass_bg, adaptive_glass_border
+
     return ft.Container(
         content=content,
         padding=ft.Padding(
@@ -83,10 +85,8 @@ def glass_card(content: ft.Control, **kwargs) -> ft.Container:
             bottom=tokens.SPACE_MD,
         ),
         border_radius=tokens.RADIUS_LG,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(
-            width=1, color=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)
-        ),
+        bgcolor=adaptive_glass_bg(),
+        border=ft.Border.all(width=1, color=adaptive_glass_border()),
         **kwargs,
     )
 
@@ -109,6 +109,8 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     """Build a glass-container-wrapped banner ad (mobile only)."""
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
         return ft.Container(width=0, height=0)
+
+    from core.theme import adaptive_glass_bg, adaptive_glass_border
 
     try:
         import flet_ads as fta
@@ -140,8 +142,8 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
         alignment=ft.Alignment.CENTER,
         padding=tokens.SPACE_SM,
         border_radius=tokens.RADIUS_LG,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+        bgcolor=adaptive_glass_bg(),
+        border=ft.Border.all(1, color=adaptive_glass_border()),
         margin=ft.Margin(
             tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
         ),

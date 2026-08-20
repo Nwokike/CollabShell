@@ -92,9 +92,7 @@ def HistoryScreen() -> ft.Control:
                 if success:
                     _snack(page, f"✅ Exported to {path}")
                 else:
-                    _snack(
-                        page, "❌ Export failed: No events to export", is_error=True
-                    )
+                    _snack(page, "❌ Export failed: No events to export", is_error=True)
             except Exception as ex:
                 _snack(page, f"❌ Export failed: {ex}", is_error=True)
 

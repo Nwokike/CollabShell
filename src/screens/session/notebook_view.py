@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -19,9 +20,10 @@ from components.notebook_toolbar import build_notebook_toolbar
 from core import constants, tokens
 from core.stdin_hook import show_stdin_dialog
 from core.styles import build_banner_ad
-from screens.session.layout import build_action_row, build_keep_alive_card
-from screens.session.vm_ops import on_auth_gcp, on_mount_drive
+from screens.session.layout import build_keep_alive_card
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
+
+logger = logging.getLogger("colab")
 
 _MAX_OUTPUT_ENTRIES = 5000
 
@@ -210,10 +212,12 @@ def NotebookView(
 
         try:
             files = await page.file_picker.pick_files(
-                allowed_extensions=["ipynb"], allow_multiple=False
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["ipynb"],
+                allow_multiple=False,
             )
-            if files and files.files:
-                fpath = files.files[0].path
+            if files:
+                fpath = files[0].path
                 if fpath:
                     raw = Path(fpath).read_text(encoding="utf-8")
                     ipynb_data = json.loads(raw)
@@ -221,9 +225,10 @@ def NotebookView(
                     _publish([CellData.from_dict(c) for c in imported])
                     _save()
                     controller.show_snack(
-                        f"✅ Imported {len(imported)} cells from {files.files[0].name}"
+                        f"✅ Imported {len(imported)} cells from {files[0].name}"
                     )
         except Exception as ex:
+            logger.exception("Import .ipynb failed")
             controller.show_snack(f"❌ Import failed: {ex}", is_error=True)
 
     # Expose notebook actions to the SessionScreen FAB overflow menu.
@@ -257,113 +262,9 @@ def NotebookView(
         page, state, _on_toggle_keep_alive, _on_toggle_keep_alive_dc
     )
 
-    # ── Restart / Stop confirm dialogs ────────────────────────────────────────
-    async def _do_restart():
-        controller.show_snack("Restarting kernel...")
-        try:
-            await services.colab.restart_kernel(
-                session_name, auth_method=state.auth_method
-            )
-            controller.show_snack("✅ Kernel restarted")
-        except Exception as ex:
-            controller.show_snack(f"❌ {ex}", is_error=True)
-
-    def _on_restart(e=None):
-        def _close(ev=None):
-            page.pop_dialog()
-
-        def _confirm(ev):
-            page.pop_dialog()
-            page.run_task(_do_restart)
-
-        page.show_dialog(
-            ft.AlertDialog(
-                title=ft.Text("Restart Kernel?"),
-                content=ft.Text(
-                    "This will restart the Python kernel. All variables will be lost."
-                ),
-                actions=[
-                    ft.TextButton("Cancel", on_click=_close),
-                    ft.FilledButton("Restart", on_click=_confirm),
-                ],
-            )
-        )
-
-    async def _do_stop():
-        controller.show_snack("Stopping session...")
-        try:
-            await services.colab.stop_session(
-                session_name, auth_method=state.auth_method
-            )
-            controller.show_snack("✅ Session terminated")
-            try:
-                state.active_sessions = (
-                    await services.colab.list_sessions(auth_method=state.auth_method)
-                    or []
-                )
-            except Exception:
-                pass
-            controller.close_session()
-        except Exception as ex:
-            controller.show_snack(f"❌ {ex}", is_error=True)
-
-    def _on_stop(e=None):
-        def _close(ev=None):
-            page.pop_dialog()
-
-        def _confirm(ev):
-            page.pop_dialog()
-            page.run_task(_do_stop)
-
-        page.show_dialog(
-            ft.AlertDialog(
-                title=ft.Text("Stop Session?"),
-                content=ft.Text(
-                    "This will terminate the session and release all resources."
-                ),
-                actions=[
-                    ft.TextButton("Cancel", on_click=_close),
-                    ft.FilledButton("Stop", on_click=_confirm),
-                ],
-            )
-        )
-
-    action_row = build_action_row(
-        page,
-        on_files=lambda e: controller.open_session(session_name, "files"),
-        on_mount_drive=lambda e: page.run_task(
-            on_mount_drive,
-            page,
-            services.colab,
-            state,
-            session_name,
-            controller.show_snack,
-        ),
-        on_auth_gcp=lambda e: page.run_task(
-            on_auth_gcp,
-            page,
-            services.colab,
-            state,
-            session_name,
-            controller.show_snack,
-        ),
-        on_open_browser=lambda e: page.run_task(
-            ft.UrlLauncher().launch_url,
-            f"https://colab.research.google.com/drive/{session_name}",
-        ),
-        on_terminal=lambda e: on_switch_terminal(),
-        on_view_logs=lambda e: controller.open_history(session_name),
-        on_restart=_on_restart,
-        on_stop=_on_stop,
-    )
-
     toolbar = build_notebook_toolbar(
         on_add_code=lambda e: _add_cell("code"),
         on_add_markdown=lambda e: _add_cell("markdown"),
-        on_clear_all=_clear_all_outputs,
-        on_export_ipynb=lambda e: page.run_task(_export_ipynb, e),
-        on_import_ipynb=lambda e: page.run_task(_import_ipynb, e),
-        on_open_terminal=on_switch_terminal,
     )
 
     # ── Render cells ──────────────────────────────────────────────────────────
@@ -389,7 +290,6 @@ def NotebookView(
     notebook_body = ft.Column(
         controls=[
             keep_alive_card,
-            action_row,
             ft.Container(
                 content=ft.Column(controls=cell_controls, spacing=0),
                 padding=ft.Padding(

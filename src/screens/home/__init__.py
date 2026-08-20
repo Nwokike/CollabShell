@@ -9,7 +9,7 @@ from components.new_session_sheet import show_new_session_sheet
 from components.session_card import build_session_card
 from core import constants, tokens
 from core.styles import build_banner_ad, glass_card
-from core.theme import AppColors
+from core.theme import AppColors, adaptive_glass_bg
 from screens.home.cards import action_button, feature_card, step_row
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
@@ -158,7 +158,7 @@ def HomeScreen() -> ft.Control:
             tokens.SPACE_SM,
         ),
         border_radius=tokens.RADIUS_PILL,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+        bgcolor=adaptive_glass_bg(),
         margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
     )
 

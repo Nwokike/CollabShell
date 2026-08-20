@@ -73,12 +73,33 @@ async def handle_upload_async(
             bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
         )
         upload_dialog = ft.AlertDialog(
-            title=ft.Text(f"Uploading {picked.name}", size=tokens.FONT_SM),
+            title=ft.Row(
+                controls=[
+                    ft.Icon(
+                        ft.Icons.UPLOAD_FILE_ROUNDED,
+                        color=ft.Colors.PRIMARY,
+                        size=tokens.ICON_MD,
+                    ),
+                    ft.Text(
+                        "Uploading file",
+                        size=tokens.FONT_MD,
+                        weight=ft.FontWeight.W_600,
+                    ),
+                ],
+                spacing=tokens.SPACE_SM,
+            ),
             content=ft.Column(
                 [
+                    ft.Text(
+                        picked.name,
+                        size=tokens.FONT_SM,
+                        weight=ft.FontWeight.W_500,
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
                     prog_bar,
                     ft.Text(
-                        f"Uploading... {size_str}",
+                        f"Uploading to {current_path} · {size_str}",
                         size=tokens.FONT_XS,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),

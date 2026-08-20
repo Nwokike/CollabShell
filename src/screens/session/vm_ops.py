@@ -105,6 +105,7 @@ async def on_mount_drive(
 
             page.run_task(_auto_close)
     except Exception as ex:
+        logger.exception("Mount Drive failed")
         if dialog.open:
             dialog.title = ft.Text("Failed")
             dialog.content = ft.Row(
@@ -208,6 +209,7 @@ async def on_auth_gcp(
 
             page.run_task(_auto_close)
     except Exception as ex:
+        logger.exception("Auth GCP failed")
         if dialog.open:
             dialog.title = ft.Text("Failed")
             dialog.content = ft.Row(

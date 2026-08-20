@@ -1,43 +1,18 @@
 import flet as ft
 
 from core import tokens
-from core.theme import AppColors
 
 
 def build_notebook_toolbar(
     on_add_code,
     on_add_markdown,
-    on_clear_all,
+    on_clear_all=None,
     on_export_ipynb=None,
     on_import_ipynb=None,
     on_open_terminal=None,
 ) -> ft.Container:
-    trailing = [
-        ft.IconButton(
-            ft.Icons.UPLOAD_FILE_ROUNDED,
-            tooltip="Import IPYNB",
-            on_click=on_import_ipynb,
-            icon_size=tokens.ICON_SM,
-        )
-        if on_import_ipynb
-        else ft.Container(),
-        ft.IconButton(
-            ft.Icons.DOWNLOAD_ROUNDED,
-            tooltip="Export IPYNB",
-            on_click=on_export_ipynb,
-            icon_size=tokens.ICON_SM,
-        )
-        if on_export_ipynb
-        else ft.Container(),
-        ft.IconButton(
-            ft.Icons.DELETE_SWEEP_ROUNDED,
-            tooltip="Clear All Outputs",
-            on_click=on_clear_all,
-            icon_color=AppColors.ERROR,
-            icon_size=tokens.ICON_SM,
-        ),
-    ]
-
+    """Bottom toolbar for adding cells. Import/export/clear-all moved to the
+    session FAB overflow menu to avoid duplicate controls."""
     return ft.Container(
         content=ft.Row(
             controls=[
@@ -60,7 +35,6 @@ def build_notebook_toolbar(
                     ),
                 ),
                 ft.Container(expand=True),
-                *trailing,
             ],
             alignment=ft.MainAxisAlignment.START,
             spacing=tokens.SPACE_SM,

@@ -90,6 +90,13 @@ def NotebookCell(
         if on_source_change:
             on_source_change(value)
 
+    def _finish_markdown_edit(value: str | None = None):
+        """Commit the latest text and render — used by Done and on_blur so
+        tapping into another cell auto-renders without pressing Done."""
+        if value is not None:
+            _commit_source(value)
+        cell.is_editing = False
+
     async def _copy_output_task(e=None):
         await copy_output(page, list(cell.outputs))
 
@@ -118,7 +125,9 @@ def NotebookCell(
                         border_color=ft.Colors.TRANSPARENT,
                         bgcolor=ft.Colors.TRANSPARENT,
                         on_change=lambda e: _commit_source(e.control.value or ""),
-                        on_blur=lambda e: setattr(cell, "is_editing", False),
+                        on_blur=lambda e: _finish_markdown_edit(
+                            e.control.value or ""
+                        ),
                         hint_text="Type markdown here...",
                         content_padding=tokens.SPACE_SM,
                         expand=True,
@@ -147,9 +156,7 @@ def NotebookCell(
                                 icon_size=tokens.ICON_SM,
                                 icon_color=AppColors.SUCCESS,
                                 tooltip="Done / Render Markdown",
-                                on_click=lambda e: setattr(
-                                    cell, "is_editing", False
-                                ),
+                                on_click=lambda e: _finish_markdown_edit(),
                             ),
                             _make_actions_row(),
                         ],
@@ -215,31 +222,41 @@ def NotebookCell(
     # each streaming chunk (O(new) instead of re-parsing the whole stream).
     def _get_output_controls() -> list[ft.Control]:
         cache = parse_cache.current
-        if cache["rev"] == cell.outputs_rev:
-            return cache["controls"]
-        outs = list(cell.outputs)
-        if len(outs) <= cache["count"] and cache["rev"] != -1:
-            # Cleared, truncated, or capped rotation — full re-parse
-            cache["controls"] = parse_outputs_to_controls(outs)[:1000]
-            cache["count"] = len(outs)
-        else:
-            new_entries = outs[cache["count"] :]
-            room = 1000 - len(cache["controls"])
-            if new_entries and room > 0:
-                cache["controls"].extend(
-                    parse_outputs_to_controls(new_entries)[:room]
-                )
-            cache["count"] = len(outs)
-        cache["rev"] = cell.outputs_rev
-        return cache["controls"]
+        if cache["rev"] != cell.outputs_rev:
+            outs = list(cell.outputs)
+            if len(outs) <= cache["count"] and cache["rev"] != -1:
+                # Cleared, truncated, or capped rotation — full re-parse
+                cache["controls"] = parse_outputs_to_controls(outs)[:1000]
+                cache["count"] = len(outs)
+            else:
+                new_entries = outs[cache["count"] :]
+                room = 1000 - len(cache["controls"])
+                if new_entries and room > 0:
+                    cache["controls"].extend(
+                        parse_outputs_to_controls(new_entries)[:room]
+                    )
+                cache["count"] = len(outs)
+            cache["rev"] = cell.outputs_rev
+        # Always hand the reconciler a FRESH list. The previously rendered
+        # (frozen) ListView still references the cached list; mutating it in
+        # place would make old == new in the diff and new output would never
+        # paint (the "invisible until remount" bug).
+        return list(cache["controls"])
 
     output_controls = _get_output_controls()
 
-    # Dynamic height for compact output boxes (legacy behavior: 36..220px)
+    # Dynamic height for compact output boxes (legacy behavior: 36..220px).
+    # The ANSI parser emits ft.Text(spans=...) with value=None, so count
+    # newlines across the spans' text instead of ctrl.value.
     line_count = 0
     for ctrl in output_controls:
-        txt = getattr(ctrl, "value", "") or ""
-        line_count += max(txt.count("\n") + 1, 1)
+        text = getattr(ctrl, "value", "") or ""
+        if not text:
+            text = "".join(
+                getattr(span, "text", "") or ""
+                for span in (getattr(ctrl, "spans", None) or [])
+            )
+        line_count += max(text.count("\n") + 1, 1)
     calc_height = min(max(line_count * 20 + 16, 36), 220) if output_controls else None
 
     output_actions = ft.Row(

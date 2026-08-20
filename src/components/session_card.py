@@ -4,6 +4,7 @@ import flet as ft
 
 from core import tokens
 from core.styles import hardware_badge, status_dot
+from core.theme import adaptive_glass_bg, adaptive_glass_border
 
 
 def build_session_card(
@@ -74,8 +75,8 @@ def build_session_card(
             tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
         ),
         border_radius=tokens.RADIUS_MD,
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+        bgcolor=adaptive_glass_bg(),
+        border=ft.Border.all(1, adaptive_glass_border()),
         margin=ft.Margin(tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, 0),
         on_click=on_click,
         ink=True,

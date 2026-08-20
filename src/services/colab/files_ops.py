@@ -158,14 +158,10 @@ async def download_folder_impl(
     """Download a remote directory as a zip file to a local path."""
     import posixpath
 
-    norm_dir = posixpath.normpath(remote_path)
-    if norm_dir.startswith("/content/") or norm_dir == "/content":
-        vm_target_dir = norm_dir
-    else:
-        clean_rel = norm_dir.lstrip("/")
-        vm_target_dir = (
-            posixpath.join("/content", clean_rel) if clean_rel else "/content"
-        )
+    # Trust the absolute path the UI built (posixpath.join of current_path +
+    # name). Colab VM paths are NOT rooted at /content — root-level dirs like
+    # /var, /root, /datalab are siblings of /content, so never re-prefix them.
+    vm_target_dir = posixpath.normpath(remote_path)
 
     base_name = posixpath.basename(vm_target_dir)
     if not base_name:

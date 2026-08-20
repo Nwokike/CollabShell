@@ -7,7 +7,7 @@ import asyncio
 import flet as ft
 
 from core import constants, tokens
-from core.styles import glass_card, hardware_badge, status_dot
+from core.styles import glass_card
 from core.theme import AppColors
 
 
@@ -80,6 +80,66 @@ def build_action_row(
             spacing=tokens.SPACE_SM,
         ),
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
+    )
+
+
+def build_tab_switcher(active_tab: int, on_switch) -> ft.Container:
+    """Compact Notebook/Terminal pill switcher for the session header.
+
+    Modeled on SpanInsight's Insight/Expert mode bar: two segments in a
+    bordered container; the active segment gets PRIMARY bg + white text.
+    """
+
+    def _segment(idx: int, label: str, icon) -> ft.Container:
+        is_active = active_tab == idx
+        fg = ft.Colors.WHITE if is_active else ft.Colors.ON_SURFACE_VARIANT
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(icon, size=tokens.ICON_MICRO, color=fg),
+                    ft.Text(
+                        label,
+                        size=tokens.FONT_XS,
+                        weight=ft.FontWeight.BOLD
+                        if is_active
+                        else ft.FontWeight.NORMAL,
+                        color=fg,
+                    ),
+                ],
+                spacing=tokens.SPACE_XXS,
+                alignment=ft.MainAxisAlignment.CENTER,
+                tight=True,
+            ),
+            bgcolor=ft.Colors.PRIMARY if is_active else ft.Colors.TRANSPARENT,
+            border_radius=tokens.RADIUS_SM,
+            padding=ft.Padding(
+                tokens.SPACE_SM, tokens.SPACE_XXS, tokens.SPACE_SM, tokens.SPACE_XXS
+            ),
+            ink=True,
+            on_click=lambda e: on_switch(idx),
+        )
+
+    return ft.Container(
+        padding=ft.Padding(
+            tokens.SPACE_XXS,
+            tokens.SPACE_XXS,
+            tokens.SPACE_XXS,
+            tokens.SPACE_XXS,
+        ),
+        border_radius=tokens.RADIUS_SM,
+        bgcolor=ft.Colors.with_opacity(tokens.OPACITY_ACCENT, ft.Colors.ON_SURFACE),
+        border=ft.Border.all(
+            tokens.DIVIDER_THICKNESS,
+            ft.Colors.with_opacity(tokens.OPACITY_CARD, ft.Colors.ON_SURFACE),
+        ),
+        content=ft.Row(
+            controls=[
+                _segment(0, "Notebook", ft.Icons.EDIT_NOTE_ROUNDED),
+                _segment(1, "Terminal", ft.Icons.TERMINAL_ROUNDED),
+            ],
+            spacing=tokens.SPACE_XXS,
+            tight=True,
+        ),
     )
 
 
@@ -159,54 +219,5 @@ def build_keep_alive_card(
         ),
         margin=ft.Margin(
             tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
-        ),
-    )
-
-
-def build_status_header(page: ft.Page, session_name: str, state, colab_service):
-    session = next(
-        (
-            s
-            for s in getattr(state, "active_sessions", [])
-            if s.get("name") == session_name
-        ),
-        None,
-    )
-    if not session:
-        return ft.Container()
-
-    accel = session.get("accelerator", "NONE")
-    variant = session.get("variant", "DEFAULT")
-    is_running = session.get("running") is not None
-
-    return glass_card(
-        ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        status_dot(is_running),
-                        ft.Text(
-                            session_name,
-                            size=tokens.FONT_XL,
-                            weight=ft.FontWeight.W_700,
-                            expand=True,
-                        ),
-                        hardware_badge(accel, variant),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=tokens.SPACE_MD,
-                ),
-                ft.Text(
-                    session.get("status", "IDLE"),
-                    size=tokens.FONT_SM,
-                    color=AppColors.SUCCESS
-                    if is_running
-                    else ft.Colors.ON_SURFACE_VARIANT,
-                ),
-            ],
-            spacing=tokens.SPACE_SM,
-        ),
-        margin=ft.Margin(
-            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
         ),
     )

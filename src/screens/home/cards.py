@@ -5,6 +5,7 @@ from __future__ import annotations
 import flet as ft
 
 from core import tokens
+from core.theme import adaptive_glass_bg, adaptive_glass_border
 
 
 def action_button(icon, label: str, on_click, color=None) -> ft.Control:
@@ -78,11 +79,8 @@ def feature_card(icon: str, title: str, desc: str, color) -> ft.Container:
         ),
         padding=tokens.SPACE_LG,
         border_radius=tokens.RADIUS_MD,
-        bgcolor=ft.Colors.with_opacity(tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE),
-        border=ft.Border.all(
-            tokens.DIVIDER_THICKNESS,
-            ft.Colors.with_opacity(tokens.OPACITY_CONTAINER, ft.Colors.ON_SURFACE),
-        ),
+        bgcolor=adaptive_glass_bg(),
+        border=ft.Border.all(tokens.DIVIDER_THICKNESS, adaptive_glass_border()),
     )
 
 

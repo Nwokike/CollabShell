@@ -20,7 +20,11 @@ from screens.files.actions import (
     handle_download_async,
     handle_upload_async,
 )
-from screens.files.components import build_breadcrumbs, build_empty_dir_view
+from screens.files.components import (
+    build_breadcrumbs,
+    build_empty_dir_view,
+    parent_path,
+)
 
 logger = logging.getLogger("ManageFilesModal")
 
@@ -101,23 +105,47 @@ def show_manage_files_modal(
 
     def _render():
         nonlocal selection_mode
-        # Update breadcrumbs
-        breadcrumb_container.content = build_breadcrumbs(
-            current_path, on_navigate=_on_navigate
+        # Update breadcrumbs (with go-up affordance)
+        up_target = parent_path(current_path)
+        breadcrumb_container.content = ft.Row(
+            controls=[
+                ft.IconButton(
+                    ft.Icons.ARROW_UPWARD_ROUNDED,
+                    tooltip="Go up",
+                    icon_size=tokens.ICON_SM,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT
+                    if up_target is None
+                    else None,
+                    on_click=(
+                        None
+                        if up_target is None
+                        else lambda _: _on_navigate(up_target)
+                    ),
+                ),
+                ft.Container(
+                    content=build_breadcrumbs(current_path, on_navigate=_on_navigate),
+                    expand=True,
+                ),
+            ],
+            spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
         # Update action buttons
         n_sel = len(selected_files)
         actions: list[ft.Control] = []
 
-        if selection_mode and n_sel > 0:
+        if selection_mode:
+            has_sel = n_sel > 0
             actions.append(
                 ft.Container(
                     content=ft.Text(
-                        f"{n_sel} sel",
+                        f"{n_sel} sel" if has_sel else "Tap to select",
                         size=tokens.FONT_XS,
                         weight=ft.FontWeight.W_600,
-                        color=ft.Colors.PRIMARY,
+                        color=ft.Colors.PRIMARY
+                        if has_sel
+                        else ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     padding=ft.Padding(
                         tokens.SPACE_XS,
@@ -132,24 +160,33 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.DOWNLOAD_ROUNDED,
                         tooltip="Download",
-                        on_click=lambda _: page.run_task(
-                            handle_download_async,
-                            page,
-                            colab,
-                            ad_service,
-                            current_path,
-                            selected_files,
-                            listing,
-                            session_name,
-                            auth_method,
-                            _clear_selection,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT
+                        if not has_sel
+                        else None,
+                        on_click=(
+                            None
+                            if not has_sel
+                            else lambda _: page.run_task(
+                                handle_download_async,
+                                page,
+                                colab,
+                                ad_service,
+                                current_path,
+                                selected_files,
+                                listing,
+                                session_name,
+                                auth_method,
+                                _clear_selection,
+                            )
                         ),
                     ),
                     ft.IconButton(
                         ft.Icons.DELETE_ROUNDED,
                         tooltip="Delete",
-                        icon_color=ft.Colors.ERROR,
-                        on_click=lambda _: _handle_delete(),
+                        icon_color=ft.Colors.ERROR
+                        if has_sel
+                        else ft.Colors.ON_SURFACE_VARIANT,
+                        on_click=None if not has_sel else lambda _: _handle_delete(),
                     ),
                     ft.IconButton(
                         ft.Icons.CLOSE_ROUNDED,
@@ -161,6 +198,11 @@ def show_manage_files_modal(
         else:
             actions.extend(
                 [
+                    ft.IconButton(
+                        ft.Icons.CHECKLIST_ROUNDED,
+                        tooltip="Select items",
+                        on_click=lambda _: _enter_selection_mode(),
+                    ),
                     ft.IconButton(
                         ft.Icons.UPLOAD_FILE_ROUNDED,
                         tooltip="Upload files",
@@ -265,9 +307,16 @@ def show_manage_files_modal(
         selection_mode = False
         _render()
 
+    def _enter_selection_mode():
+        nonlocal selection_mode
+        selection_mode = True
+        _render()
+
     def _on_item_click(item: dict):
         nonlocal current_path, selection_mode
+        is_dir = item.get("type") == "directory" or item.get("is_dir", False)
         if selection_mode:
+            # Folders are selectable too (downloaded as zip).
             name = item["name"]
             if name in selected_files:
                 selected_files.remove(name)
@@ -276,17 +325,14 @@ def show_manage_files_modal(
             else:
                 selected_files.add(name)
             _render()
+        elif is_dir:
+            new_path = posixpath.normpath(posixpath.join(current_path, item["name"]))
+            page.run_task(_fetch_listing, new_path)
         else:
-            if item.get("type") == "directory":
-                new_path = posixpath.normpath(
-                    posixpath.join(current_path, item["name"])
-                )
-                page.run_task(_fetch_listing, new_path)
-            else:
-                selected_files.clear()
-                selected_files.add(item["name"])
-                selection_mode = True
-                _render()
+            selected_files.clear()
+            selected_files.add(item["name"])
+            selection_mode = True
+            _render()
 
     def _handle_delete():
         if not selected_files:

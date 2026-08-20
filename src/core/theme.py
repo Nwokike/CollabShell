@@ -12,7 +12,7 @@ class AppColors:
     LIGHT_BG = "#FFFFFF"
     LIGHT_SURFACE = "#F3F4F6"
     LIGHT_TEXT = "#1E293B"
-    LIGHT_TEXT_DIM = "#64748B"
+    LIGHT_TEXT_DIM = "#475569"
     LIGHT_HIGHLIGHT = "#D87607"  # Brand orange from icon
     LIGHT_PRIMARY_VARIANT = "#BA6200"  # Darker orange
     LIGHT_PRIMARY = "#D87607"  # Brand orange from icon
@@ -50,6 +50,81 @@ class AppColors:
     TERMINAL_DOT_RED = "#FF5F57"
     TERMINAL_DOT_YELLOW = "#FEBC2E"
     TERMINAL_DOT_GREEN = "#28C840"
+
+    # ─── Adaptive glass (elevation) surfaces ──────────────────────────────────
+    # Explicit per-mode values so cards never rely on M3 tokens the custom
+    # Colab ColorScheme doesn't set (surface_container_low would fall back to
+    # the Material default and wash out). These replace the old
+    # with_opacity(0.05, ON_SURFACE) pattern that read as near-invisible in
+    # light mode.
+    LIGHT_GLASS_BG = "#F1F5F9"      # soft slate-100 card on white
+    LIGHT_GLASS_BORDER = "#E2E8F0"  # slate-200 hairline
+    DARK_GLASS_BG = "#26263A"       # raised card on #1E1E2E
+    DARK_GLASS_BORDER = "#2D2D3F"   # dark hairline
+
+
+def _resolve_page(page: "ft.Page | None") -> "ft.Page | None":
+    """Return the given page, else the running app's page (None if unavailable)."""
+    if page is not None:
+        return page
+    try:
+        return ft.context.page
+    except RuntimeError:
+        return None
+
+
+def is_light_theme(page: "ft.Page | None" = None) -> bool:
+    """Resolve the *effective* light/dark mode, handling SYSTEM via platform brightness.
+
+    ``page.theme_mode`` only holds the *requested* mode — in ``SYSTEM`` mode it
+    stays ``SYSTEM`` and the client resolves light/dark from the host OS. We
+    mirror that resolution with the read-only ``page.platform_brightness`` so
+    adaptive helpers work in all three modes. Pass ``ft.context.page`` (or leave
+    it unset to auto-resolve); defaults to light when the brightness is unknown.
+
+    Reading the observable ``state.theme_mode`` / ``state.theme_revision`` here
+    means any component whose render calls this will re-render when the theme
+    mode toggles or the platform brightness flips.
+    """
+    # Read observables so callers subscribe (kept separate from the page read).
+    from src.core.state import state as _state
+
+    requested = _state.theme_mode
+    revision = _state.theme_revision  # noqa: F841  (subscribe for re-render)
+
+    p = _resolve_page(page)
+    if p is None:
+        return True
+    tm = getattr(p, "theme_mode", None) or requested
+    if tm == ft.ThemeMode.LIGHT:
+        return True
+    if tm == ft.ThemeMode.DARK:
+        return False
+    # SYSTEM (or unset): follow the host platform brightness.
+    brightness = getattr(p, "platform_brightness", None)
+    if brightness == ft.Brightness.DARK:
+        return False
+    if brightness == ft.Brightness.LIGHT:
+        return True
+    return True  # brightness not yet reported — Colab's default surface is light
+
+
+def adaptive_glass_bg(page: "ft.Page | None" = None):
+    """Return the card background color for the active theme mode."""
+    return (
+        AppColors.LIGHT_GLASS_BG
+        if is_light_theme(page)
+        else AppColors.DARK_GLASS_BG
+    )
+
+
+def adaptive_glass_border(page: "ft.Page | None" = None):
+    """Return the card hairline border color for the active theme mode."""
+    return (
+        AppColors.LIGHT_GLASS_BORDER
+        if is_light_theme(page)
+        else AppColors.DARK_GLASS_BORDER
+    )
 
 
 class AppTheme:
