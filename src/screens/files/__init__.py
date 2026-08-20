@@ -245,24 +245,32 @@ def FilesScreen(session_name: str) -> ft.Control:
         )
     else:
         up_target = parent_path(current_path)
+        # Two-row toolbar: breadcrumbs get the full width on row 1; the action
+        # icons move to row 2 so they never squeeze the path on narrow screens.
         toolbar = ft.Container(
-            content=ft.Row(
+            content=ft.Column(
                 controls=[
-                    ft.IconButton(
-                        ft.Icons.ARROW_UPWARD_ROUNDED,
-                        tooltip="Go up",
-                        icon_color=ft.Colors.ON_SURFACE_VARIANT
-                        if up_target is None
-                        else None,
-                        on_click=(
-                            None
-                            if up_target is None
-                            else lambda e: _navigate(up_target)
-                        ),
-                    ),
-                    ft.Container(
-                        content=build_breadcrumbs(current_path, _navigate),
-                        expand=True,
+                    ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                ft.Icons.ARROW_UPWARD_ROUNDED,
+                                tooltip="Go up",
+                                icon_color=ft.Colors.ON_SURFACE_VARIANT
+                                if up_target is None
+                                else None,
+                                on_click=(
+                                    None
+                                    if up_target is None
+                                    else lambda e: _navigate(up_target)
+                                ),
+                            ),
+                            ft.Container(
+                                content=build_breadcrumbs(current_path, _navigate),
+                                expand=True,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=0,
                     ),
                     ft.Row(
                         controls=[
@@ -302,10 +310,10 @@ def FilesScreen(session_name: str) -> ft.Control:
                             ),
                         ],
                         spacing=0,
+                        alignment=ft.MainAxisAlignment.END,
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=0,
             ),
             padding=ft.Padding(
                 tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS
@@ -384,27 +392,6 @@ def FilesScreen(session_name: str) -> ft.Control:
             ),
         )
 
-    # ── Upload FAB (hidden during multi-selection) ────────────────────────────
-    # Extended FAB: string content + icon renders the labeled pill. A Row in
-    # `content` collapses to a bare circle on Flet 0.86.x.
-    upload_fab = ft.FloatingActionButton(
-        content="Upload",
-        icon=ft.Icons.UPLOAD_FILE_ROUNDED,
-        bgcolor=ft.Colors.PRIMARY,
-        tooltip="Upload files",
-        on_click=lambda e: page.run_task(
-            handle_upload_async,
-            page,
-            services.colab,
-            current_path,
-            session_name,
-            state.auth_method,
-            _fetch,
-            state,
-        ),
-        visible=not selection_mode,
-    )
-
     content_col = ft.Column(
         controls=[
             toolbar,
@@ -422,17 +409,7 @@ def FilesScreen(session_name: str) -> ft.Control:
         expand=True,
     )
 
-    return ft.Stack(
-        controls=[
-            content_col,
-            ft.Container(
-                content=upload_fab,
-                right=tokens.SPACE_LG,
-                bottom=tokens.SPACE_XL,
-            ),
-        ],
-        expand=True,
-    )
+    return content_col
 
 
 __all__ = ["FilesScreen"]

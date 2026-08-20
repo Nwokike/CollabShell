@@ -29,10 +29,18 @@ def _active_theme_name(page: ft.Page | None = None) -> str:
 
 
 def _is_mounted(control) -> bool:
-    """Safely check if control is attached to the page without raising RuntimeError."""
+    """Safely check if control is attached to the page.
+
+    Flet 0.86's ``.page`` property walks the parent chain and RAISES
+    RuntimeError when the control isn't in the tree yet (there is no
+    ``_page`` attribute). The old pre-0.86 ``.page`` returned None instead.
+    """
     if control is None:
         return False
-    return getattr(control, "_page", None) is not None
+    try:
+        return control.page is not None
+    except RuntimeError:
+        return False
 
 
 async def _get_terminal_session(colab_service, session_name: str):
@@ -488,45 +496,21 @@ def TerminalPanel(
 
     # Inline zoom controls: tap repeatedly to zoom in/out without opening the
     # FAB (each tap is one step). Mirrors the flet_terminal example appbar.
+    # Search and theme-cycle buttons were removed — they were unresponsive on
+    # mobile; theming is handled by the FAB menu and follows the app mode.
     zoom_out_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_OUT,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom Out",
+        style=ft.ButtonStyle(padding=0),
         on_click=lambda e: _zoom_out(),
     )
     zoom_in_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_IN,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom In",
+        style=ft.ButtonStyle(padding=0),
         on_click=lambda e: _zoom_in(),
-    )
-
-    # Theme cycle button: each tap advances through the four presets and the
-    # icon reflects the active theme (like the app's light/dark mode switch).
-    _theme_cycle = ["Dracula", "JetBrains Dark", "Matrix Green", "Colab Light"]
-    _theme_icons = {
-        "Dracula": ft.Icons.DARK_MODE_ROUNDED,
-        "JetBrains Dark": ft.Icons.CODE_ROUNDED,
-        "Matrix Green": ft.Icons.GRID_ON_ROUNDED,
-        "Colab Light": ft.Icons.LIGHT_MODE_ROUNDED,
-    }
-
-    def _cycle_theme():
-        idx = _theme_cycle.index(ps.theme) if ps.theme in _theme_cycle else 0
-        _set_theme(_theme_cycle[(idx + 1) % len(_theme_cycle)])
-
-    theme_btn = ft.IconButton(
-        icon=_theme_icons.get(ps.theme, ft.Icons.PALETTE_ROUNDED),
-        icon_size=tokens.ICON_SM,
-        tooltip=f"Theme: {ps.theme} (tap to cycle)",
-        on_click=lambda e: _cycle_theme(),
-    )
-    search_btn = ft.IconButton(
-        icon=ft.Icons.SEARCH_ROUNDED,
-        icon_size=tokens.ICON_SM,
-        tooltip="Toggle Search Bar",
-        icon_color=ft.Colors.PRIMARY if ps.search else None,
-        on_click=lambda e: _toggle_search(),
     )
 
     switcher_box = ft.Container(
@@ -540,12 +524,10 @@ def TerminalPanel(
                     ),
                     expand=True,
                 ),
-                search_btn,
-                theme_btn,
                 zoom_out_btn,
                 zoom_in_btn,
             ],
-            spacing=tokens.SPACE_XS,
+            spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
