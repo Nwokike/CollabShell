@@ -13,8 +13,12 @@ import flet as ft
 from core import tokens
 
 
-def _item(content: str, icon, on_click, checked: bool | None = None) -> ft.PopupMenuItem:
-    return ft.PopupMenuItem(content=content, icon=icon, on_click=on_click, checked=checked)
+def _item(
+    content: str, icon, on_click, checked: bool | None = None
+) -> ft.PopupMenuItem:
+    return ft.PopupMenuItem(
+        content=content, icon=icon, on_click=on_click, checked=checked
+    )
 
 
 def _header(label: str) -> ft.PopupMenuItem:
@@ -47,7 +51,6 @@ def build_session_fab(
     # Terminal settings (FAB inherits the flet_terminal settings menu)
     term_settings: dict | None = None,
     on_term_theme=None,
-    on_term_cursor=None,
     on_term_zoom_in=None,
     on_term_zoom_out=None,
     on_term_zoom_reset=None,
@@ -72,13 +75,13 @@ def build_session_fab(
                 _header("Theme Presets"),
                 _item(
                     "Dracula",
-                    ft.Icons.PALETTE_ROUNDED,
+                    ft.Icons.DARK_MODE_ROUNDED,
                     lambda e: on_term_theme("Dracula") if on_term_theme else None,
                     ts.get("theme") == "Dracula",
                 ),
                 _item(
                     "JetBrains Dark",
-                    ft.Icons.PALETTE_ROUNDED,
+                    ft.Icons.CODE_ROUNDED,
                     lambda e: (
                         on_term_theme("JetBrains Dark") if on_term_theme else None
                     ),
@@ -86,37 +89,15 @@ def build_session_fab(
                 ),
                 _item(
                     "Matrix Green",
-                    ft.Icons.PALETTE_ROUNDED,
-                    lambda e: (
-                        on_term_theme("Matrix Green") if on_term_theme else None
-                    ),
+                    ft.Icons.GRID_ON_ROUNDED,
+                    lambda e: on_term_theme("Matrix Green") if on_term_theme else None,
                     ts.get("theme") == "Matrix Green",
                 ),
                 _item(
                     "Colab Light",
-                    ft.Icons.PALETTE_ROUNDED,
+                    ft.Icons.LIGHT_MODE_ROUNDED,
                     lambda e: on_term_theme("Colab Light") if on_term_theme else None,
                     ts.get("theme") == "Colab Light",
-                ),
-                ft.PopupMenuItem(),
-                _header("Cursor Style"),
-                _item(
-                    "Block",
-                    ft.Icons.TEXT_FIELDS_ROUNDED,
-                    lambda e: on_term_cursor("block") if on_term_cursor else None,
-                    ts.get("cursor") == "block",
-                ),
-                _item(
-                    "Underline",
-                    ft.Icons.TEXT_FIELDS_ROUNDED,
-                    lambda e: on_term_cursor("underline") if on_term_cursor else None,
-                    ts.get("cursor") == "underline",
-                ),
-                _item(
-                    "Bar",
-                    ft.Icons.TEXT_FIELDS_ROUNDED,
-                    lambda e: on_term_cursor("bar") if on_term_cursor else None,
-                    ts.get("cursor") == "bar",
                 ),
                 ft.PopupMenuItem(),
                 _header("Font Size / Zoom"),
@@ -171,9 +152,7 @@ def build_session_fab(
             ]
         )
 
-    menu_items.append(
-        _item("Manage Files", ft.Icons.FOLDER_ROUNDED, on_manage_files)
-    )
+    menu_items.append(_item("Manage Files", ft.Icons.FOLDER_ROUNDED, on_manage_files))
     menu_items.extend(
         [
             _item("Restart Kernel", ft.Icons.REFRESH_ROUNDED, on_restart),

@@ -188,7 +188,9 @@ def FilesScreen(session_name: str) -> ft.Control:
                         else "Tap items to select",
                         size=tokens.FONT_SM,
                         weight=ft.FontWeight.W_600,
-                        color=ft.Colors.PRIMARY if has_sel else ft.Colors.ON_SURFACE_VARIANT,
+                        color=ft.Colors.PRIMARY
+                        if has_sel
+                        else ft.Colors.ON_SURFACE_VARIANT,
                         expand=True,
                     ),
                     ft.IconButton(

@@ -38,9 +38,7 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
                     ft.Text(
                         label,
                         size=tokens.FONT_SM,
-                        weight=ft.FontWeight.W_600
-                        if is_sel
-                        else ft.FontWeight.NORMAL,
+                        weight=ft.FontWeight.W_600 if is_sel else ft.FontWeight.NORMAL,
                         color=ft.Colors.PRIMARY if is_sel else ft.Colors.ON_SURFACE,
                     ),
                 ],
@@ -61,9 +59,7 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
             ),
             bgcolor=ft.Colors.with_opacity(tokens.OPACITY_ACCENT, ft.Colors.PRIMARY)
             if is_sel
-            else ft.Colors.with_opacity(
-                tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE
-            ),
+            else ft.Colors.with_opacity(tokens.OPACITY_SUBTLE, ft.Colors.ON_SURFACE),
             animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
             on_click=lambda e, m=mode, l=label: _select(m, l),
             ink=True,
@@ -78,7 +74,9 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
                         _card(ft.ThemeMode.LIGHT, "Light", ft.Icons.LIGHT_MODE_ROUNDED),
                         _card(ft.ThemeMode.DARK, "Dark", ft.Icons.DARK_MODE_ROUNDED),
                         _card(
-                            ft.ThemeMode.SYSTEM, "System", ft.Icons.BRIGHTNESS_AUTO_ROUNDED
+                            ft.ThemeMode.SYSTEM,
+                            "System",
+                            ft.Icons.BRIGHTNESS_AUTO_ROUNDED,
                         ),
                     ],
                     spacing=tokens.SPACE_SM,

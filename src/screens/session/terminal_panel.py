@@ -90,7 +90,6 @@ class TerminalPanelState:
         # Active terminal settings (drive the FAB menu; session/session_sync
         # bumps terminal_settings_rev after a change so checkmarks refresh).
         self.theme = "JetBrains Dark"
-        self.cursor = "block"
         self.blink = True
         self.search = False
         self.zoom = 11.0
@@ -143,7 +142,6 @@ def TerminalPanel(
 
         entry = TerminalEntry(new_id, mt)
         # New terminals inherit the panel's current settings.
-        mt.set_cursor_style(ps.cursor)
         if not ps.blink:
             mt.toggle_cursor_blink()
         while mt.font_size < ps.zoom:
@@ -302,11 +300,6 @@ def TerminalPanel(
         _for_each_mt(lambda mt: mt.set_theme(name))
         _changed_settings()
 
-    def _set_cursor(style: str):
-        ps.cursor = style
-        _for_each_mt(lambda mt: mt.set_cursor_style(style))
-        _changed_settings()
-
     def _zoom_in():
         _for_each_mt(lambda mt: mt.zoom_in())
         entry = _active_entry()
@@ -336,9 +329,7 @@ def TerminalPanel(
     def _toggle_search():
         ps.search = not ps.search
         want = ps.search
-        _for_each_mt(
-            lambda mt: mt.toggle_search() if mt.show_search != want else None
-        )
+        _for_each_mt(lambda mt: mt.toggle_search() if mt.show_search != want else None)
         _changed_settings()
 
     def _clear_terminal():
@@ -376,7 +367,6 @@ def TerminalPanel(
                 ),
                 # Settings (consumed by the FAB menu, with live checkmarks)
                 "theme": _set_theme,
-                "cursor": _set_cursor,
                 "zoom_in": _zoom_in,
                 "zoom_out": _zoom_out,
                 "zoom_reset": _zoom_reset,
@@ -489,9 +479,67 @@ def TerminalPanel(
         )
     )
 
+    # Inline zoom controls: tap repeatedly to zoom in/out without opening the
+    # FAB (each tap is one step). Mirrors the flet_terminal example appbar.
+    zoom_out_btn = ft.IconButton(
+        icon=ft.Icons.ZOOM_OUT,
+        icon_size=tokens.ICON_SM,
+        tooltip="Zoom Out",
+        on_click=lambda e: _zoom_out(),
+    )
+    zoom_in_btn = ft.IconButton(
+        icon=ft.Icons.ZOOM_IN,
+        icon_size=tokens.ICON_SM,
+        tooltip="Zoom In",
+        on_click=lambda e: _zoom_in(),
+    )
+
+    # Theme cycle button: each tap advances through the four presets and the
+    # icon reflects the active theme (like the app's light/dark mode switch).
+    _theme_cycle = ["Dracula", "JetBrains Dark", "Matrix Green", "Colab Light"]
+    _theme_icons = {
+        "Dracula": ft.Icons.DARK_MODE_ROUNDED,
+        "JetBrains Dark": ft.Icons.CODE_ROUNDED,
+        "Matrix Green": ft.Icons.GRID_ON_ROUNDED,
+        "Colab Light": ft.Icons.LIGHT_MODE_ROUNDED,
+    }
+
+    def _cycle_theme():
+        idx = _theme_cycle.index(ps.theme) if ps.theme in _theme_cycle else 0
+        _set_theme(_theme_cycle[(idx + 1) % len(_theme_cycle)])
+
+    theme_btn = ft.IconButton(
+        icon=_theme_icons.get(ps.theme, ft.Icons.PALETTE_ROUNDED),
+        icon_size=tokens.ICON_SM,
+        tooltip=f"Theme: {ps.theme} (tap to cycle)",
+        on_click=lambda e: _cycle_theme(),
+    )
+    search_btn = ft.IconButton(
+        icon=ft.Icons.SEARCH_ROUNDED,
+        icon_size=tokens.ICON_SM,
+        tooltip="Toggle Search Bar",
+        icon_color=ft.Colors.PRIMARY if ps.search else None,
+        on_click=lambda e: _toggle_search(),
+    )
+
     switcher_box = ft.Container(
         content=ft.Row(
-            controls=tab_buttons, spacing=tokens.SPACE_XS, scroll=ft.ScrollMode.AUTO
+            controls=[
+                ft.Container(
+                    content=ft.Row(
+                        controls=tab_buttons,
+                        spacing=tokens.SPACE_XS,
+                        scroll=ft.ScrollMode.AUTO,
+                    ),
+                    expand=True,
+                ),
+                search_btn,
+                theme_btn,
+                zoom_out_btn,
+                zoom_in_btn,
+            ],
+            spacing=tokens.SPACE_XS,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.Padding(tokens.SPACE_SM, 0, tokens.SPACE_SM, 0),
         bgcolor=ft.Colors.with_opacity(0.04, ft.Colors.ON_SURFACE),

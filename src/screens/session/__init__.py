@@ -167,13 +167,11 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             # Terminal settings (FAB inherits the flet_terminal settings menu)
             term_settings={
                 "theme": ts.theme,
-                "cursor": ts.cursor,
                 "blink": ts.blink,
                 "search": ts.search,
                 "zoom": ts.zoom,
             },
             on_term_theme=lambda name: _call(term_actions, "theme", name),
-            on_term_cursor=lambda style: _call(term_actions, "cursor", style),
             on_term_zoom_in=lambda e=None: _call(term_actions, "zoom_in"),
             on_term_zoom_out=lambda e=None: _call(term_actions, "zoom_out"),
             on_term_zoom_reset=lambda e=None: _call(term_actions, "zoom_reset"),

@@ -57,10 +57,10 @@ class AppColors:
     # the Material default and wash out). These replace the old
     # with_opacity(0.05, ON_SURFACE) pattern that read as near-invisible in
     # light mode.
-    LIGHT_GLASS_BG = "#F1F5F9"      # soft slate-100 card on white
+    LIGHT_GLASS_BG = "#F1F5F9"  # soft slate-100 card on white
     LIGHT_GLASS_BORDER = "#E2E8F0"  # slate-200 hairline
-    DARK_GLASS_BG = "#26263A"       # raised card on #1E1E2E
-    DARK_GLASS_BORDER = "#2D2D3F"   # dark hairline
+    DARK_GLASS_BG = "#26263A"  # raised card on #1E1E2E
+    DARK_GLASS_BORDER = "#2D2D3F"  # dark hairline
 
 
 def _resolve_page(page: "ft.Page | None") -> "ft.Page | None":
@@ -111,11 +111,7 @@ def is_light_theme(page: "ft.Page | None" = None) -> bool:
 
 def adaptive_glass_bg(page: "ft.Page | None" = None):
     """Return the card background color for the active theme mode."""
-    return (
-        AppColors.LIGHT_GLASS_BG
-        if is_light_theme(page)
-        else AppColors.DARK_GLASS_BG
-    )
+    return AppColors.LIGHT_GLASS_BG if is_light_theme(page) else AppColors.DARK_GLASS_BG
 
 
 def adaptive_glass_border(page: "ft.Page | None" = None):

@@ -74,7 +74,6 @@ def show_manage_files_modal(
                         content=ft.Row(
                             controls=[
                                 breadcrumb_container,
-                                action_row,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
@@ -95,12 +94,20 @@ def show_manage_files_modal(
             height=tokens.DIALOG_HEIGHT_LG,
         ),
         actions=[
-            ft.TextButton(
-                "Close",
-                on_click=lambda _: page.pop_dialog(),
+            ft.Row(
+                controls=[
+                    action_row,
+                    ft.Container(expand=True),
+                    ft.TextButton(
+                        "Close",
+                        on_click=lambda _: page.pop_dialog(),
+                    ),
+                ],
+                spacing=tokens.SPACE_SM,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         ],
-        actions_alignment=ft.MainAxisAlignment.END,
+        actions_alignment=ft.MainAxisAlignment.START,
     )
 
     def _render():
@@ -117,9 +124,7 @@ def show_manage_files_modal(
                     if up_target is None
                     else None,
                     on_click=(
-                        None
-                        if up_target is None
-                        else lambda _: _on_navigate(up_target)
+                        None if up_target is None else lambda _: _on_navigate(up_target)
                     ),
                 ),
                 ft.Container(
@@ -160,6 +165,7 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.DOWNLOAD_ROUNDED,
                         tooltip="Download",
+                        icon_size=tokens.ICON_SM,
                         icon_color=ft.Colors.ON_SURFACE_VARIANT
                         if not has_sel
                         else None,
@@ -183,6 +189,7 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.DELETE_ROUNDED,
                         tooltip="Delete",
+                        icon_size=tokens.ICON_SM,
                         icon_color=ft.Colors.ERROR
                         if has_sel
                         else ft.Colors.ON_SURFACE_VARIANT,
@@ -191,6 +198,7 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.CLOSE_ROUNDED,
                         tooltip="Cancel selection",
+                        icon_size=tokens.ICON_SM,
                         on_click=lambda _: _clear_selection(),
                     ),
                 ]
@@ -201,11 +209,13 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.CHECKLIST_ROUNDED,
                         tooltip="Select items",
+                        icon_size=tokens.ICON_SM,
                         on_click=lambda _: _enter_selection_mode(),
                     ),
                     ft.IconButton(
                         ft.Icons.UPLOAD_FILE_ROUNDED,
                         tooltip="Upload files",
+                        icon_size=tokens.ICON_SM,
                         on_click=lambda _: page.run_task(
                             handle_upload_async,
                             page,
@@ -220,11 +230,13 @@ def show_manage_files_modal(
                     ft.IconButton(
                         ft.Icons.CREATE_NEW_FOLDER_ROUNDED,
                         tooltip="New folder",
+                        icon_size=tokens.ICON_SM,
                         on_click=lambda _: _handle_new_folder(),
                     ),
                     ft.IconButton(
                         ft.Icons.REFRESH_ROUNDED,
                         tooltip="Refresh",
+                        icon_size=tokens.ICON_SM,
                         on_click=lambda _: page.run_task(_fetch_listing, current_path),
                     ),
                 ]

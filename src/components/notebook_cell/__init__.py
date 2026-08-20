@@ -125,9 +125,7 @@ def NotebookCell(
                         border_color=ft.Colors.TRANSPARENT,
                         bgcolor=ft.Colors.TRANSPARENT,
                         on_change=lambda e: _commit_source(e.control.value or ""),
-                        on_blur=lambda e: _finish_markdown_edit(
-                            e.control.value or ""
-                        ),
+                        on_blur=lambda e: _finish_markdown_edit(e.control.value or ""),
                         hint_text="Type markdown here...",
                         content_padding=tokens.SPACE_SM,
                         expand=True,
