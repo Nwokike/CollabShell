@@ -87,7 +87,7 @@ def is_light_theme(page: ft.Page | None = None) -> bool:
     mode toggles or the platform brightness flips.
     """
     # Read observables so callers subscribe (kept separate from the page read).
-    from src.core.state import state as _state
+    from core.state import state as _state
 
     requested = _state.theme_mode
     revision = _state.theme_revision  # noqa: F841  (subscribe for re-render)

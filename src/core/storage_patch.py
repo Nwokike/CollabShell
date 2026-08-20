@@ -6,6 +6,8 @@ import logging
 import os
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 
 def resolve_storage_dir() -> str:
     """Return the canonical colab-cli storage directory path.
@@ -38,7 +40,8 @@ class MemoryLogHandler(logging.Handler):
             if len(MemoryLogHandler._logs) > MemoryLogHandler._MAX_LOGS:
                 MemoryLogHandler._logs.pop(0)
         except Exception:
-            logger.exception("Suppressed exception")
+            # Never log here — this IS a logging handler; logging would recurse.
+            pass
 
     @classmethod
     def get_logs(cls) -> list[str]:
