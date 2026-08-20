@@ -40,7 +40,7 @@
 
 | Capability | Description |
 | :--- | :--- |
-| **Interactive PTY Terminal (TTY)** | Real-time live interactive terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. |
+| **Interactive PTY Terminal (TTY)** | Real-time live interactive terminal sessions directly connected via Google Colab's `/api/terminals` WebSocket tunnels. Themes follow the app's light/dark mode, and every terminal starts in `/content`. |
 | **Tabbed Workspace** | Seamlessly toggle between **Notebook** cell execution and live **Terminal** shell tabs inside active cloud runtimes. |
 | **Session Lifecycle Control** | Instantly create, list, restart, and stop active Google Colab sessions directly from your device with smart intent routing. |
 | **Hardware Tiers** | Provision CPU (always free), T4 GPU, or TPU v5e/v6e runtimes based on your Google tier limits. |
@@ -124,7 +124,7 @@
     <td width="33%"><img src="screenshots/settings_dark.png" width="100%" alt="App Settings Dark" /></td>
   </tr>
   <tr>
-    <td align="center"><em>Terminal Customization — select themes (Dracula, Matrix Green), cursor styles & zoom</em></td>
+    <td align="center"><em>Terminal Customization — select themes (JetBrains Dark, Dracula, Matrix Green, Colab Light), cursor blink & zoom</em></td>
     <td align="center"><em>Matrix Green Theme — customized TTY styling with built-in output search bar</em></td>
     <td align="center"><em>Settings Manager — toggle app themes, inspect Activity Terminal logs & re-authenticate</em></td>
   </tr>
@@ -134,7 +134,8 @@
 
 ## Features
 
-- **Collab Shell-Branded Design System** — Solarized Light and deep Dark themes styled to the Google Colab branding palette.
+- **React-Like Declarative UI (Flet 0.86)** — The entire app is built on Flet's new functional component model (`@ft.component`, `@ft.observable`, `use_state`, `use_effect`): state mutations trigger surgical re-renders instead of full-page repaints.
+- **Collab Shell-Branded Design System** — Adaptive light and dark themes styled to the Google Colab branding palette; terminal, cards, and glass surfaces all follow the active mode automatically.
 - **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`).
 - **Universal Storage & History Normalization** — Monkey-patched backend state persistence (`storage_patch.py`) guaranteeing history and execution logs save reliably across Android and Linux desktops.
 - **Native OS File Picker & Zip-and-Download** — Save files anywhere on your OS/Android device without permission headaches, and archive entire cloud folders on the fly.
@@ -149,7 +150,7 @@
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Flet | Cross-platform UI with responsive views and smooth page transitions |
+| **Frontend** | Flet 0.86 (declarative components) | Cross-platform React-like UI with observable state models and surgical re-renders |
 | **Client Service** | `google-colab-cli` SDK | Wrapper for Colab session management and code execution |
 | **Local Database** | Flat JSON Storage (`storage.json`) | Key-value store for app settings, theme state, and credentials |
 | **Auth Provider** | Google OAuth2 | Secure user authentication to manage personal Google Cloud instances |
