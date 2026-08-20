@@ -6,7 +6,7 @@ Uses test Ad IDs until Play Store launch.
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
 from collections.abc import Callable
 
@@ -149,7 +149,7 @@ class AdService:
 
     async def _handle_close(self, e):
         if self._on_close:
-            if asyncio.iscoroutinefunction(self._on_close):
+            if inspect.iscoroutinefunction(self._on_close):
                 await self._on_close()
             else:
                 self._on_close()
@@ -168,7 +168,7 @@ class AdService:
     async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
         """Show a rewarded interstitial ad, triggering on_close when closed."""
         if not _HAS_ADS or not self._is_mobile():
-            if asyncio.iscoroutinefunction(on_close):
+            if inspect.iscoroutinefunction(on_close):
                 await on_close()
             else:
                 on_close()
@@ -181,7 +181,7 @@ class AdService:
 
             async def _close(e):
                 self._active_rewarded_ad = None
-                if asyncio.iscoroutinefunction(on_close):
+                if inspect.iscoroutinefunction(on_close):
                     await on_close()
                 else:
                     on_close()
@@ -197,7 +197,7 @@ class AdService:
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)
-            if asyncio.iscoroutinefunction(on_close):
+            if inspect.iscoroutinefunction(on_close):
                 await on_close()
             else:
                 on_close()
