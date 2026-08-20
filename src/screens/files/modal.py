@@ -243,8 +243,10 @@ def show_manage_files_modal(
             )
         action_row.controls = actions
 
-        # Update file list
-        if is_loading and not listing:
+        # Update file list — spinner whenever the modal is busy, so folder
+        # taps, go-up, and refreshes all give feedback instead of freezing on
+        # the previous directory's stale listing.
+        if is_loading:
             list_container.content = ft.Container(
                 content=ft.ProgressRing(),
                 alignment=ft.Alignment.CENTER,
