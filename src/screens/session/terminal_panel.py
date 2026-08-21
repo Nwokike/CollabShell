@@ -1,8 +1,11 @@
 """Native Colab Terminal panel — declarative component using flet_terminal.
 
-Panel state (tabs, active tab, status) is an @ft.observable
-model; the `TerminalPanel` component re-renders reactively on every change.
-WebSocket clients live in the panel state and are closed on unmount.
+Panel state (tabs, active tab, status) is an @ft.observable model
+(`TerminalPanelState`); the `TerminalPanel` component re-renders
+reactively on every change. Each terminal tab is owned by a child
+component `_TerminalHost` that builds its MobileTerminal DURING RENDER
+(matching the proven flet_terminal example app) and opens its Colab
+WebSocket in on_mounted. WebSocket clients are closed on unmount.
 """
 
 from __future__ import annotations
@@ -13,7 +16,6 @@ import logging
 from collections.abc import Callable
 
 import flet as ft
-from flet.components.component import Renderer
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
 from core import tokens
@@ -26,21 +28,6 @@ logger = logging.getLogger("colab")
 def _active_theme_name(page: ft.Page | None = None) -> str:
     """Terminal theme that follows the app's light/dark mode."""
     return "Colab Light" if is_light_theme(page) else "JetBrains Dark"
-
-
-def _is_mounted(control) -> bool:
-    """Safely check if control is attached to the page.
-
-    Flet 0.86's ``.page`` property walks the parent chain and RAISES
-    RuntimeError when the control isn't in the tree yet (there is no
-    ``_page`` attribute). The old pre-0.86 ``.page`` returned None instead.
-    """
-    if control is None:
-        return False
-    try:
-        return control.page is not None
-    except RuntimeError:
-        return False
 
 
 async def _get_terminal_session(colab_service, session_name: str):
@@ -68,8 +55,8 @@ async def _get_terminal_session(colab_service, session_name: str):
             }
 
         return await asyncio.to_thread(_get)
-    except Exception as e:
-        logger.error("Failed to get session data: %s", e)
+    except Exception:
+        logger.exception("Failed to get session data")
         return None
 
 
@@ -77,12 +64,14 @@ async def _get_terminal_session(colab_service, session_name: str):
 class TerminalEntry:
     """One terminal tab: its widget, WebSocket client, and readiness."""
 
-    def __init__(self, tid: int, mt: MobileTerminal):
+    def __init__(self, tid: int):
         self.id = tid
-        self.mt = mt
+        # Built during render by _TerminalHost — see that component's
+        # docstring for why it must NOT be constructed in an async task.
+        self.mt: MobileTerminal | None = None
         self.client = None
-        self.pending_stdout: list = []
         self.ready = False
+        self.wired = False
 
 
 @ft.observable
@@ -105,6 +94,145 @@ class TerminalPanelState:
 
 
 @ft.component
+def _TerminalHost(
+    entry: TerminalEntry,
+    ps: TerminalPanelState,
+    session_name: str,
+    colab_service,
+    snack: Callable[[str], None] | None = None,
+) -> ft.Control:
+    """Owns one MobileTerminal and its Colab WebSocket.
+
+    The terminal widget is constructed DURING RENDER — the pattern proven
+    responsive by the flet_terminal example app. Building the control inside
+    a component render wires up its parent/page chain and did_mount()
+    lifecycle correctly, so imperative changes (output writes, zoom, theme,
+    blink) are pushed to the client immediately. The old approach built it
+    in an async task, which left the control's internal update() calls
+    silently failing until a screen change forced a remount — that was the
+    unresponsive zoom/theme and the missing shell output.
+    """
+    page = ft.context.page
+
+    # ── Build the widget once, during render ────────────────────────────────
+    if entry.mt is None:
+        mt = MobileTerminal(
+            show_search=False,
+            show_settings=False,
+            scrollback=10000,
+            font_family="JetBrains Mono",
+            font_size=ps.zoom,
+            theme=BUILTIN_THEMES.get(_active_theme_name(page)),
+            auto_focus=False,
+            expand=True,
+        )
+        # New terminals inherit the panel's current settings.
+        if not ps.blink:
+            mt.toggle_cursor_blink()
+        entry.mt = mt
+    mt = entry.mt
+
+    def _safe_run_task(task_fn, *args):
+        try:
+            if getattr(page, "_session", getattr(page, "session", None)):
+                page.run_task(task_fn, *args)
+        except RuntimeError:
+            logger.exception("run_task failed")
+
+    def _on_stdout(text: str):
+        # Terminal.send_bytes buffers internally until the widget mounts and
+        # flushes on did_mount — no external mount gate or buffer needed.
+        mt.send_bytes(text.encode("utf-8", errors="ignore"))
+
+    def _on_status(msg: str, ok: bool):
+        if ps.active_id == entry.id:
+            ps.status = msg
+            ps.status_ok = ok
+            ps.connecting = not ok
+
+    def _on_bytes(payload: bytes | str):
+        if entry.client:
+            data = (
+                payload
+                if isinstance(payload, bytes)
+                else payload.encode("utf-8", errors="ignore")
+            )
+            _safe_run_task(entry.client.send_input, data)
+
+    def _on_resize(ev):
+        if entry.client and ev.data:
+            try:
+                info = json.loads(ev.data)
+                _safe_run_task(
+                    entry.client.set_size,
+                    info.get("rows", 24),
+                    info.get("cols", 80),
+                )
+            except Exception:
+                logger.exception("Error handling terminal resize")
+
+    # Wire handlers exactly once, before the first patch freezes the tree.
+    if not entry.wired:
+        mt.set_on_bytes(_on_bytes)
+        mt.on_data = lambda e: _on_bytes(
+            e.data if isinstance(e.data, str) else str(e.data)
+        )
+        mt.on_resize = _on_resize
+        entry.wired = True
+
+    async def _connect():
+        session_info = await _get_terminal_session(colab_service, session_name)
+        if not session_info:
+            ps.status = "Session not found."
+            ps.status_ok = False
+            if snack:
+                snack("Session not found in store.")
+            return
+
+        ps.status = f"Connecting Terminal {entry.id}…"
+        ps.status_ok = False
+        ps.connecting = True
+        try:
+            ws_url = await asyncio.to_thread(
+                colab_service.create_terminal_ws_url,
+                session_info["url"],
+                session_info["token"],
+            )
+
+            client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
+            entry.client = client
+
+            await client.connect()
+            entry.ready = True
+
+            if entry.client:
+                # Colab PTYs open in /root; move to the shared data dir.
+                _safe_run_task(entry.client.send_input, "cd /content\r\n")
+
+        except Exception as ex:
+            logger.exception("Terminal %s init failed", entry.id)
+            if ps.active_id == entry.id:
+                ps.status = f"Error: {ex}"
+                ps.status_ok = False
+                ps.connecting = False
+            if snack:
+                snack(f"Terminal {entry.id} error: {ex}")
+
+    def _close_client():
+        if entry.client:
+            try:
+                entry.client.close()
+            except Exception:
+                logger.exception("Terminal client close failed")
+
+    # Open the WebSocket once mounted; close the socket on unmount.
+    ft.on_mounted(lambda: page.run_task(_connect))
+    ft.use_effect(lambda: None, [], cleanup=_close_client)
+
+    return mt
+
+
+@ft.component
 def TerminalPanel(
     ps: TerminalPanelState,
     session_name: str,
@@ -124,152 +252,17 @@ def TerminalPanel(
         return next((t for t in ps.terminals if t.id == ps.active_id), None)
 
     # ── Terminal lifecycle ────────────────────────────────────────────────────
-    async def _create_terminal():
+    def _create_terminal():
+        """Register a new terminal tab. The actual MobileTerminal widget is
+        built during render by _TerminalHost, and its WebSocket connects on
+        mount — see _TerminalHost for why that matters."""
         new_id = ps.next_id
         ps.next_id = new_id + 1
         ps.active_id = new_id
-
-        session_info = await _get_terminal_session(colab_service, session_name)
-        if not session_info:
-            ps.status = "Session not found."
-            ps.status_ok = False
-            if snack:
-                snack("Session not found in store.")
-            return
-
-        theme_name = _active_theme_name(page)
-        # MobileTerminal builds its ExtraKeysBar, whose CTRL/ALT buttons are
-        # @ft.component functions. Those require an active renderer, which this
-        # async task doesn't have — bind a throwaway one for construction only.
-        # Reactivity is unaffected: Component.update() creates its own renderer
-        # on every re-render, so the ModifierKey buttons keep repainting when
-        # ModifierState changes.
-        with Renderer().with_context():
-            mt = MobileTerminal(
-                show_search=False,
-                show_settings=False,
-                scrollback=10000,
-                font_family="JetBrains Mono",
-                font_size=11.0,
-                theme=BUILTIN_THEMES.get(theme_name),
-                auto_focus=False,
-                expand=True,
-            )
-
-        entry = TerminalEntry(new_id, mt)
-        # New terminals inherit the panel's current settings.
-        if not ps.blink:
-            mt.toggle_cursor_blink()
-        while mt.font_size < ps.zoom:
-            mt.zoom_in()
-
-        def _safe_run_task(task_fn, *args):
-            try:
-                if getattr(page, "_session", getattr(page, "session", None)):
-                    page.run_task(task_fn, *args)
-            except RuntimeError:
-                pass
-
-        def _write_to_terminal(text: str):
-            if (
-                getattr(mt._terminal, "_channel", None) is not None
-                and getattr(mt._terminal, "_channel_ready", False)
-                and getattr(mt._terminal, "_dart_ready", False)
-            ):
-                mt.send_bytes(text.encode("utf-8", errors="ignore"))
-            else:
-                mt.write(text)
-
-        def _on_stdout(text: str):
-            if entry.ready and _is_mounted(mt):
-                try:
-                    _write_to_terminal(text)
-                    return
-                except Exception as ex:
-                    logger.debug("Buffering stdout: %s", ex)
-            entry.pending_stdout.append(text)
-
-        def _on_status(msg: str, ok: bool):
-            if ps.active_id == entry.id:
-                ps.status = msg
-                ps.status_ok = ok
-                ps.connecting = not ok
-
-        def _on_bytes(payload: bytes | str):
-            if entry.client:
-                data = (
-                    payload
-                    if isinstance(payload, bytes)
-                    else payload.encode("utf-8", errors="ignore")
-                )
-                _safe_run_task(entry.client.send_input, data)
-
-        def _on_resize(ev):
-            if entry.client and ev.data:
-                try:
-                    info = json.loads(ev.data)
-                    _safe_run_task(
-                        entry.client.set_size,
-                        info.get("rows", 24),
-                        info.get("cols", 80),
-                    )
-                except Exception as ex:
-                    logger.debug("Error handling terminal resize: %s", ex)
-
-        # Wire every handler BEFORE the widget enters the observable tree.
-        # Appending to ps.terminals triggers a component re-render that freezes
-        # the rendered subtree; declared props (on_data/on_resize) can only be
-        # assigned while the control is still unfrozen.
-        mt.set_on_bytes(_on_bytes)
-        mt.on_data = lambda e: _on_bytes(
-            e.data if isinstance(e.data, str) else str(e.data)
-        )
-        mt.on_resize = _on_resize
-
-        ps.terminals.append(entry)
-        ps.status = f"Connecting Terminal {new_id}…"
+        ps.terminals.append(TerminalEntry(new_id))
+        ps.status = f"Opening Terminal {new_id}…"
         ps.status_ok = False
         ps.connecting = True
-
-        # Wait for the widget to mount before opening the WebSocket
-        for _ in range(40):
-            if _is_mounted(mt):
-                break
-            await asyncio.sleep(0.05)
-
-        try:
-            ws_url = await asyncio.to_thread(
-                colab_service.create_terminal_ws_url,
-                session_info["url"],
-                session_info["token"],
-            )
-
-            client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
-            entry.client = client
-
-            await client.connect()
-            entry.ready = True
-
-            if entry.pending_stdout and _is_mounted(mt):
-                for chunk in entry.pending_stdout:
-                    try:
-                        _write_to_terminal(chunk)
-                    except Exception:
-                        logger.exception("Suppressed exception")
-                entry.pending_stdout.clear()
-
-            if entry.client:
-                # Colab PTYs open in /root; move to the shared data dir.
-                _safe_run_task(entry.client.send_input, "cd /content\r\n")
-
-        except Exception as ex:
-            logger.error("Terminal %s init failed: %s", new_id, ex)
-            if ps.active_id == new_id:
-                ps.status = f"Error: {ex}"
-                ps.status_ok = False
-                ps.connecting = False
-            if snack:
-                snack(f"Terminal {new_id} error: {ex}")
 
     def _close_terminal(tid: int):
         idx = next((i for i, t in enumerate(ps.terminals) if t.id == tid), -1)
@@ -280,9 +273,9 @@ def TerminalPanel(
             try:
                 entry.client.close()
             except Exception:
-                logger.exception("Suppressed exception")
+                logger.exception("Terminal client close failed")
         if not ps.terminals:
-            page.run_task(_create_terminal)
+            _create_terminal()
             return
 
         if ps.active_id == tid:
@@ -295,12 +288,12 @@ def TerminalPanel(
                 try:
                     t.client.close()
                 except Exception:
-                    logger.exception("Suppressed exception")
+                    logger.exception("Terminal client close failed")
 
-    async def _init_panel():
+    def _init_panel():
         _close_all_clients()
         ps.terminals.clear()
-        await _create_terminal()
+        _create_terminal()
 
     # ── Actions exposed to the SessionScreen FAB overflow menu ───────────────
     def _changed_settings():
@@ -308,7 +301,8 @@ def TerminalPanel(
 
     def _for_each_mt(fn):
         for t in ps.terminals:
-            fn(t.mt)
+            if t.mt is not None:
+                fn(t.mt)
 
     def _set_theme(name: str):
         ps.theme = name
@@ -318,21 +312,21 @@ def TerminalPanel(
     def _zoom_in():
         _for_each_mt(lambda mt: mt.zoom_in())
         entry = _active_entry()
-        if entry:
+        if entry and entry.mt:
             ps.zoom = entry.mt.font_size
         _changed_settings()
 
     def _zoom_out():
         _for_each_mt(lambda mt: mt.zoom_out())
         entry = _active_entry()
-        if entry:
+        if entry and entry.mt:
             ps.zoom = entry.mt.font_size
         _changed_settings()
 
     def _zoom_reset():
         _for_each_mt(lambda mt: mt.reset_zoom())
         entry = _active_entry()
-        if entry:
+        if entry and entry.mt:
             ps.zoom = entry.mt.font_size
         _changed_settings()
 
@@ -355,7 +349,7 @@ def TerminalPanel(
 
     async def _copy_selection():
         entry = _active_entry()
-        if not entry:
+        if not entry or not entry.mt:
             return
         text = await entry.mt.get_selection_async()
         if not text:
@@ -374,11 +368,13 @@ def TerminalPanel(
     if register_actions:
         register_actions(
             {
-                "new_terminal": lambda: page.run_task(_create_terminal),
+                "new_terminal": lambda: _create_terminal(),
                 "clear_terminal": _clear_terminal,
                 "copy": lambda: page.run_task(_copy_selection),
                 "paste": lambda: (
-                    _active_entry().mt.paste() if _active_entry() else None
+                    _active_entry().mt.paste()
+                    if _active_entry() and _active_entry().mt
+                    else None
                 ),
                 # Settings (consumed by the FAB menu, with live checkmarks)
                 "theme": _set_theme,
@@ -388,13 +384,15 @@ def TerminalPanel(
                 "toggle_blink": _toggle_blink,
                 "toggle_search": _toggle_search,
                 "font_size": lambda: (
-                    _active_entry().mt.font_size if _active_entry() else ps.zoom
+                    _active_entry().mt.font_size
+                    if _active_entry() and _active_entry().mt
+                    else ps.zoom
                 ),
             }
         )
 
     # Self-initialize on mount; close all sockets on unmount.
-    ft.on_mounted(lambda: page.run_task(_init_panel))
+    ft.on_mounted(_init_panel)
     ft.use_effect(lambda: None, [], cleanup=_close_all_clients)
 
     # Follow the app's light/dark mode: re-apply the terminal theme whenever
@@ -402,7 +400,8 @@ def TerminalPanel(
     def _apply_app_theme():
         name = _active_theme_name(page)
         for t in ps.terminals:
-            t.mt.set_theme(name)
+            if t.mt is not None:
+                t.mt.set_theme(name)
         ps.theme = name
         _changed_settings()
 
@@ -490,7 +489,7 @@ def TerminalPanel(
             icon=ft.Icons.ADD_ROUNDED,
             icon_size=tokens.ICON_SM,
             tooltip="New Terminal",
-            on_click=lambda e: page.run_task(_create_terminal),
+            on_click=lambda e: _create_terminal(),
         )
     )
 
@@ -534,10 +533,18 @@ def TerminalPanel(
         bgcolor=ft.Colors.with_opacity(0.04, ft.Colors.ON_SURFACE),
     )
 
-    # Stable MobileTerminal instances wrapped in declarative visibility boxes
+    # Each terminal gets a keyed _TerminalHost so the MobileTerminal instance
+    # is stable across panel re-renders and mounts exactly once.
     stack_children = [
         ft.Container(
-            content=t.mt,
+            content=_TerminalHost(
+                entry=t,
+                ps=ps,
+                session_name=session_name,
+                colab_service=colab_service,
+                snack=snack,
+                key=ft.ValueKey(f"host_{t.id}"),
+            ),
             visible=t.id == ps.active_id,
             expand=True,
             key=ft.ValueKey(f"term_{t.id}"),
