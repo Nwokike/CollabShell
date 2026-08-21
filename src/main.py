@@ -14,6 +14,50 @@ import flet as ft
 
 from core.storage_patch import apply_storage_patches
 
+
+def _install_bytes_safe_streams():
+    """Make stdout/stderr tolerate bytes writes.
+
+    The packaged runtime (serious-python) replaces sys.stdout with a writer
+    that only accepts str, but click/typer (used inside colab_cli) decides
+    to write bytes when the stream has no usable `encoding` attribute —
+    crashing e.g. `sync_sessions` with "TypeError: write() argument must be
+    str, not bytes" on every startup. Wrapping the runtime streams with a
+    decoding adapter fixes that without touching colab_cli.
+    """
+
+    class _BytesSafeStream:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def write(self, data):
+            if isinstance(data, (bytes, bytearray)):
+                data = bytes(data).decode("utf-8", errors="ignore")
+            return self._inner.write(data)
+
+        def flush(self):
+            try:
+                return self._inner.flush()
+            except Exception:
+                pass
+
+        def isatty(self):
+            try:
+                return self._inner.isatty()
+            except Exception:
+                return False
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    for stream_name in ("stdout", "stderr"):
+        inner = getattr(sys, stream_name, None)
+        if inner is None or isinstance(inner, _BytesSafeStream):
+            continue
+        setattr(sys, stream_name, _BytesSafeStream(inner))
+
+
+_install_bytes_safe_streams()
 apply_storage_patches()
 
 from app_shell import AppShell
