@@ -16,7 +16,7 @@ def build_notebook_toolbar(
     trailing = [
         ft.IconButton(
             ft.Icons.UPLOAD_FILE_ROUNDED,
-            tooltip="Import IPYNB",
+            tooltip="Import IPYNB or PY",
             on_click=on_import_ipynb,
             icon_size=tokens.ICON_SM,
         )

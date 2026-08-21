@@ -66,6 +66,61 @@ def ipynb_to_cells(ipynb: dict) -> list[dict]:
     return cells
 
 
+def py_to_cells(source: str) -> list[dict]:
+    """Convert a Python source file to internal cells.
+
+    Files using Jupyter/VS Code `# %%` cell markers are split into one code
+    cell per block; a `# %% [markdown]` marker starts a markdown cell. Files
+    without markers become a single code cell.
+    """
+    lines = (source or "").splitlines()
+    blocks: list[tuple[str, list[str]]] = []
+    block_type = "code"
+    block_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("# %%"):
+            if block_lines or blocks:
+                blocks.append((block_type, block_lines))
+            marker = stripped[len("# %%") :].strip()
+            if marker.lower().startswith("[markdown]"):
+                block_type = "markdown"
+                # `# %% [markdown] Title` — keep the title as the cell body.
+                title = marker[len("[markdown]") :].strip()
+                block_lines = [title] if title else []
+            else:
+                block_type = "code"
+                block_lines = []
+        else:
+            block_lines.append(line)
+    blocks.append((block_type, block_lines))
+
+    cells: list[dict] = []
+    for cell_type, body in blocks:
+        text = "\n".join(body).strip("\n")
+        if not text:
+            continue
+        cells.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": cell_type,
+                "source": text,
+                "outputs": [],
+                "is_running": False,
+            }
+        )
+    return cells or [
+        {
+            "id": str(uuid.uuid4()),
+            "type": "code",
+            "source": "",
+            "outputs": [],
+            "is_running": False,
+        }
+    ]
+
+
 def _join_source(source_raw) -> str:
     if isinstance(source_raw, list):
         return "".join(source_raw)

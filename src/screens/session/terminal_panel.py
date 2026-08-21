@@ -2,10 +2,20 @@
 
 Panel state (tabs, active tab, status) is an @ft.observable model
 (`TerminalPanelState`); the `TerminalPanel` component re-renders
-reactively on every change. Each terminal tab is owned by a child
-component `_TerminalHost` that builds its MobileTerminal DURING RENDER
-(matching the proven flet_terminal example app) and opens its Colab
-WebSocket in on_mounted. WebSocket clients are closed on unmount.
+reactively on every change.
+
+Architecture notes (v2.0.1):
+
+* Each terminal tab's Colab WebSocket is owned by `TerminalEntry` and created
+  by the PANEL — not by the widget host component. The socket therefore
+  survives tab switches, widget remounts, and session-screen re-renders.
+* Every stdout chunk is mirrored into a per-tab scrollback ring buffer. When
+  the terminal widget remounts (Dart side fires a `mount` event whenever the
+  xterm view is recreated) the buffer is replayed so no content is lost —
+  this is what fixed "switching tabs loses terminal content".
+* Clients reconnect automatically with exponential backoff after drops
+  (app backgrounded, network blip), and can be force-reconnected from the
+  app lifecycle hook via `app_state.terminal_reconnect`.
 """
 
 from __future__ import annotations
@@ -13,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import deque
 from collections.abc import Callable
 
 import flet as ft
@@ -23,6 +34,11 @@ from core.state import state as app_state
 from core.theme import AppColors, is_light_theme
 
 logger = logging.getLogger("colab")
+
+# Scrollback ring buffer kept per tab in Python so content can be replayed
+# when the Dart xterm widget is recreated (tab switch, remount). Roughly
+# 2000 chunks ⇒ several screens of output on a busy shell.
+_SCROLLBACK_CHUNKS = 2000
 
 
 def _active_theme_name(page: ft.Page | None = None) -> str:
@@ -72,6 +88,9 @@ class TerminalEntry:
         self.client = None
         self.ready = False
         self.wired = False
+        # Ring buffer of every stdout chunk (bytes) — replayed when the
+        # terminal widget remounts so content survives tab switches.
+        self.scrollback: deque[bytes] = deque(maxlen=_SCROLLBACK_CHUNKS)
 
 
 @ft.observable
@@ -93,24 +112,146 @@ class TerminalPanelState:
         self.zoom = 11.0
 
 
+def _make_entry_handlers(
+    entry: TerminalEntry,
+    ps: TerminalPanelState,
+    page,
+    colab_service,
+    session_name: str,
+    snack,
+):
+    """Build the per-tab WS callbacks. Called once, at WebSocket-creation time."""
+    logger_ = logger
+
+    def _safe_run_task(task_fn, *args):
+        try:
+            if getattr(page, "_session", getattr(page, "session", None)):
+                page.run_task(task_fn, *args)
+        except RuntimeError:
+            logger_.exception("run_task failed")
+
+    async def _connect():
+        session_info = await _get_terminal_session(colab_service, session_name)
+        if not session_info:
+            ps.status = "Session not found."
+            ps.status_ok = False
+            if snack:
+                snack("Session not found in store.")
+            return
+
+        if ps.active_id == entry.id:
+            ps.status = f"Connecting Terminal {entry.id}…"
+            ps.status_ok = False
+            ps.connecting = True
+        try:
+            client = colab_service.get_terminal_client(
+                session_info["url"],
+                session_info["token"],
+                _on_stdout,
+                _on_status,
+            )
+            entry.client = client
+
+            await client.connect()
+            entry.ready = True
+
+            if entry.client:
+                # Colab PTYs open in /root; move to the shared data dir.
+                _safe_run_task(entry.client.send_input, "cd /content\r\n")
+
+        except Exception as ex:
+            logger_.exception("Terminal %s init failed", entry.id)
+            if ps.active_id == entry.id:
+                ps.status = f"Error: {ex}"
+                ps.status_ok = False
+                ps.connecting = False
+            if snack:
+                snack(f"Terminal {entry.id} error: {ex}")
+
+    def _on_stdout(text: str):
+        # Mirror into the ring buffer first — this is what survives widget
+        # remounts and tab switches. send_bytes queues transparently when the
+        # Dart channel is not ready yet (e.g. right after a remount).
+        data = text.encode("utf-8", errors="ignore")
+        entry.scrollback.append(data)
+        if entry.mt is not None:
+            entry.mt.send_bytes(data)
+
+    def _on_status(msg: str, ok: bool):
+        if ps.active_id == entry.id:
+            ps.status = msg
+            ps.status_ok = ok
+            ps.connecting = not ok
+
+    def replay_scrollback():
+        """Re-send the buffered scrollback after a widget (re)mount.
+
+        The Dart xterm buffer is empty after a fresh mount, so nothing the
+        shell printed before the remount would be visible. Chunks that were
+        sitting in the widget's own transport queue during the dead window
+        were already mirrored into `entry.scrollback`, so clear them first
+        and replay from the ring buffer — no duplicates, order preserved.
+        """
+        mt = entry.mt
+        if mt is None:
+            return
+        with mt._terminal._lock:
+            mt._terminal._pending_writes.clear()
+        for chunk in list(entry.scrollback):
+            mt.send_bytes(chunk)
+
+    def _on_mount(e=None):
+        # Fired by the Dart side whenever the xterm view is (re)created —
+        # including after tab switches that dispose the hidden widget.
+        replay_scrollback()
+
+    def _on_bytes(payload: bytes | str):
+        if entry.client:
+            data = (
+                payload
+                if isinstance(payload, bytes)
+                else payload.encode("utf-8", errors="ignore")
+            )
+            _safe_run_task(entry.client.send_input, data)
+
+    def _on_resize(ev):
+        if entry.client and ev.data:
+            try:
+                info = json.loads(ev.data)
+                _safe_run_task(
+                    entry.client.set_size,
+                    info.get("rows", 24),
+                    info.get("cols", 80),
+                )
+            except Exception:
+                logger_.exception("Error handling terminal resize")
+
+    return {
+        "connect": _connect,
+        "on_stdout": _on_stdout,
+        "on_status": _on_status,
+        "on_mount": _on_mount,
+        "on_bytes": _on_bytes,
+        "on_resize": _on_resize,
+    }
+
+
 @ft.component
 def _TerminalHost(
     entry: TerminalEntry,
     ps: TerminalPanelState,
-    session_name: str,
-    colab_service,
-    snack: Callable[[str], None] | None = None,
+    handlers: dict,
 ) -> ft.Control:
-    """Owns one MobileTerminal and its Colab WebSocket.
+    """Owns the MobileTerminal widget for one tab.
 
     The terminal widget is constructed DURING RENDER — the pattern proven
     responsive by the flet_terminal example app. Building the control inside
     a component render wires up its parent/page chain and did_mount()
     lifecycle correctly, so imperative changes (output writes, zoom, theme,
-    blink) are pushed to the client immediately. The old approach built it
-    in an async task, which left the control's internal update() calls
-    silently failing until a screen change forced a remount — that was the
-    unresponsive zoom/theme and the missing shell output.
+    blink) are pushed to the client immediately.
+
+    The WebSocket is NOT created here (it lives on the entry, managed by the
+    panel) — that is precisely why switching tabs no longer drops the shell.
     """
     page = ft.context.page
 
@@ -132,102 +273,16 @@ def _TerminalHost(
         entry.mt = mt
     mt = entry.mt
 
-    def _safe_run_task(task_fn, *args):
-        try:
-            if getattr(page, "_session", getattr(page, "session", None)):
-                page.run_task(task_fn, *args)
-        except RuntimeError:
-            logger.exception("run_task failed")
-
-    def _on_stdout(text: str):
-        # Terminal.send_bytes buffers internally until the widget mounts and
-        # flushes on did_mount — no external mount gate or buffer needed.
-        mt.send_bytes(text.encode("utf-8", errors="ignore"))
-
-    def _on_status(msg: str, ok: bool):
-        if ps.active_id == entry.id:
-            ps.status = msg
-            ps.status_ok = ok
-            ps.connecting = not ok
-
-    def _on_bytes(payload: bytes | str):
-        if entry.client:
-            data = (
-                payload
-                if isinstance(payload, bytes)
-                else payload.encode("utf-8", errors="ignore")
-            )
-            _safe_run_task(entry.client.send_input, data)
-
-    def _on_resize(ev):
-        if entry.client and ev.data:
-            try:
-                info = json.loads(ev.data)
-                _safe_run_task(
-                    entry.client.set_size,
-                    info.get("rows", 24),
-                    info.get("cols", 80),
-                )
-            except Exception:
-                logger.exception("Error handling terminal resize")
-
     # Wire handlers exactly once, before the first patch freezes the tree.
     if not entry.wired:
-        mt.set_on_bytes(_on_bytes)
-        mt.on_data = lambda e: _on_bytes(
+        mt.set_on_bytes(handlers["on_bytes"])
+        mt.on_data = lambda e: handlers["on_bytes"](
             e.data if isinstance(e.data, str) else str(e.data)
         )
-        mt.on_resize = _on_resize
+        mt.on_resize = handlers["on_resize"]
+        # Firmware-level remount hook (Dart `initState` → "mount" event).
+        mt._terminal.on_mount = handlers["on_mount"]
         entry.wired = True
-
-    async def _connect():
-        session_info = await _get_terminal_session(colab_service, session_name)
-        if not session_info:
-            ps.status = "Session not found."
-            ps.status_ok = False
-            if snack:
-                snack("Session not found in store.")
-            return
-
-        ps.status = f"Connecting Terminal {entry.id}…"
-        ps.status_ok = False
-        ps.connecting = True
-        try:
-            ws_url = await asyncio.to_thread(
-                colab_service.create_terminal_ws_url,
-                session_info["url"],
-                session_info["token"],
-            )
-
-            client = colab_service.get_terminal_client(ws_url, _on_stdout, _on_status)
-            entry.client = client
-
-            await client.connect()
-            entry.ready = True
-
-            if entry.client:
-                # Colab PTYs open in /root; move to the shared data dir.
-                _safe_run_task(entry.client.send_input, "cd /content\r\n")
-
-        except Exception as ex:
-            logger.exception("Terminal %s init failed", entry.id)
-            if ps.active_id == entry.id:
-                ps.status = f"Error: {ex}"
-                ps.status_ok = False
-                ps.connecting = False
-            if snack:
-                snack(f"Terminal {entry.id} error: {ex}")
-
-    def _close_client():
-        if entry.client:
-            try:
-                entry.client.close()
-            except Exception:
-                logger.exception("Terminal client close failed")
-
-    # Open the WebSocket once mounted; close the socket on unmount.
-    ft.on_mounted(lambda: page.run_task(_connect))
-    ft.use_effect(lambda: None, [], cleanup=_close_client)
 
     return mt
 
@@ -251,18 +306,30 @@ def TerminalPanel(
     def _active_entry():
         return next((t for t in ps.terminals if t.id == ps.active_id), None)
 
-    # ── Terminal lifecycle ────────────────────────────────────────────────────
+    # ── Terminal lifecycle (panel-owned WebSockets) ─────────────────────────
+    async def _connect_entry(entry: TerminalEntry):
+        await entry._handlers["connect"]()
+
     def _create_terminal():
-        """Register a new terminal tab. The actual MobileTerminal widget is
-        built during render by _TerminalHost, and its WebSocket connects on
-        mount — see _TerminalHost for why that matters."""
+        """Register a new terminal tab and start its WebSocket.
+
+        Handlers are built synchronously here so the first render of
+        _TerminalHost can wire them immediately; the socket connects from a
+        task right after. The MobileTerminal widget itself is built during
+        render by _TerminalHost.
+        """
         new_id = ps.next_id
         ps.next_id = new_id + 1
         ps.active_id = new_id
-        ps.terminals.append(TerminalEntry(new_id))
+        entry = TerminalEntry(new_id)
+        entry._handlers = _make_entry_handlers(
+            entry, ps, page, colab_service, session_name, snack
+        )
+        ps.terminals.append(entry)
         ps.status = f"Opening Terminal {new_id}…"
         ps.status_ok = False
         ps.connecting = True
+        page.run_task(entry._handlers["connect"])
 
     def _close_terminal(tid: int):
         idx = next((i for i, t in enumerate(ps.terminals) if t.id == tid), -1)
@@ -292,8 +359,23 @@ def TerminalPanel(
 
     def _init_panel():
         _close_all_clients()
+        for t in ps.terminals:
+            t.mt = None  # widgets are owned per-panel-instance
         ps.terminals.clear()
         _create_terminal()
+
+    async def _reconnect_dead():
+        """Reconnect terminals whose sockets are no longer alive.
+
+        Called from the app lifecycle resume hook — Colab's WS proxy closes
+        idle sockets while the app is backgrounded but the PTY itself stays
+        up, so ColabTerminalClient.reconnect() re-attaches to the same shell.
+        """
+        for entry in ps.terminals:
+            client = entry.client
+            if client is not None and not client.alive:
+                logger.info("Reconnecting terminal %s on app resume", entry.id)
+                await client.reconnect()
 
     # ── Actions exposed to the SessionScreen FAB overflow menu ───────────────
     def _changed_settings():
@@ -391,9 +473,19 @@ def TerminalPanel(
             }
         )
 
-    # Self-initialize on mount; close all sockets on unmount.
-    ft.on_mounted(_init_panel)
-    ft.use_effect(lambda: None, [], cleanup=_close_all_clients)
+    # Self-initialize on mount; register the resume-reconnect hook globally
+    # so main.py's lifecycle handler can reach it, and clear on unmount.
+    def _on_mount():
+        app_state.terminal_reconnect = _reconnect_dead
+        _init_panel()
+
+    def _cleanup():
+        _close_all_clients()
+        if getattr(app_state, "terminal_reconnect", None) is _reconnect_dead:
+            app_state.terminal_reconnect = None
+
+    ft.on_mounted(_on_mount)
+    ft.use_effect(lambda: None, [], cleanup=_cleanup)
 
     # Follow the app's light/dark mode: re-apply the terminal theme whenever
     # the requested mode changes or the OS flips brightness in SYSTEM mode.
@@ -540,9 +632,7 @@ def TerminalPanel(
             content=_TerminalHost(
                 entry=t,
                 ps=ps,
-                session_name=session_name,
-                colab_service=colab_service,
-                snack=snack,
+                handlers=t._handlers or {},
                 key=ft.ValueKey(f"host_{t.id}"),
             ),
             visible=t.id == ps.active_id,

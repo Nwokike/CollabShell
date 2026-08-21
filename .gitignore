@@ -29,3 +29,4 @@ storage/
 *.jks
 *.keystore
 release_notes.md
+.zcode/

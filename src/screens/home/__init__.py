@@ -330,7 +330,6 @@ def HomeScreen() -> ft.Control:
                 ),
                 padding=ft.Padding(0, tokens.SPACE_SM, 0, 0),
             ),
-            build_banner_ad(page),
             # Sessions header & list
             ft.Container(
                 content=ft.Row(

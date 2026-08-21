@@ -1,13 +1,13 @@
 [project]
 name = "collabshell"
-version = "2.0.0"
+version = "2.0.1"
 description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "flet>=0.86.5",
     "flet-ads>=0.86.5",
-    "flet-terminal>=0.3.6",
+    "flet-terminal>=0.3.7",
     "google-colab-cli>=0.6.0",
     # google-colab-cli 0.6.0 calls jupyter_kernel_client.KernelClient(...),
     # which jupyter-kernel-client 1.0.0 renamed to JupyterKernelClient.
@@ -19,7 +19,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 5
+build_number = 6
 
 [tool.flet.app]
 path = "src"

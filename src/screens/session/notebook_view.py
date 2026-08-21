@@ -210,27 +210,30 @@ def NotebookView(
                 controller.show_snack(f"❌ Export failed: {ex}", is_error=True)
 
     async def _import_ipynb(e=None):
-        from services.ipynb_converter import ipynb_to_cells
+        """Import a `.ipynb` notebook, or a `.py` script (becomes code cells)."""
+        from services.ipynb_converter import ipynb_to_cells, py_to_cells
 
         try:
             files = await page.file_picker.pick_files(
                 file_type=ft.FilePickerFileType.CUSTOM,
-                allowed_extensions=["ipynb"],
+                allowed_extensions=["ipynb", "py"],
                 allow_multiple=False,
             )
             if files:
                 fpath = files[0].path
                 if fpath:
                     raw = Path(fpath).read_text(encoding="utf-8")
-                    ipynb_data = json.loads(raw)
-                    imported = ipynb_to_cells(ipynb_data)
+                    if files[0].name.lower().endswith(".py"):
+                        imported = py_to_cells(raw)
+                    else:
+                        imported = ipynb_to_cells(json.loads(raw))
                     _publish([CellData.from_dict(c) for c in imported])
                     _save()
                     controller.show_snack(
-                        f"✅ Imported {len(imported)} cells from {files[0].name}"
+                        f"✅ Imported {len(imported)} cell{'s' if len(imported) != 1 else ''} from {files[0].name}"
                     )
         except Exception as ex:
-            logger.exception("Import .ipynb failed")
+            logger.exception("Import notebook failed")
             controller.show_snack(f"❌ Import failed: {ex}", is_error=True)
 
     # Expose notebook actions to the SessionScreen FAB overflow menu.

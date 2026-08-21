@@ -37,6 +37,9 @@ class AppState:
     theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
     theme_revision: int = 0  # bumped on platform-brightness change (SYSTEM mode)
     terminal_settings_rev: int = 0  # bumped when terminal settings change (FAB rebuild)
+    # Callable set by the active TerminalPanel; invoked on app RESUME so
+    # dropped terminal WebSockets re-attach to their still-alive PTYs.
+    terminal_reconnect = None
     is_loading: bool = False
     app_ready: bool = False
     cli_available: bool = False

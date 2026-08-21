@@ -128,7 +128,7 @@ def build_session_fab(
         # Import is always available — you can import a notebook into an empty
         # one. Export and Clear All are only meaningful once cells exist.
         menu_items.append(
-            _item("Import .ipynb", ft.Icons.UPLOAD_FILE_ROUNDED, on_import_ipynb)
+            _item("Import .ipynb / .py", ft.Icons.UPLOAD_FILE_ROUNDED, on_import_ipynb)
         )
         if has_cells:
             menu_items.extend(

@@ -1,10 +1,17 @@
 import asyncio
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable
 
 logger = logging.getLogger("colab_service")
+
+
+def _extract_term_name(ws_url: str) -> str | None:
+    """Extract the PTY terminal name embedded in a Colab terminal WS URL."""
+    m = re.search(r"/terminals/websocket/([^/?#]+)", ws_url)
+    return m.group(1) if m else None
 
 
 class ColabService:
@@ -112,20 +119,41 @@ class ColabService:
             stdin_hook,
         )
 
-    def create_terminal_ws_url(self, raw_url: str, token: str) -> str:
+    def create_terminal_ws_url(
+        self, raw_url: str, token: str, term_name: str | None = None
+    ) -> str:
         from services.colab.terminal_client import create_terminal_ws_url as _create
 
-        return _create(raw_url, token)
+        return _create(raw_url, token, term_name)
 
     def get_terminal_client(
         self,
-        ws_url: str,
+        raw_url: str,
+        token: str,
         on_stdout: Callable[[str], None],
         on_status: Callable[[str, bool], None] | None = None,
+        term_name: str | None = None,
     ):
-        from services.colab.terminal_client import ColabTerminalClient
+        """Build a terminal client (creating a fresh PTY when no `term_name`).
 
-        return ColabTerminalClient(ws_url, on_stdout, on_status)
+        The raw URL/token are cached on the client so it can later re-attach to
+        the same PTY after a dropped socket instead of minting a new shell.
+        """
+        from services.colab.terminal_client import (
+            ColabTerminalClient,
+            create_terminal_ws_url,
+        )
+
+        ws_url = create_terminal_ws_url(raw_url, token, term_name)
+        parsed_term_name = term_name or _extract_term_name(ws_url)
+        return ColabTerminalClient(
+            ws_url,
+            on_stdout,
+            on_status,
+            base_url=raw_url,
+            token=token,
+            term_name=parsed_term_name,
+        )
 
     async def ls(
         self,

@@ -537,6 +537,16 @@ class AppController:
                             session_name, ep, state.auth_method
                         )
 
+            # Terminal WebSockets die while the app is backgrounded (Colab's
+            # proxy closes idle sockets) but the PTYs stay alive — re-attach.
+            reconnect_terminals = getattr(state, "terminal_reconnect", None)
+            if state.is_online and callable(reconnect_terminals):
+                try:
+                    await reconnect_terminals()
+                    logger.info("[lifecycle] terminal reconnect pass complete")
+                except Exception:
+                    logger.exception("[lifecycle] terminal reconnect failed")
+
         page.on_app_lifecycle_state_change = _on_lifecycle_change
 
         # Android hardware BACK: close the active subview (session/history)
