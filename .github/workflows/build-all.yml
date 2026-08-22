@@ -13,7 +13,7 @@ on:
       build_number:
         description: "Build number"
         required: true
-        default: "6"
+        default: "7"
 
 permissions:
   contents: write
@@ -23,7 +23,7 @@ env:
   FLET_CLI_NO_RICH_OUTPUT: "1"
   UV_PYTHON: "3.14"
   BUILD_VERSION: ${{ inputs.build_version || '2.0.1' }}
-  BUILD_NUMBER: ${{ inputs.build_number || '6' }}
+  BUILD_NUMBER: ${{ inputs.build_number || '7' }}
 
 jobs:
   # ─── 0. Create Release Tag & Placeholder ───────────────
@@ -94,6 +94,8 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v
+      - name: Verify 16 KB page alignment (Google Play requirement)
+        run: python scripts/check_elf_alignment.py build/apk/*.apk
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -134,6 +136,8 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+      - name: Verify 16 KB page alignment (Google Play requirement)
+        run: python scripts/check_elf_alignment.py build/aab/*.aab
       - name: Upload directly to GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
