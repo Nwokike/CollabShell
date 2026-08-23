@@ -231,7 +231,7 @@ jobs:
           mkdir -p build/dist
 
           # 1. Universal Portable .tar.gz
-          tar -czf build/dist/CollabShell_${{ env.BUILD_VERSION }}_linux_x86_64.tar.gz -C build/linux .
+          tar -czf build/dist/CollabShell_linux_x86_64.tar.gz -C build/linux .
 
           # 2. Stage filesystem tree for rich .deb and .rpm packages
           mkdir -p pkg_root/usr/lib/collabshell pkg_root/usr/bin pkg_root/usr/share/applications pkg_root/usr/share/icons/hicolor/256x256/apps pkg_root/usr/share/pixmaps pkg_root/usr/share/metainfo
@@ -291,7 +291,7 @@ jobs:
               --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "utils" \
-              -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_amd64.deb \
+              -p build/dist/CollabShell_amd64.deb \
               -C pkg_root .
 
           # Build rich .rpm using fpm
@@ -301,7 +301,7 @@ jobs:
               --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "Utility" \
-              -p build/dist/CollabShell_${{ env.BUILD_VERSION }}_x86_64.rpm \
+              -p build/dist/CollabShell_x86_64.rpm \
               -C pkg_root .
 
       - name: Upload directly to GitHub Release

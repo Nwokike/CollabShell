@@ -31,6 +31,16 @@ def test_help_body_with_context_is_flat_controls():
         # context section appends a divider + its rows — all flat controls
         assert any(isinstance(c, ft.Divider) for c in body)
         _assert_flat_controls(body)
+        # context sheets stay focused: exactly one extra section (one divider)
+        assert sum(isinstance(c, ft.Divider) for c in body) == 1
+
+
+def test_help_body_global_contains_every_screen_section():
+    """Home visitors must see ALL screens' shortcuts, not just General."""
+    body = build_help_body("global")
+    _assert_flat_controls(body)
+    # one divider per screen section (notebook, terminal, files)
+    assert sum(isinstance(c, ft.Divider) for c in body) == 3
 
 
 def test_help_body_unknown_context_falls_back_to_global_only():
