@@ -77,6 +77,9 @@ def NotebookCell(
     on_source_change: Callable[[str], None] | None = None,
     on_clear_output: Callable[[], None] | None = None,
     on_open_terminal: Callable[[], None] | None = None,
+    is_active: bool = False,
+    on_focus_change: Callable[[str, bool], None] | None = None,
+    focus_token: int = 0,
 ) -> ft.Control:
     """Renders one notebook cell. Re-renders reactively when `cell` changes."""
     page = ft.context.page
@@ -84,11 +87,27 @@ def NotebookCell(
     # Hooks must run unconditionally in the same order on every render,
     # regardless of cell type.
     parse_cache = ft.use_ref(lambda: {"rev": -1, "count": 0, "controls": []})
+    editor_ref = ft.use_ref(None)
+
+    def _focus_effect():
+        # focus_token > 0 asks this cell's editor to grab focus after render
+        # (shortcut: run-and-advance, insert cell, toggle type).
+        if focus_token and editor_ref.current is not None:
+            try:
+                page.run_task(editor_ref.current.focus)
+            except RuntimeError:
+                pass
+
+    ft.use_effect(_focus_effect, [focus_token])
 
     def _commit_source(value: str):
         cell.source = value
         if on_source_change:
             on_source_change(value)
+
+    def _report_focus(focused: bool):
+        if on_focus_change:
+            on_focus_change(cell.id, focused)
 
     def _finish_markdown_edit(value: str | None = None):
         """Commit the latest text and render — used by Done and on_blur so
@@ -124,8 +143,13 @@ def NotebookCell(
                         text_size=tokens.FONT_SM,
                         border_color=ft.Colors.TRANSPARENT,
                         bgcolor=ft.Colors.TRANSPARENT,
+                        ref=editor_ref,
+                        on_focus=lambda e: _report_focus(True),
+                        on_blur=lambda e: (
+                            _finish_markdown_edit(e.control.value or ""),
+                            _report_focus(False),
+                        ),
                         on_change=lambda e: _commit_source(e.control.value or ""),
-                        on_blur=lambda e: _finish_markdown_edit(e.control.value or ""),
                         hint_text="Type markdown here...",
                         content_padding=tokens.SPACE_SM,
                         expand=True,
@@ -211,7 +235,13 @@ def NotebookCell(
             content=content,
             border_radius=tokens.RADIUS_MD,
             bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.ON_SURFACE),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+            border=(
+                ft.Border(left=ft.BorderSide(3, ft.Colors.PRIMARY))
+                if is_active
+                else ft.Border.all(
+                    1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)
+                )
+            ),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )
 
@@ -330,6 +360,9 @@ def NotebookCell(
                     ),
                     border_color=ft.Colors.TRANSPARENT,
                     bgcolor=ft.Colors.TRANSPARENT,
+                    ref=editor_ref,
+                    on_focus=lambda e: _report_focus(True),
+                    on_blur=lambda e: _report_focus(False),
                     on_change=lambda e: _commit_source(e.control.value or ""),
                     hint_text=(
                         "Write Python code here.\nPrefix with ! to run a terminal"
@@ -399,7 +432,12 @@ def NotebookCell(
         ),
         padding=tokens.SPACE_SM,
         border=ft.Border(
-            left=ft.BorderSide(3, ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE)),
+            left=ft.BorderSide(
+                3,
+                ft.Colors.PRIMARY
+                if is_active
+                else ft.Colors.with_opacity(0.2, ft.Colors.ON_SURFACE),
+            ),
         ),
         margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
     )

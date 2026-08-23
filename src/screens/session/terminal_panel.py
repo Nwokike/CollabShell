@@ -29,6 +29,7 @@ from collections.abc import Callable
 import flet as ft
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
+from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.state import state as app_state
 from core.theme import AppColors, is_light_theme
@@ -39,6 +40,14 @@ logger = logging.getLogger("colab")
 # when the Dart xterm widget is recreated (tab switch, remount). Roughly
 # 2000 chunks ⇒ several screens of output on a busy shell.
 _SCROLLBACK_CHUNKS = 2000
+
+
+def _compact_btn_style() -> ft.ButtonStyle:
+    """Snug toolbar buttons — no Material 48dp minimum tap box."""
+    return ft.ButtonStyle(
+        padding=2,
+        visual_density=ft.VisualDensity.COMPACT,
+    )
 
 
 def _active_theme_name(page: ft.Page | None = None) -> str:
@@ -241,6 +250,7 @@ def _TerminalHost(
     entry: TerminalEntry,
     ps: TerminalPanelState,
     handlers: dict,
+    on_shortcut: Callable[[str], None] | None = None,
 ) -> ft.Control:
     """Owns the MobileTerminal widget for one tab.
 
@@ -282,6 +292,10 @@ def _TerminalHost(
         mt.on_resize = handlers["on_resize"]
         # Firmware-level remount hook (Dart `initState` → "mount" event).
         mt._terminal.on_mount = handlers["on_mount"]
+        # Dart-intercepted host shortcuts (flet-terminal ≥0.3.8). The combos
+        # are consumed before the PTY, so they arrive only as events.
+        if on_shortcut is not None:
+            mt.on_shortcut = lambda e: on_shortcut(e.shortcut)
         entry.wired = True
 
     return mt
@@ -377,6 +391,83 @@ def TerminalPanel(
                 logger.info("Reconnecting terminal %s on app resume", entry.id)
                 await client.reconnect()
 
+    async def _reconnect_active():
+        """Manual reconnect for the active tab (top-bar / shortcut)."""
+        entry = _active_entry()
+        if entry is None:
+            return
+        if entry.client is None:
+            ps.status = f"Connecting Terminal {entry.id}…"
+            ps.connecting = True
+            await entry._handlers["connect"]()
+            return
+        if entry.client.alive:
+            if snack:
+                snack(f"Terminal {entry.id} is already connected.")
+            return
+        ps.status = f"Reconnecting Terminal {entry.id}…"
+        ps.connecting = True
+        try:
+            await entry.client.reconnect()
+        except Exception as ex:
+            logger.exception("Manual reconnect failed for terminal %s", entry.id)
+            if snack:
+                snack(f"Reconnect failed: {ex}", is_error=True)
+
+    def _cycle_theme():
+        names = list(BUILTIN_THEMES.keys())
+        try:
+            idx = names.index(ps.theme)
+        except ValueError:
+            idx = 0
+        _set_theme(names[(idx + 1) % len(names)])
+
+    def _switch_terminal_delta(delta: int):
+        if not ps.terminals:
+            return
+        ids = [t.id for t in ps.terminals]
+        try:
+            pos = ids.index(ps.active_id)
+        except ValueError:
+            pos = 0
+        ps.active_id = ids[(pos + delta) % len(ids)]
+
+    def _handle_shortcut(name: str):
+        """Dispatch Dart-intercepted terminal combos (flet-terminal ≥0.3.8)."""
+        if name == "help":
+            open_shortcuts_help(page, "terminal")
+        elif name == "new_terminal":
+            _create_terminal()
+        elif name == "close_terminal":
+            _close_terminal(ps.active_id)
+        elif name.startswith("switch_terminal_"):
+            try:
+                target = int(name.rsplit("_", 1)[1])
+            except ValueError:
+                return
+            if any(t.id == target for t in ps.terminals):
+                ps.active_id = target
+        elif name == "prev_terminal":
+            _switch_terminal_delta(-1)
+        elif name == "next_terminal":
+            _switch_terminal_delta(1)
+        elif name == "toggle_search":
+            _toggle_search()
+        elif name == "clear":
+            _clear_terminal()
+        elif name == "copy":
+            page.run_task(_copy_selection)
+        elif name == "paste":
+            entry = _active_entry()
+            if entry and entry.mt:
+                entry.mt.paste()
+        elif name == "zoom_in":
+            _zoom_in()
+        elif name == "zoom_out":
+            _zoom_out()
+        elif name == "zoom_reset":
+            _zoom_reset()
+
     # ── Actions exposed to the SessionScreen FAB overflow menu ───────────────
     def _changed_settings():
         app_state.terminal_settings_rev += 1
@@ -451,6 +542,9 @@ def TerminalPanel(
         register_actions(
             {
                 "new_terminal": lambda: _create_terminal(),
+                "close_terminal": lambda: _close_terminal(ps.active_id),
+                "reconnect": lambda: page.run_task(_reconnect_active),
+                "cycle_theme": _cycle_theme,
                 "clear_terminal": _clear_terminal,
                 "copy": lambda: page.run_task(_copy_selection),
                 "paste": lambda: (
@@ -581,26 +675,40 @@ def TerminalPanel(
             icon=ft.Icons.ADD_ROUNDED,
             icon_size=tokens.ICON_SM,
             tooltip="New Terminal",
+            style=_compact_btn_style(),
             on_click=lambda e: _create_terminal(),
         )
     )
 
-    # Inline zoom controls: tap repeatedly to zoom in/out without opening the
-    # FAB (each tap is one step). Mirrors the flet_terminal example appbar.
-    # Search and theme-cycle buttons were removed — they were unresponsive on
-    # mobile; theming is handled by the FAB menu and follows the app mode.
+    # Compact action cluster: Material's default ~48dp tap box per IconButton
+    # is what created the wide gaps; COMPACT density + tight padding keeps the
+    # icons snug while staying comfortably tappable.
+    reconnect_btn = ft.IconButton(
+        icon=ft.Icons.SYNC_ROUNDED,
+        icon_size=tokens.ICON_SM,
+        tooltip="Reconnect Terminal",
+        style=_compact_btn_style(),
+        on_click=lambda e: page.run_task(_reconnect_active),
+    )
+    theme_btn = ft.IconButton(
+        icon=ft.Icons.PALETTE_ROUNDED,
+        icon_size=tokens.ICON_SM,
+        tooltip="Cycle Terminal Theme",
+        style=_compact_btn_style(),
+        on_click=lambda e: _cycle_theme(),
+    )
     zoom_out_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_OUT,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom Out",
-        style=ft.ButtonStyle(padding=0),
+        style=_compact_btn_style(),
         on_click=lambda e: _zoom_out(),
     )
     zoom_in_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_IN,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom In",
-        style=ft.ButtonStyle(padding=0),
+        style=_compact_btn_style(),
         on_click=lambda e: _zoom_in(),
     )
 
@@ -615,6 +723,8 @@ def TerminalPanel(
                     ),
                     expand=True,
                 ),
+                reconnect_btn,
+                theme_btn,
                 zoom_out_btn,
                 zoom_in_btn,
             ],
@@ -633,6 +743,7 @@ def TerminalPanel(
                 entry=t,
                 ps=ps,
                 handlers=t._handlers or {},
+                on_shortcut=_handle_shortcut,
                 key=ft.ValueKey(f"host_{t.id}"),
             ),
             visible=t.id == ps.active_id,

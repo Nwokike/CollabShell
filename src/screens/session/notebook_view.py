@@ -17,7 +17,9 @@ import flet as ft
 
 from components.notebook_cell import CellData, NotebookCell
 from components.notebook_toolbar import build_notebook_toolbar
+from components.shortcuts_help import open_shortcuts_help
 from core import constants, tokens
+from core.shortcuts import Binding
 from core.stdin_hook import show_stdin_dialog
 from core.styles import build_banner_ad
 from screens.files.modal import show_manage_files_modal
@@ -36,6 +38,7 @@ def NotebookView(
     on_switch_terminal,
     register_actions=None,
     on_cells_change=None,
+    register_bindings=None,
 ) -> ft.Control:
     state = ft.use_context(AppStateCtx)
     services = ft.use_context(ServiceCtx)
@@ -45,6 +48,14 @@ def NotebookView(
     cells, set_cells = ft.use_state([])
     cells_ref = ft.use_ref([])
     save_debounce_ref = ft.use_ref(None)
+    # ── Active-cell model (keyboard shortcuts) ───────────────────────────────
+    # The active cell is the last one whose editor held focus (sticky — it
+    # survives blur, matching Jupyter's selection model). Run/move/delete
+    # shortcuts target it. focus_req is (cell_id, counter): bumping the
+    # counter asks that cell's editor to grab focus after the next render.
+    active_cell_id, set_active_cell_id = ft.use_state("")
+    focus_req, set_focus_req = ft.use_state(("", 0))
+    focus_sink_ref = ft.use_ref(None)
 
     def _publish(new_list: list):
         cells_ref.current = new_list
@@ -171,6 +182,95 @@ def NotebookView(
         cell.outputs_rev += 1
         _save()
 
+    # ── Active-cell operations (keyboard shortcuts) ──────────────────────────
+    def _active_cell() -> CellData | None:
+        c_list = cells_ref.current or []
+        for c in c_list:
+            if c.id == active_cell_id:
+                return c
+        return c_list[-1] if c_list else None
+
+    def _focus_cell(cell_id: str):
+        set_focus_req((cell_id, (focus_req[1] or 0) + 1))
+
+    def _on_cell_focus(cell_id: str, focused: bool):
+        if focused and cell_id != active_cell_id:
+            set_active_cell_id(cell_id)
+
+    def _insert_cell_near(above: bool, after_id: str | None = None):
+        """Insert a code cell above/below the active cell (or at the end)."""
+        c_list = list(cells_ref.current or [])
+        anchor_id = after_id or active_cell_id
+        anchor_idx = next(
+            (i for i, c in enumerate(c_list) if c.id == anchor_id), -1
+        )
+        new_cell = CellData(cell_type="code")
+        if anchor_idx == -1:
+            c_list.append(new_cell)
+        else:
+            c_list.insert(anchor_idx if above else anchor_idx + 1, new_cell)
+        _publish(c_list)
+        _save()
+        set_active_cell_id(new_cell.id)
+        _focus_cell(new_cell.id)
+
+    def _delete_active():
+        cell = _active_cell()
+        if cell:
+            _delete_cell(cell)
+
+    def _move_active(direction: int):
+        cell = _active_cell()
+        if cell:
+            _move_cell(cell, direction)
+
+    def _toggle_active_type():
+        cell = _active_cell()
+        if not cell:
+            return
+        if cell.type == "code":
+            cell.type = "markdown"
+            cell.is_editing = True  # edit immediately after switching
+        else:
+            cell.type = "code"
+            cell.is_editing = False
+        _save()
+        _focus_cell(cell.id)
+
+    async def _run_all():
+        for cell in list(cells_ref.current or []):
+            if cell.type == "code" and (cell.source or "").strip():
+                await _run_cell(cell)
+
+    def _shortcut_run(advance: str):
+        """Run the active cell; advance = "next" | "insert" | "inplace"."""
+        cell = _active_cell()
+        if cell is None:
+            return
+        page.run_task(_run_cell, cell)
+        if advance == "inplace":
+            return
+        c_list = list(cells_ref.current or [])
+        idx = next((i for i, c in enumerate(c_list) if c.id == cell.id), -1)
+        if advance == "insert" or idx == len(c_list) - 1:
+            _insert_cell_near(above=False, after_id=cell.id)
+        elif idx >= 0:
+            _focus_cell(c_list[idx + 1].id)
+
+    def _blur_editor():
+        """Escape: pull focus out of the editor so markdown renders on blur.
+
+        TextField has no blur() in Flet 0.86, so focus travels to an
+        invisible focusable sink instead.
+        """
+        sink = focus_sink_ref.current
+        if sink is not None:
+            try:
+                page.run_task(sink.focus)
+            except RuntimeError:
+                logger.debug("Focus sink not ready", exc_info=True)
+
+
     def _clear_all_outputs(e=None):
         for cell in cells_ref.current or []:
             cell.outputs.clear()
@@ -244,6 +344,28 @@ def NotebookView(
                 "import_ipynb": lambda: page.run_task(_import_ipynb),
                 "clear_all": _clear_all_outputs,
             }
+        )
+
+    # Refresh the shortcut binding table every render so the router always
+    # sees current closures (cells, handlers). Writing to the session's ref
+    # is side-effect free — no re-render loop.
+    if register_bindings:
+        register_bindings(
+            [
+                (Binding("Enter", ctrl=True, shift=True), lambda: page.run_task(_run_all)),
+                (Binding("Enter", shift=True), lambda: _shortcut_run("next")),
+                (Binding("Enter", alt=True), lambda: _shortcut_run("insert")),
+                (Binding("Enter", ctrl=True), lambda: _shortcut_run("inplace")),
+                (Binding("s", ctrl=True), lambda: page.run_task(_export_ipynb)),
+                (Binding("a", ctrl=True, shift=True), lambda: _insert_cell_near(True)),
+                (Binding("b", ctrl=True, shift=True), lambda: _insert_cell_near(False)),
+                (Binding("ArrowUp", alt=True), lambda: _move_active(-1)),
+                (Binding("ArrowDown", alt=True), lambda: _move_active(1)),
+                (Binding("d", ctrl=True, shift=True), _delete_active),
+                (Binding("m", ctrl=True, shift=True), _toggle_active_type),
+                (Binding("Escape"), _blur_editor),
+                (Binding("F1"), lambda: open_shortcuts_help(page, "notebook")),
+            ]
         )
 
     # ── Keep-alive & Action row ───────────────────────────────────────────────
@@ -396,10 +518,21 @@ def NotebookView(
                 on_source_change=lambda value: _debounced_save(),
                 on_clear_output=lambda c=cell: _clear_cell_output(c),
                 on_open_terminal=on_switch_terminal,
+                is_active=cell.id == active_cell_id,
+                on_focus_change=_on_cell_focus,
+                focus_token=(focus_req[1] if focus_req[0] == cell.id else 0),
             )
         )
         if (i + 1) % 2 == 0:
             cell_controls.append(build_banner_ad(page))
+
+    # Invisible focusable sink — Escape moves focus here so editors blur and
+    # markdown cells render (kept 1px, not 0, so the focus node stays live).
+    focus_sink = ft.KeyboardListener(
+        content=ft.Container(width=1, height=1, content=ft.Container(width=0, height=0)),
+        ref=focus_sink_ref,
+    )
+
 
     notebook_body = ft.Column(
         controls=[
@@ -413,8 +546,9 @@ def NotebookView(
             ),
             build_banner_ad(page),
             ft.Container(height=tokens.SPACE_XXXL * 3),
+            focus_sink,
         ],
-        spacing=tokens.SPACE_SM,
+        spacing=0,
         scroll=ft.ScrollMode.AUTO,
         expand=True,
     )

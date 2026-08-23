@@ -133,15 +133,16 @@
 
 ## Features
 
+- **Desktop Keyboard Shortcuts (F1 for the cheat sheet)** — Jupyter-standard notebook shortcuts (Shift+Enter run & advance, Ctrl+Enter run in place, Alt+Enter run & insert, Ctrl+S export `.ipynb`), leak-free terminal combos intercepted before the PTY (Ctrl+Shift+T/W/F/L/C/V, Ctrl+Shift+1..9, zoom), and Files shortcuts (F5 refresh, Alt+Up parent, Ctrl+A select all).
 - **React-Like Declarative UI (Flet 0.86)** — The entire app is built on Flet's new functional component model (`@ft.component`, `@ft.observable`, `use_state`, `use_effect`): state mutations trigger surgical re-renders instead of full-page repaints.
 - **Collab Shell-Branded Design System** — Adaptive light and dark themes styled to the Google Colab branding palette; terminal, cards, and glass surfaces all follow the active mode automatically.
-- **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`).
+- **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`), with inline theme cycling, one-tap reconnect, and zoom.
 - **Universal Storage & History Normalization** — Monkey-patched backend state persistence (`storage_patch.py`) guaranteeing history and execution logs save reliably across Android and Linux desktops.
 - **Native OS File Picker & Zip-and-Download** — Save files anywhere on your OS/Android device without permission headaches, and archive entire cloud folders on the fly.
 - **Dynamic Onboarding Guide** — 3-step walk-through onboarding introducing features with gesture-swipe controls.
 - **Preloaded Interstitial Ads** — Intelligent Google AdMob integration displaying ads seamlessly on mobile platforms.
 - **Non-Blocking Execution** — Asynchronous connection wrappers ensuring the Flet UI stays fully responsive during long remote computations.
-- **Ruff Compliance** — Clean, formatted, and strictly linted Python codebase.
+- **Tested & Ruff-Compliant** — pytest suite for the shortcut engine and notebook model; clean, formatted, strictly linted codebase.
 
 ---
 

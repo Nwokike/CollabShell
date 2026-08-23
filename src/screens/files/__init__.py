@@ -7,7 +7,9 @@ import posixpath
 import flet as ft
 
 from components.file_item import build_file_item
+from components.shortcuts_help import open_shortcuts_help
 from core import tokens
+from core.shortcuts import Binding, shortcuts_router
 from core.styles import build_banner_ad
 from core.theme import adaptive_glass_bg, adaptive_glass_border
 from screens.files.actions import (
@@ -37,6 +39,57 @@ def FilesScreen(session_name: str) -> ft.Control:
     selection_mode, set_selection_mode = ft.use_state(False)
     is_loading, set_is_loading = ft.use_state(False)
     error_msg, set_error_msg = ft.use_state("")
+
+    # ── Keyboard shortcuts ────────────────────────────────────────────────────
+    # The provider is registered once at mount; the ctx dict is refreshed on
+    # every render so the bindings always see current handlers and values.
+    # Dialog tracking keeps shortcuts from firing while a TextField dialog
+    # (New Folder) is open — Ctrl+A / Escape must reach the dialog, not us.
+    kb_ctx = ft.use_ref(dict)
+    kb_ctx.current = {
+        "path": current_path,
+        "selected": selected,
+        "selection_mode": selection_mode,
+        "names": [item["name"] for item in listing],
+        "dialog_open": False,
+        "handlers": {},  # refreshed below, after handlers are defined
+    }
+
+    def _kb_handler(name: str):
+        return kb_ctx.current["handlers"].get(name)
+
+    def _files_bindings():
+        if kb_ctx.current["dialog_open"]:
+            return []
+        c = kb_ctx.current
+
+        def _up():
+            target = parent_path(c["path"])
+            if target is not None:
+                _navigate(target)
+
+        return [
+            (Binding("F1"), lambda: open_shortcuts_help(page, "files")),
+            (Binding("F5"), lambda: _kb_handler("refresh")()),
+            (Binding("r", ctrl=True), lambda: _kb_handler("refresh")()),
+            (Binding("ArrowUp", alt=True), _up),
+            (Binding("Backspace"), _up),
+            (Binding("a", ctrl=True), lambda: _kb_handler("select_all")()),
+            (Binding("n", ctrl=True, shift=True), lambda: _kb_handler("new_folder")()),
+            (
+                Binding("Delete"),
+                lambda: _kb_handler("delete")() if c["selected"] else None,
+            ),
+            (
+                Binding("Escape"),
+                lambda: _kb_handler("clear_selection")() if c["selection_mode"] else None,
+            ),
+        ]
+
+    def _register_files_shortcuts():
+        return shortcuts_router.register(_files_bindings)
+
+    ft.on_mounted(_register_files_shortcuts)
 
     # ── Fetch directory listing ───────────────────────────────────────────────
     async def _fetch(path: str):
@@ -88,14 +141,27 @@ def FilesScreen(session_name: str) -> ft.Control:
         if not new_sel:
             set_selection_mode(False)
 
+    def _select_all():
+        set_selection_mode(True)
+        set_selected(set(kb_ctx.current["names"]))
+
     # ── Action dialogs ────────────────────────────────────────────────────────
+    # Wrapped so keyboard shortcuts stay disabled while a dialog is open.
+    def _show_dlg(dialog):
+        kb_ctx.current["dialog_open"] = True
+        page.show_dialog(dialog)
+
+    def _close_dlg(e=None):
+        kb_ctx.current["dialog_open"] = False
+        page.pop_dialog()
+
     def _open_new_folder_dialog():
         tf = ft.TextField(
             label="Folder name",
             autofocus=True,
             border_radius=tokens.RADIUS_MD,
             on_submit=lambda e: (
-                page.pop_dialog(),
+                _close_dlg(),
                 page.run_task(
                     do_new_folder_async,
                     page,
@@ -112,7 +178,7 @@ def FilesScreen(session_name: str) -> ft.Control:
 
         def _confirm_create(e):
             val = tf.value or ""
-            page.pop_dialog()
+            _close_dlg()
             page.run_task(
                 do_new_folder_async,
                 page,
@@ -125,14 +191,14 @@ def FilesScreen(session_name: str) -> ft.Control:
                 _fetch,
             )
 
-        page.show_dialog(
+        _show_dlg(
             ft.AlertDialog(
                 title=ft.Text(
                     "New Folder", size=tokens.FONT_MD, weight=ft.FontWeight.W_600
                 ),
                 content=tf,
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.TextButton("Cancel", on_click=lambda e: _close_dlg()),
                     ft.FilledButton("Create", on_click=_confirm_create),
                 ],
             )
@@ -144,7 +210,7 @@ def FilesScreen(session_name: str) -> ft.Control:
             return
 
         def _confirm_delete(e):
-            page.pop_dialog()
+            _close_dlg()
             page.run_task(
                 do_delete_async,
                 page,
@@ -158,13 +224,13 @@ def FilesScreen(session_name: str) -> ft.Control:
                 _fetch,
             )
 
-        page.show_dialog(
+        _show_dlg(
             ft.AlertDialog(
                 modal=True,
                 title=ft.Text(f"Delete {len(names)} item(s)?"),
                 content=ft.Text("This cannot be undone.", size=tokens.FONT_SM),
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.TextButton("Cancel", on_click=lambda e: _close_dlg()),
                     ft.FilledButton(
                         "Delete",
                         style=ft.ButtonStyle(
@@ -175,6 +241,15 @@ def FilesScreen(session_name: str) -> ft.Control:
                 ],
             )
         )
+
+    # Refresh the shortcut handler table with this render's closures.
+    kb_ctx.current["handlers"] = {
+        "refresh": lambda: page.run_task(_fetch, current_path),
+        "select_all": _select_all,
+        "new_folder": _open_new_folder_dialog,
+        "delete": _open_delete_dialog,
+        "clear_selection": _clear_selection,
+    }
 
     # ── Toolbar ───────────────────────────────────────────────────────────────
     if selection_mode:

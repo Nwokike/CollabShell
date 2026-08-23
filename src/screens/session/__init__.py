@@ -7,6 +7,7 @@ import logging
 import flet as ft
 
 from core import tokens
+from core.shortcuts import SUPPRESS, shortcuts_router
 from core.styles import hardware_badge, status_dot
 from screens.files.modal import show_manage_files_modal
 from screens.session.fab_menu import build_session_fab
@@ -32,6 +33,26 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     # Stable panel state survives re-renders; the TerminalPanel component
     # subscribes to it and manages its own WebSocket lifecycle.
     terminal_ps_ref = ft.use_ref(lambda: TerminalPanelState())
+
+    # ── Keyboard shortcut context ────────────────────────────────────────────
+    # While the Terminal tab is active the page-level handler must ignore ALL
+    # keys: terminal combos are owned by flet_terminal's Dart interceptor
+    # (zero PTY leakage) and any global binding (e.g. Ctrl+1..5) would leak
+    # its control bytes into the shell. The refs are refreshed every render
+    # so the once-registered provider always reads current values.
+    session_kb_ref = ft.use_ref(lambda: {"tab": 0, "nb_bindings": []})
+    session_kb_ref.current["tab"] = active_tab
+
+    def _session_bindings():
+        if session_kb_ref.current["tab"] == 1:
+            return SUPPRESS
+        return session_kb_ref.current["nb_bindings"]
+
+    def _register_session_shortcuts():
+        return shortcuts_router.register(_session_bindings)
+
+    ft.on_mounted(_register_session_shortcuts)
+
 
     # ── Shared session actions (used by the FAB on both tabs) ────────────────
     async def _do_restart():
@@ -245,10 +266,11 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 content=NotebookView(
                     session_name=session_name,
                     on_switch_terminal=_switch_to_terminal,
-                    register_actions=lambda actions: nb_actions_ref.current.update(
-                        actions
-                    ),
+                    register_actions=lambda actions: nb_actions_ref.current.update(actions),
                     on_cells_change=set_cells_version,
+                    register_bindings=lambda bindings: session_kb_ref.current.__setitem__(
+                        "nb_bindings", bindings
+                    ),
                 ),
                 expand=True,
                 visible=active_tab == 0,

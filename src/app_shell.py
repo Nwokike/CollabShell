@@ -14,7 +14,10 @@ import flet as ft
 from flet import Control
 
 from components.offline_flow import OfflineFlow
+from components.shortcuts_help import open_shortcuts_help
 from core import constants, tokens
+from core.shortcuts import Binding, shortcuts_router
+from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
 from state import AppStateCtx, ControllerMethodsCtx
 
 logger = logging.getLogger("AppShell")
@@ -42,6 +45,40 @@ def AppShell() -> Control:
     controller = ft.use_context(ControllerMethodsCtx)
     state = ft.use_context(AppStateCtx)
     page = ft.context.page
+
+    # ── 0. Global keyboard shortcuts (desktop) ────────────────────────────────
+    # Registered first so screen contexts (session, files) shadow these via the
+    # router's most-recent-first matching. Kept live by reading observable
+    # state inside the provider, which runs at event time.
+    def _global_bindings():
+        bindings = []
+        if state.app_ready and state.onboarding_done and state.is_authenticated:
+            if not state.active_subview:
+                bindings.extend(
+                    (
+                        Binding(str(i + 1), ctrl=True),
+                        lambda i=i: controller.navigate_tab(i),
+                    )
+                    for i in range(len(_TAB_NAMES))
+                )
+            bindings.append(
+                (
+                    Binding("F1"),
+                    lambda: open_shortcuts_help(
+                        page,
+                        state.session_mode
+                        if state.active_subview == "session"
+                        else "global",
+                    ),
+                )
+            )
+        return bindings
+
+    def _register_global_shortcuts():
+        return shortcuts_router.register(_global_bindings)
+
+    ft.on_mounted(_register_global_shortcuts)
+    use_keyboard_shortcuts(shortcuts_router)
 
     # ── 1. NavigationBar sync via use_effect (Deliberate Page Chrome) ──────────
     def _sync_navigation_bar():
