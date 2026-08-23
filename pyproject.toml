@@ -19,7 +19,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 9
+build_number = 10
 
 [tool.flet.app]
 path = "src"

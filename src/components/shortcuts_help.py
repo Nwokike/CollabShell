@@ -68,10 +68,9 @@ def open_shortcuts_help(page: ft.Page, context: str = "global") -> None:
                     controls=body_controls,
                     spacing=tokens.SPACE_SM,
                     scroll=ft.ScrollMode.AUTO,
-                    tight=True,
+                    height=420,
                 ),
-                width=380,
-                max_height=440,
+                width=400,
             ),
             actions=[
                 ft.FilledButton("Close", on_click=lambda e: page.pop_dialog()),
