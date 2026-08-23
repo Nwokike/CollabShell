@@ -233,6 +233,28 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             set_terminal_ready(True)
         set_tab(idx)
 
+    def _focus_terminal_tab():
+        # Desktop only: returning to the Terminal tab restores keyboard focus
+        # so Dart-intercepted shortcuts keep working without re-clicking the
+        # canvas. Mobile skips this — requestFocus pops the soft keyboard.
+        if active_tab != 1:
+            return
+        try:
+            if page.platform.is_mobile():
+                return
+        except Exception:
+            return
+        ts = terminal_ps_ref.current
+        entry = next((t for t in ts.terminals if t.id == ts.active_id), None)
+        if entry is not None and entry.mt is not None:
+            try:
+                entry.mt.focus()
+            except RuntimeError:
+                pass
+        return
+
+    ft.use_effect(_focus_terminal_tab, [active_tab])
+
     # ── Terminal panel (mounted lazily on first access) ───────────────────────
     if terminal_ready:
         terminal_panel = TerminalPanel(

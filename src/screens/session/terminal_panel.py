@@ -251,6 +251,7 @@ def _TerminalHost(
     ps: TerminalPanelState,
     handlers: dict,
     on_shortcut: Callable[[str], None] | None = None,
+    focus_when_wired: bool = False,
 ) -> ft.Control:
     """Owns the MobileTerminal widget for one tab.
 
@@ -297,6 +298,15 @@ def _TerminalHost(
         if on_shortcut is not None:
             mt.on_shortcut = lambda e: on_shortcut(e.shortcut)
         entry.wired = True
+        # New terminals grab the keyboard immediately on desktop so
+        # Dart-intercepted shortcuts work without an extra click. Hidden
+        # siblings are built too, hence the active-id gate.
+        if focus_when_wired and ps.active_id == entry.id:
+            try:
+                if not page.platform.is_mobile():
+                    mt.focus()
+            except RuntimeError:
+                logger.debug("Initial terminal focus deferred")
 
     return mt
 
@@ -421,6 +431,25 @@ def TerminalPanel(
         except ValueError:
             idx = 0
         _set_theme(names[(idx + 1) % len(names)])
+
+    def _refocus_terminal():
+        """Return keyboard focus to the active terminal after a toolbar click.
+
+        IconButtons steal focus when tapped, which silences every
+        Dart-intercepted shortcut until the canvas is clicked again.
+        Desktop only — on mobile requestFocus pops the soft keyboard.
+        """
+        try:
+            if page.platform.is_mobile():
+                return
+        except Exception:
+            pass
+        entry = _active_entry()
+        if entry and entry.mt:
+            try:
+                entry.mt.focus()
+            except RuntimeError:
+                logger.debug("Terminal focus deferred (page not ready)")
 
     def _switch_terminal_delta(delta: int):
         if not ps.terminals:
@@ -676,7 +705,7 @@ def TerminalPanel(
             icon_size=tokens.ICON_SM,
             tooltip="New Terminal",
             style=_compact_btn_style(),
-            on_click=lambda e: _create_terminal(),
+            on_click=lambda e: (_create_terminal(), _refocus_terminal()),
         )
     )
 
@@ -688,28 +717,28 @@ def TerminalPanel(
         icon_size=tokens.ICON_SM,
         tooltip="Reconnect Terminal",
         style=_compact_btn_style(),
-        on_click=lambda e: page.run_task(_reconnect_active),
+        on_click=lambda e: (page.run_task(_reconnect_active), _refocus_terminal()),
     )
     theme_btn = ft.IconButton(
         icon=ft.Icons.PALETTE_ROUNDED,
         icon_size=tokens.ICON_SM,
         tooltip="Cycle Terminal Theme",
         style=_compact_btn_style(),
-        on_click=lambda e: _cycle_theme(),
+        on_click=lambda e: (_cycle_theme(), _refocus_terminal()),
     )
     zoom_out_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_OUT,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom Out",
         style=_compact_btn_style(),
-        on_click=lambda e: _zoom_out(),
+        on_click=lambda e: (_zoom_out(), _refocus_terminal()),
     )
     zoom_in_btn = ft.IconButton(
         icon=ft.Icons.ZOOM_IN,
         icon_size=tokens.ICON_SM,
         tooltip="Zoom In",
         style=_compact_btn_style(),
-        on_click=lambda e: _zoom_in(),
+        on_click=lambda e: (_zoom_in(), _refocus_terminal()),
     )
 
     switcher_box = ft.Container(
@@ -744,6 +773,7 @@ def TerminalPanel(
                 ps=ps,
                 handlers=t._handlers or {},
                 on_shortcut=_handle_shortcut,
+                focus_when_wired=True,
                 key=ft.ValueKey(f"host_{t.id}"),
             ),
             visible=t.id == ps.active_id,
