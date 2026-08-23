@@ -14,7 +14,7 @@ import flet as ft
 from flet import Control
 
 from components.offline_flow import OfflineFlow
-from components.shortcuts_help import open_shortcuts_help
+from components.shortcuts_help import build_help_button, open_shortcuts_help
 from core import constants, tokens
 from core.shortcuts import Binding, shortcuts_router
 from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
@@ -229,6 +229,7 @@ def AppShell() -> Control:
                                     weight=ft.FontWeight.W_700,
                                 ),
                                 ft.Container(expand=True),
+                                build_help_button(page, "global"),
                                 theme_btn,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -275,6 +276,7 @@ def AppShell() -> Control:
                                         weight=ft.FontWeight.W_700,
                                     ),
                                     ft.Container(expand=True),
+                                    build_help_button(page, "files"),
                                     theme_btn,
                                 ],
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -355,6 +357,7 @@ def AppShell() -> Control:
                     on_click=lambda e: controller.open_history(),
                     visible=state.current_tab == 0,
                 ),
+                build_help_button(page, "global"),
                 theme_btn,
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,

@@ -6,6 +6,7 @@ import logging
 
 import flet as ft
 
+from components.shortcuts_help import build_help_button
 from core import tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
 from core.styles import hardware_badge, status_dot
@@ -330,6 +331,10 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 ),
                 hardware_badge(_accel, _variant),
                 build_tab_switcher(active_tab, _switch_tab),
+                build_help_button(
+                    page,
+                    lambda: "terminal" if session_kb_ref.current["tab"] == 1 else "notebook",
+                ),
                 theme_btn,
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,

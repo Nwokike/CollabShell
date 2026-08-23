@@ -53,19 +53,49 @@ def _section_rows(section_key: str) -> list[ft.Control]:
     return controls
 
 
-def open_shortcuts_help(page: ft.Page, context: str = "global") -> None:
-    """Show the shortcuts cheat sheet — General plus the active screen's set."""
-    body_controls: list[ft.Control] = [_section_rows("global")]
+def build_help_body(context: str = "global") -> list[ft.Control]:
+    """Assemble the dialog body: General section plus the given context's."""
+    # _section_rows() returns a LIST — extend, never append (a nested list
+    # reaches Dart as List<dynamic> where a Control is expected).
+    body_controls: list[ft.Control] = []
+    body_controls.extend(_section_rows("global"))
     if context in SHORTCUT_DOCS and context != "global":
         body_controls.append(ft.Divider(height=1, thickness=1))
-        body_controls.append(_section_rows(context))
+        body_controls.extend(_section_rows(context))
+    return body_controls
 
+
+def build_help_button(page: ft.Page, context: str | None = None) -> ft.Control:
+    """Header "?" button opening the cheat sheet. Desktop only — mobile has
+    no keyboard, so the sheet would be dead weight in the app bar."""
+    try:
+        if page.platform.is_mobile():
+            return ft.Container()
+    except Exception:
+        pass
+
+    def _open(e=None):
+        ctx = context
+        if callable(ctx):
+            ctx = ctx()
+        open_shortcuts_help(page, ctx or "global")
+
+    return ft.IconButton(
+        icon=ft.Icons.KEYBOARD_OUTLINED,
+        icon_size=18,
+        tooltip="Keyboard Shortcuts (F1)",
+        on_click=_open,
+    )
+
+
+def open_shortcuts_help(page: ft.Page, context: str = "global") -> None:
+    """Show the shortcuts cheat sheet — General plus the active screen's set."""
     page.show_dialog(
         ft.AlertDialog(
             title=ft.Text("Keyboard Shortcuts", weight=ft.FontWeight.W_700),
             content=ft.Container(
                 content=ft.Column(
-                    controls=body_controls,
+                    controls=build_help_body(context),
                     spacing=tokens.SPACE_SM,
                     scroll=ft.ScrollMode.AUTO,
                     height=420,
