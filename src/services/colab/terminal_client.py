@@ -282,9 +282,7 @@ class ColabTerminalClient:
                 create_terminal_ws_url, self.base_url, self.token, self.term_name
             )
             await self.connect()
-            logger.info(
-                "Terminal '%s' resumed with fresh connection.", self.term_name
-            )
+            logger.info("Terminal '%s' resumed with fresh connection.", self.term_name)
             return True
         except Exception as ex:
             logger.warning("Manual terminal reconnect failed: %s", ex)

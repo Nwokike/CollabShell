@@ -201,9 +201,7 @@ def NotebookView(
         """Insert a code cell above/below the active cell (or at the end)."""
         c_list = list(cells_ref.current or [])
         anchor_id = after_id or active_cell_id
-        anchor_idx = next(
-            (i for i, c in enumerate(c_list) if c.id == anchor_id), -1
-        )
+        anchor_idx = next((i for i, c in enumerate(c_list) if c.id == anchor_id), -1)
         new_cell = CellData(cell_type="code")
         if anchor_idx == -1:
             c_list.append(new_cell)
@@ -269,7 +267,6 @@ def NotebookView(
                 page.run_task(sink.focus)
             except RuntimeError:
                 logger.debug("Focus sink not ready", exc_info=True)
-
 
     def _clear_all_outputs(e=None):
         for cell in cells_ref.current or []:
@@ -352,7 +349,10 @@ def NotebookView(
     if register_bindings:
         register_bindings(
             [
-                (Binding("Enter", ctrl=True, shift=True), lambda: page.run_task(_run_all)),
+                (
+                    Binding("Enter", ctrl=True, shift=True),
+                    lambda: page.run_task(_run_all),
+                ),
                 (Binding("Enter", shift=True), lambda: _shortcut_run("next")),
                 (Binding("Enter", alt=True), lambda: _shortcut_run("insert")),
                 (Binding("Enter", ctrl=True), lambda: _shortcut_run("inplace")),
@@ -529,10 +529,11 @@ def NotebookView(
     # Invisible focusable sink — Escape moves focus here so editors blur and
     # markdown cells render (kept 1px, not 0, so the focus node stays live).
     focus_sink = ft.KeyboardListener(
-        content=ft.Container(width=1, height=1, content=ft.Container(width=0, height=0)),
+        content=ft.Container(
+            width=1, height=1, content=ft.Container(width=0, height=0)
+        ),
         ref=focus_sink_ref,
     )
-
 
     notebook_body = ft.Column(
         controls=[

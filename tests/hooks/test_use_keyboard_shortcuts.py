@@ -165,9 +165,7 @@ def test_hook_chains_to_previous_handler_for_unhandled_keys():
         mock_page.on_keyboard_event = previous
         _install_hook(ShortcutRouter())
 
-        asyncio.run(
-            handler_run(mock_page.on_keyboard_event, _event("a"))
-        )
+        asyncio.run(handler_run(mock_page.on_keyboard_event, _event("a")))
         previous.assert_called_once()
     finally:
         cleanup()

@@ -238,9 +238,7 @@ def NotebookCell(
             border=(
                 ft.Border(left=ft.BorderSide(3, ft.Colors.PRIMARY))
                 if is_active
-                else ft.Border.all(
-                    1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)
-                )
+                else ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE))
             ),
             margin=ft.Margin(0, tokens.SPACE_SM, 0, tokens.SPACE_SM),
         )

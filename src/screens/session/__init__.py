@@ -53,7 +53,6 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
 
     ft.on_mounted(_register_session_shortcuts)
 
-
     # ── Shared session actions (used by the FAB on both tabs) ────────────────
     async def _do_restart():
         controller.show_snack("Restarting kernel...")
@@ -266,10 +265,12 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 content=NotebookView(
                     session_name=session_name,
                     on_switch_terminal=_switch_to_terminal,
-                    register_actions=lambda actions: nb_actions_ref.current.update(actions),
+                    register_actions=lambda actions: nb_actions_ref.current.update(
+                        actions
+                    ),
                     on_cells_change=set_cells_version,
-                    register_bindings=lambda bindings: session_kb_ref.current.__setitem__(
-                        "nb_bindings", bindings
+                    register_bindings=lambda bindings: (
+                        session_kb_ref.current.__setitem__("nb_bindings", bindings)
                     ),
                 ),
                 expand=True,

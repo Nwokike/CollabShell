@@ -82,7 +82,9 @@ def FilesScreen(session_name: str) -> ft.Control:
             ),
             (
                 Binding("Escape"),
-                lambda: _kb_handler("clear_selection")() if c["selection_mode"] else None,
+                lambda: (
+                    _kb_handler("clear_selection")() if c["selection_mode"] else None
+                ),
             ),
         ]
 

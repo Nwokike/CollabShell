@@ -11,6 +11,7 @@ aligned below 16384 (16 KB). 32-bit ABIs are reported as warnings only.
 
 Exits non-zero if any 64-bit library is misaligned, so it can gate CI.
 """
+
 from __future__ import annotations
 
 import struct
@@ -75,13 +76,19 @@ def check_artifact(artifact: Path) -> bool:
             worst = min(aligns)
             abi = next((a for a in ABI_64_BIT if f"/{a}/" in name), None)
             if abi and worst < PAGE_16K:
-                print(f"FAIL {name}  p_aligns={sorted(set(aligns))} (64-bit ABI below 16 KB)")
+                print(
+                    f"FAIL {name}  p_aligns={sorted(set(aligns))} (64-bit ABI below 16 KB)"
+                )
                 ok = False
             elif not abi and worst < PAGE_16K:
-                print(f"warn {name}  p_aligns={sorted(set(aligns))} (32-bit ABI, exempt)")
+                print(
+                    f"warn {name}  p_aligns={sorted(set(aligns))} (32-bit ABI, exempt)"
+                )
             else:
                 print(f"ok   {name}  p_aligns={sorted(set(aligns))}")
-    print(f"\n{count} native libraries checked in {artifact.name}: {'PASS' if ok else 'FAIL'}")
+    print(
+        f"\n{count} native libraries checked in {artifact.name}: {'PASS' if ok else 'FAIL'}"
+    )
     return ok
 
 
