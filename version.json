@@ -1,0 +1,10 @@
+{
+  "build_number": 9,
+  "version": "2.1.0",
+  "type": "update",
+  "title": "CollabShell 2.1.0",
+  "release_notes": "You're up to date on v2.1.0!",
+  "mandatory": false,
+  "github_url": "https://github.com/Nwokike/CollabShell/releases/latest",
+  "playstore_url": "https://play.google.com/store/apps/details?id=ng.kiri.collabshell"
+}

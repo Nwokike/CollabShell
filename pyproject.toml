@@ -7,6 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "flet>=0.86.5",
     "flet-ads>=0.86.5",
+    "httpx>=0.28.1",
     "flet-cli>=0.86.5; sys_platform == 'win32'",
     "flet-desktop>=0.86.5; sys_platform == 'win32'",
     "flet-terminal>=0.3.8",
