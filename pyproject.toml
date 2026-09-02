@@ -22,7 +22,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 10
+build_number = 11
 
 [tool.flet.app]
 path = "src"
@@ -33,8 +33,7 @@ startup_message = "Initializing Collab Shell..."
 
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"
-min_sdk_version = 24
-target_sdk_version = 35
+
 # Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq 27.2.0's
 # android x86_64 wheel ships 4 KB-aligned libs (libzmq + libc++_shared), so
 # x86_64 is dropped. armeabi-v7a is kept: 32-bit ABIs are exempt from the
