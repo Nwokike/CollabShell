@@ -1,6 +1,6 @@
 {
-  "build_number": 10,
-  "version": "2.1.1",
+  "build_number": 11,
+  "version": "2.1.2",
   "type": "update",
   "title": "CollabShell 2.1.1",
   "release_notes": "- Sessions no longer die after hours idle — the runtime proxy token now refreshes automatically on resume, session sync, and 404\n- Terminal tabs reconnect with a fresh token instead of erroring\n- Files browser self-heals after long sessions\n- Kernel execution no longer drops a live session on a stale token\n- Update notifications: version chip, banner, and changelog dialog\n- Check for Updates button in the version dialog",
