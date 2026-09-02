@@ -130,7 +130,6 @@ class AppController:
         if update_info:
             state.update_available = True
             state.update_data = update_info
-            state.update_available_version = update_info.get("version")
             logger.info(
                 "Update available: v%s (build %s, type=%s)",
                 update_info.get("version"),

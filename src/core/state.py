@@ -45,7 +45,6 @@ class AppState:
     cli_available: bool = False
     update_available: bool = False
     update_data: dict | None = None
-    update_available_version: str | None = None
     onboarding_done: bool = False
 
     # ── Settings (every CLI flag exposed) ─────────────────────────────────────
@@ -86,7 +85,6 @@ class AppState:
         self.log_events = []
         self.update_available = False
         self.update_data = None
-        self.update_available_version = None
         self.onboarding_done = False
         self.app_ready = False
         self.is_online = True

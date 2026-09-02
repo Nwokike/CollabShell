@@ -89,39 +89,6 @@ def HomeScreen() -> ft.Control:
         visible=not state.is_online,
     )
 
-    # ── Update banner ─────────────────────────────────────────────────────────
-    update_banner = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Icon(
-                    ft.Icons.SYSTEM_UPDATE_ROUNDED,
-                    color=ft.Colors.ON_TERTIARY_CONTAINER,
-                    size=tokens.ICON_SM,
-                ),
-                ft.Text(
-                    f"Update available: v{state.update_available_version}",
-                    size=tokens.FONT_XS,
-                    color=ft.Colors.ON_TERTIARY_CONTAINER,
-                    expand=True,
-                ),
-                ft.TextButton(
-                    "Update",
-                    style=ft.ButtonStyle(color=ft.Colors.ON_TERTIARY_CONTAINER),
-                    on_click=lambda e: controller.open_version_dialog(),
-                ),
-            ],
-            spacing=tokens.SPACE_SM,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-        padding=ft.Padding(
-            tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
-        ),
-        bgcolor=ft.Colors.TERTIARY_CONTAINER,
-        visible=bool(state.update_available_version),
-        on_click=lambda e: controller.open_version_dialog(),
-        ink=True,
-    )
-
     # ── Auth status chip ──────────────────────────────────────────────────────
     auth_status_chip = ft.Container(
         content=ft.Row(
@@ -287,7 +254,6 @@ def HomeScreen() -> ft.Control:
         controls=[
             build_brand_header(),
             offline_banner,
-            update_banner,
             auth_status_chip,
             # Quick actions
             ft.Container(

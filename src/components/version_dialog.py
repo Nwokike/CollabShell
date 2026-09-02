@@ -59,7 +59,6 @@ async def check_from_dialog(page: ft.Page):
     if result:
         state.update_available = True
         state.update_data = result
-        state.update_available_version = result.get("version")
         show_version_dialog(page, result)
     else:
         show_notification(page, f"✓ {APP_VERSION} is up to date")

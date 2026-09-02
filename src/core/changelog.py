@@ -9,7 +9,7 @@ CHANGELOG: dict[str, str] = {
         "- Terminal tabs reconnect with a fresh token instead of erroring\n"
         "- Files browser self-heals after long sessions\n"
         "- Kernel execution no longer drops a live session on a stale token\n"
-        "- Update notifications: version chip, banner, and changelog dialog\n"
+        "- Update notifications: version chip and changelog dialog\n"
         "- Check for Updates button in the version dialog"
     ),
     "2.1.0": (
