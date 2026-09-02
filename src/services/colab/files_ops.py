@@ -5,6 +5,38 @@ from collections.abc import Callable
 logger = logging.getLogger("colab_files_ops")
 
 
+def _is_404(ex: BaseException) -> bool:
+    """True when the error is an HTTP 404 (stale runtime-proxy token or a
+    genuinely missing path — ContentsClient maps both to FileNotFoundError)."""
+    status = getattr(getattr(ex, "response", None), "status_code", None)
+    return status == 404 or isinstance(ex, FileNotFoundError)
+
+
+async def _run_with_token_heal(service, session_name: str, auth_method: str, op):
+    """Run a contents-API op, healing a stale runtime-proxy token on 404.
+
+    The JWT cached in sessions.json expires after hours while the VM stays
+    assigned; a 404 from the contents API means either that or a genuinely
+    missing file. One refresh attempt disambiguates: if the server handed
+    back a different token, retry the op once with it; otherwise re-raise
+    the original error unchanged.
+    """
+    try:
+        return await op()
+    except Exception as ex:
+        if not _is_404(ex):
+            raise
+        healed = False
+        try:
+            healed = await service.refresh_session_token(session_name, auth_method)
+        except Exception:
+            logger.debug("token heal failed for %s", session_name, exc_info=True)
+        if not healed:
+            raise
+        logger.info("Retrying file operation after token refresh (%s).", session_name)
+        return await op()
+
+
 async def ls_impl(
     service,
     session_name: str,
@@ -58,7 +90,9 @@ async def ls_impl(
             }
         ]
 
-    return await asyncio.to_thread(_ls)
+    return await _run_with_token_heal(
+        service, session_name, auth_method, lambda: asyncio.to_thread(_ls)
+    )
 
 
 async def upload_impl(
@@ -101,7 +135,9 @@ async def upload_impl(
         )
         return True
 
-    return await asyncio.to_thread(_upload)
+    return await _run_with_token_heal(
+        service, session_name, auth_method, lambda: asyncio.to_thread(_upload)
+    )
 
 
 async def download_impl(
@@ -144,7 +180,9 @@ async def download_impl(
         )
         return True
 
-    return await asyncio.to_thread(_download)
+    return await _run_with_token_heal(
+        service, session_name, auth_method, lambda: asyncio.to_thread(_download)
+    )
 
 
 async def download_folder_impl(
@@ -267,4 +305,6 @@ async def rm_impl(
         st.history.log_event(name, "file_operation", {"op": "rm", "path": norm_path})
         return True
 
-    return await asyncio.to_thread(_rm)
+    return await _run_with_token_heal(
+        service, session_name, auth_method, lambda: asyncio.to_thread(_rm)
+    )

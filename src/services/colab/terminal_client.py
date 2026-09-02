@@ -76,6 +76,7 @@ class ColabTerminalClient:
         base_url: str | None = None,
         token: str | None = None,
         term_name: str | None = None,
+        session_name: str | None = None,
     ):
         self.ws_url = ws_url
         self.on_stdout = on_stdout
@@ -84,11 +85,56 @@ class ColabTerminalClient:
         self.base_url = base_url
         self.token = token
         self.term_name = term_name
+        # Session record name — lets reconnects pick up a re-minted
+        # runtime-proxy token (the cached one expires after hours).
+        self.session_name = session_name
         self.ws: WebSocketClientConnection | None = None
         self._running = False
         self._abandoned = False
         self._reconnecting = False
         self._read_task: asyncio.Task | None = None
+
+    async def _refresh_cached_credentials(self) -> bool:
+        """Re-read this session's url/token from the local store.
+
+        list_sessions/refresh_session_token heal the stored record when the
+        short-lived runtime-proxy JWT expires; a long-lived client must
+        re-read it before rebuilding its WS URL or it keeps presenting the
+        stale token (every reconnect 404s). Returns True when the cached
+        credentials changed.
+        """
+        if not self.session_name:
+            return False
+
+        def _read():
+            from colab_cli.common import State
+
+            s = State().store.get(self.session_name)
+            if not s:
+                return None
+            return (s.url, s.token)
+
+        try:
+            creds = await asyncio.to_thread(_read)
+        except Exception:
+            logger.debug(
+                "credential re-read failed for %s",
+                self.session_name,
+                exc_info=True,
+            )
+            return False
+        if creds is None:
+            return False
+        url, token = creds
+        if url == self.base_url and token == self.token:
+            return False
+        self.base_url = url
+        self.token = token
+        logger.info(
+            "Terminal client picked up refreshed runtime proxy token (%s).",
+            self.session_name,
+        )
+        return True
 
     @property
     def alive(self) -> bool:
@@ -232,6 +278,7 @@ class ColabTerminalClient:
                 return  # Panel was closed or replaced this client meanwhile.
 
             try:
+                await self._refresh_cached_credentials()
                 self.ws_url = await asyncio.to_thread(
                     create_terminal_ws_url,
                     self.base_url,
@@ -278,6 +325,7 @@ class ColabTerminalClient:
         try:
             self._abandoned = False
             self._running = False
+            await self._refresh_cached_credentials()
             self.ws_url = await asyncio.to_thread(
                 create_terminal_ws_url, self.base_url, self.token, self.term_name
             )

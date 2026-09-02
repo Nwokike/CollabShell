@@ -43,6 +43,8 @@ class AppState:
     is_loading: bool = False
     app_ready: bool = False
     cli_available: bool = False
+    update_available: bool = False
+    update_data: dict | None = None
     update_available_version: str | None = None
     onboarding_done: bool = False
 
@@ -82,6 +84,8 @@ class AppState:
         self.file_listing = []
         self.log_session_names = []
         self.log_events = []
+        self.update_available = False
+        self.update_data = None
         self.update_available_version = None
         self.onboarding_done = False
         self.app_ready = False

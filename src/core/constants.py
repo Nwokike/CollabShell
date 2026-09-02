@@ -2,7 +2,12 @@
 
 APP_NAME = "Colab Shell"
 APP_FULL_NAME = "Colab Shell: Notebook & TTY"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
+APP_BUILD_NUMBER = 10
+UPDATE_CONFIG_URL = (
+    "https://raw.githubusercontent.com/Nwokike/CollabShell/main/version.json"
+)
+GITHUB_RELEASES_URL = "https://github.com/Nwokike/CollabShell/releases/latest"
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=ng.kiri.collabshell"
 PRIVACY_POLICY_URL = "https://kiri.ng/privacy"
 TERMS_OF_SERVICE_URL = "https://kiri.ng/terms"

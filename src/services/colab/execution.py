@@ -26,6 +26,10 @@ async def exec_code_impl(
         from colab_cli.common import State
         from colab_cli.runtime import ColabRuntime
 
+        from services.colab.session_ops import (
+            _refresh_runtime_token_sync as _heal_runtime_token,
+        )
+
         if service._cancel_event.is_set():
             service._cancel_event.clear()
             raise RuntimeError("Execution cancelled by user")
@@ -45,26 +49,43 @@ async def exec_code_impl(
             s.session_id = sid
             st.store.add(s)
 
-        runtime = ColabRuntime(
-            s.url,
-            s.token,
-            kernel_id=s.kernel_id,
-            session_id=s.session_id,
-            on_kernel_started=on_started,
-            on_session_started=on_sess,
+        def _new_runtime():
+            return ColabRuntime(
+                s.url,
+                s.token,
+                kernel_id=s.kernel_id,
+                session_id=s.session_id,
+                on_kernel_started=on_started,
+                on_session_started=on_sess,
+            )
+
+        runtime = _new_runtime()
+        preflight_code = (
+            "import os; os.makedirs('/content', exist_ok=True); os.chdir('/content')"
         )
 
-        try:
-            runtime.execute_code(
-                "import os; os.makedirs('/content', exist_ok=True); os.chdir('/content')"
-            )
-        except Exception as e:
-            from colab_cli.utils import is_terminal_error
+        for attempt in range(2):
+            try:
+                runtime.execute_code(preflight_code)
+                break
+            except Exception as e:
+                from colab_cli.utils import is_terminal_error
 
-            if is_terminal_error(e):
+                if not is_terminal_error(e):
+                    raise
+                # 404/401: the cached runtime-proxy token may simply have
+                # expired while the assignment stayed alive. Heal it once
+                # before pruning a session that may still be server-side.
+                if attempt == 0 and _heal_runtime_token(st, session_name):
+                    fresh = st.store.get(session_name)
+                    if fresh:
+                        s = fresh
+                        runtime = _new_runtime()
+                        continue
                 st.prune_session(session_name)
-                raise ValueError("Session lost (404/401). It may have timed out.")
-            raise
+                raise ValueError(
+                    "Session lost (404/401). It may have timed out."
+                ) from e
 
         s.running = "exec(code)"
         s.last_execution = (
@@ -250,39 +271,55 @@ async def exec_code_impl(
 
             wrapped_user_stdin_hook = _app_stdin_hook
 
-        try:
-            outputs = runtime.execute_code(
+        def _execute_main():
+            return runtime.execute_code(
                 code,
                 output_hook=output_hook if on_output else None,
                 timeout=timeout,
                 allow_stdin=intercept_oauth or (active_stdin_hook is not None),
                 stdin_hook=wrapped_user_stdin_hook,
             )
-            st.history.log_event(
-                session_name,
-                "execution",
-                {
-                    "code": code,
-                    "outputs": outputs,
-                },
-            )
-            return outputs
-        except Exception as e:
-            err_str = str(e)
-            if (
-                hasattr(e, "response")
-                and getattr(e.response, "status_code", None) == 404
-                or "404" in err_str
-                or "Not Found" in err_str
-            ):
-                logger.warning(
-                    f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+
+        try:
+            for attempt in range(2):
+                try:
+                    outputs = _execute_main()
+                except Exception as e:
+                    err_str = str(e)
+                    is_404 = (
+                        hasattr(e, "response")
+                        and getattr(e.response, "status_code", None) == 404
+                        or "404" in err_str
+                        or "Not Found" in err_str
+                    )
+                    if not is_404:
+                        raise
+                    # A stale runtime-proxy token 404s exactly like a dead
+                    # kernel. Heal once before removing a live session.
+                    if attempt == 0 and _heal_runtime_token(st, session_name):
+                        fresh = st.store.get(session_name)
+                        if fresh:
+                            s = fresh
+                            runtime = _new_runtime()
+                            if intercept_oauth:
+                                runtime.colab_request_hook = drivefs_hook
+                            continue
+                    logger.warning(
+                        f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+                    )
+                    st.store.remove(session_name)
+                    raise RuntimeError(
+                        "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
+                    ) from e
+                st.history.log_event(
+                    session_name,
+                    "execution",
+                    {
+                        "code": code,
+                        "outputs": outputs,
+                    },
                 )
-                st.store.remove(session_name)
-                raise RuntimeError(
-                    "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
-                ) from e
-            raise
+                return outputs
         finally:
             if intercept_oauth and runtime:
                 runtime.colab_request_hook = None

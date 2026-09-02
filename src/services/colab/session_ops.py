@@ -164,6 +164,30 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
         st.auth_provider = provider
 
         local_sessions, assignments = st.sync_sessions()
+
+        # The runtime-proxy JWT is short-lived; list_assignments() hands us a
+        # fresh one on every sync. Persist it onto existing local records so
+        # long-running sessions don't start failing with 404s hours in.
+        name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
+        for a in assignments:
+            existing_name = name_by_ep.get(a.endpoint)
+            if not existing_name:
+                continue
+            s = local_sessions.get(existing_name)
+            if s is None:
+                continue
+            if (
+                s.token != a.runtime_proxy_info.token
+                or s.url != a.runtime_proxy_info.url
+            ):
+                s.token = a.runtime_proxy_info.token
+                s.url = a.runtime_proxy_info.url
+                st.store.add(s)
+                logger.info(
+                    "[sync] refreshed runtime proxy token for session %s",
+                    existing_name,
+                )
+
         results = []
         name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
 
@@ -227,6 +251,58 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
     except Exception:
         logger.exception("list_sessions failed")
         return []
+
+
+def _refresh_runtime_token_sync(st, session_name: str) -> bool:
+    """Synchronously re-mint one session's runtime-proxy token from the server.
+
+    Returns True when the local record was updated with a fresh token (the
+    caller should retry its failed operation); False when the session is
+    unknown locally, has no live assignment anymore, the token is unchanged,
+    or the refresh itself failed (the caller keeps its existing error path).
+    """
+    try:
+        s = st.store.get(session_name)
+        if not s:
+            return False
+
+        assignments = st.client.list_assignments()
+        match = next((a for a in assignments if a.endpoint == s.endpoint), None)
+        if match is None:
+            return False
+
+        fresh = match.runtime_proxy_info
+        if s.token == fresh.token and s.url == fresh.url:
+            return False
+
+        s.token = fresh.token
+        s.url = fresh.url
+        st.store.add(s)
+        logger.info("[heal] refreshed runtime proxy token for session %s", session_name)
+        return True
+    except Exception:
+        logger.debug(
+            "runtime proxy token refresh failed for %s", session_name, exc_info=True
+        )
+        return False
+
+
+async def refresh_session_token_impl(
+    service, session_name: str, auth_method: str = "oauth2"
+) -> bool:
+    """Re-mint the runtime-proxy token for one session from the server."""
+    await service._ensure_online()
+
+    def _refresh():
+        from colab_cli.auth import AuthProvider
+        from colab_cli.common import State
+
+        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
+        st = State()
+        st.auth_provider = provider
+        return _refresh_runtime_token_sync(st, session_name)
+
+    return await asyncio.to_thread(_refresh)
 
 
 async def stop_session_impl(
@@ -313,12 +389,36 @@ async def restart_kernel_impl(
             runtime.restart()
         except Exception as e:
             err_str = str(e)
-            if (
-                hasattr(e, "response")
-                and getattr(e.response, "status_code", None) == 404
+            is_404 = (
+                (
+                    hasattr(e, "response")
+                    and getattr(e.response, "status_code", None) == 404
+                )
                 or "404" in err_str
                 or "Not Found" in err_str
-            ):
+            )
+            if is_404:
+                # A stale runtime-proxy token 404s identically to a dead
+                # kernel. Re-mint the token and retry once before pruning a
+                # session that may still be alive server-side.
+                if _refresh_runtime_token_sync(st, session_name):
+                    s = st.store.get(session_name)
+                    retry = ColabRuntime(
+                        s.url,
+                        s.token,
+                        kernel_id=s.kernel_id,
+                        session_id=s.session_id,
+                        on_kernel_started=on_started,
+                        on_session_started=on_sess,
+                    )
+                    try:
+                        retry.restart()
+                        return True
+                    except Exception:
+                        logger.exception(
+                            "Kernel restart retry with fresh token failed for %s",
+                            session_name,
+                        )
                 logger.warning(
                     f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
                 )

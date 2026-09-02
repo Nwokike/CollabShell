@@ -158,6 +158,7 @@ def _make_entry_handlers(
                 session_info["token"],
                 _on_stdout,
                 _on_status,
+                session_name=session_name,
             )
             entry.client = client
 
@@ -169,6 +170,48 @@ def _make_entry_handlers(
                 _safe_run_task(entry.client.send_input, "cd /content\r\n")
 
         except Exception as ex:
+            # A 404 from POST /api/terminals usually means the cached
+            # runtime-proxy token expired (they live for hours, not the
+            # lifetime of the assignment). Re-mint it and retry once before
+            # surfacing the failure.
+            status = getattr(getattr(ex, "response", None), "status_code", None)
+            healed = False
+            if status == 404:
+                try:
+                    healed = await colab_service.refresh_session_token(
+                        session_name, app_state.auth_method
+                    )
+                except Exception:
+                    logger_.debug(
+                        "token heal failed for %s", session_name, exc_info=True
+                    )
+            if healed:
+                try:
+                    session_info = await _get_terminal_session(
+                        colab_service, session_name
+                    )
+                    if session_info:
+                        client = colab_service.get_terminal_client(
+                            session_info["url"],
+                            session_info["token"],
+                            _on_stdout,
+                            _on_status,
+                            session_name=session_name,
+                        )
+                        entry.client = client
+                        await client.connect()
+                        entry.ready = True
+                        if entry.client:
+                            _safe_run_task(entry.client.send_input, "cd /content\r\n")
+                        logger_.info(
+                            "Terminal %s connected after token refresh.",
+                            entry.id,
+                        )
+                        return
+                except Exception:
+                    logger_.exception(
+                        "Terminal %s retry after token refresh failed", entry.id
+                    )
             logger_.exception("Terminal %s init failed", entry.id)
             if ps.active_id == entry.id:
                 ps.status = f"Error: {ex}"

@@ -71,6 +71,7 @@ from core.theme import AppTheme
 from services.ad_service import AdService
 from services.colab import ColabService
 from services.storage_service import StorageService
+from services.update_service import UpdateService
 from state import ControllerMethods, ControllerMethodsCtx, ServiceCtx, Services
 
 root_logger = logging.getLogger()
@@ -116,6 +117,39 @@ class AppController:
         self.storage: StorageService | None = None
         self.ad_service: AdService | None = None
         self.colab_service: ColabService | None = None
+        self.update_service: UpdateService | None = None
+
+    async def check_for_updates(self, notify_if_latest: bool = False) -> None:
+        """Check version.json on main for a newer build or announcement.
+
+        Silent on failure; only a mandatory update auto-opens the dialog.
+        """
+        if not self.update_service:
+            return
+        update_info = await self.update_service.check_for_update()
+        if update_info:
+            state.update_available = True
+            state.update_data = update_info
+            state.update_available_version = update_info.get("version")
+            logger.info(
+                "Update available: v%s (build %s, type=%s)",
+                update_info.get("version"),
+                update_info.get("build_number"),
+                update_info.get("type"),
+            )
+            if update_info.get("mandatory"):
+                self.open_version_dialog()
+        elif notify_if_latest:
+            show_notification(
+                page=self.page, message=f"✓ {constants.APP_VERSION} is up to date"
+            )
+
+    def open_version_dialog(self) -> None:
+        """Open the version dialog (changelog when up to date, update UI
+        when a newer build was found)."""
+        from components.version_dialog import show_version_dialog
+
+        show_version_dialog(self.page)
 
     async def init(self):
         """Bootstrap services, restore preferences, and render the application."""
@@ -186,6 +220,7 @@ class AppController:
         page.run_task(self.ad_service.preload_interstitial)
 
         self.colab_service = ColabService()
+        self.update_service = UpdateService()
 
         async def _init_cli():
             try:
@@ -367,6 +402,8 @@ class AppController:
             show_snack=_show_snack,
             show_new_session_sheet=_show_new_session_sheet,
             toggle_theme=_toggle_theme,
+            check_for_updates=self.check_for_updates,
+            open_version_dialog=self.open_version_dialog,
         )
 
         services = Services(
@@ -393,6 +430,11 @@ class AppController:
 
         # ── Initial background bootstrap (auth, connectivity, sessions) ──────
         page.run_task(self._bootstrap_state)
+
+        # Update check in the background — pure GET + observable flip, so it
+        # can never delay startup. Only a mandatory update auto-opens the
+        # dialog; otherwise the version chip / Home banner surface it.
+        page.run_task(self.check_for_updates)
 
     async def _restore_preferences(self):
         try:
@@ -493,8 +535,8 @@ class AppController:
             state.app_ready = True
             try:
                 self.page.update()
-            except Exception:
-                logger.exception("Suppressed exception")
+            except Exception as exc:
+                logger.debug("Bootstrap page update skipped: %s", exc)
 
     def _register_lifecycle_handlers(self):
         page = self.page
@@ -556,6 +598,21 @@ class AppController:
                 state.is_online = ft.ConnectivityType.NONE not in connectivity
             except Exception as exc:
                 logger.warning("[lifecycle] connectivity probe failed: %s", exc)
+
+            if state.is_online and state.is_authenticated and state.active_sessions:
+                # Re-sync assignments first: it re-mints the short-lived
+                # runtime-proxy tokens in the local store, so the terminal
+                # re-attach below (and any new tab the user opens) presents
+                # a fresh token instead of the expired one.
+                try:
+                    state.active_sessions = (
+                        await self.colab_service.list_sessions(
+                            auth_method=state.auth_method
+                        )
+                        or state.active_sessions
+                    )
+                except Exception as exc:
+                    logger.debug("[lifecycle] session re-sync skipped: %s", exc)
 
             if state.is_online and state.active_sessions:
                 dead = [

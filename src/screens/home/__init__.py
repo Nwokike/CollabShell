@@ -107,14 +107,7 @@ def HomeScreen() -> ft.Control:
                 ft.TextButton(
                     "Update",
                     style=ft.ButtonStyle(color=ft.Colors.ON_TERTIARY_CONTAINER),
-                    on_click=lambda e: page.run_task(
-                        ft.UrlLauncher().launch_url,
-                        getattr(
-                            constants,
-                            "PLAY_STORE_URL",
-                            "https://play.google.com/store/apps/details?id=ng.kiri.collabshell",
-                        ),
-                    ),
+                    on_click=lambda e: controller.open_version_dialog(),
                 ),
             ],
             spacing=tokens.SPACE_SM,
@@ -125,6 +118,8 @@ def HomeScreen() -> ft.Control:
         ),
         bgcolor=ft.Colors.TERTIARY_CONTAINER,
         visible=bool(state.update_available_version),
+        on_click=lambda e: controller.open_version_dialog(),
+        ink=True,
     )
 
     # ── Auth status chip ──────────────────────────────────────────────────────

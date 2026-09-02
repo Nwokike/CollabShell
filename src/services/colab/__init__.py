@@ -75,6 +75,13 @@ class ColabService:
 
         return await list_sessions_impl(self, auth_method)
 
+    async def refresh_session_token(
+        self, session_name: str, auth_method: str = "oauth2"
+    ) -> bool:
+        from services.colab.session_ops import refresh_session_token_impl
+
+        return await refresh_session_token_impl(self, session_name, auth_method)
+
     async def stop_session(
         self, session_name: str, auth_method: str = "oauth2"
     ) -> bool:
@@ -133,11 +140,14 @@ class ColabService:
         on_stdout: Callable[[str], None],
         on_status: Callable[[str, bool], None] | None = None,
         term_name: str | None = None,
+        session_name: str | None = None,
     ):
         """Build a terminal client (creating a fresh PTY when no `term_name`).
 
         The raw URL/token are cached on the client so it can later re-attach to
         the same PTY after a dropped socket instead of minting a new shell.
+        `session_name` additionally lets re-attach pick up a re-minted
+        runtime-proxy token after the cached one expires.
         """
         from services.colab.terminal_client import (
             ColabTerminalClient,
@@ -153,6 +163,7 @@ class ColabService:
             base_url=raw_url,
             token=token,
             term_name=parsed_term_name,
+            session_name=session_name,
         )
 
     async def ls(

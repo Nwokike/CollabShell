@@ -22,20 +22,12 @@ def _get_cli_version() -> str:
         return "latest"
 
 
-def _open_version_dialog(page: ft.Page):
-    from core.state import state as _st
-    if getattr(_st, 'update_available', False) and getattr(_st, 'update_data', None):
-        from components.update_dialog import show_update_dialog
-        show_update_dialog(page, _st.update_data.get('github_url') and _st.update_data or _st.update_data)
-        return
-    # fallback - try update_data else local
-    try:
-        from core import constants as _c
-        _ver = _c.APP_VERSION
-    except: _ver='2.1.0'
-    from components.update_dialog import show_update_dialog
-    fallback = {'version': _ver, 'type': 'update', 'title': f'CollabShell {_ver}', 'release_notes': '• You\'re up to date on v' + _ver + '!\n• Cloud GPUs from your phone\n• Full history on GitHub Releases', 'github_url': 'https://github.com/Nwokike/CollabShell/releases/latest', 'playstore_url': 'https://play.google.com/store/apps/details?id=ng.kiri.collabshell'}
-    show_update_dialog(page, fallback)
+def _open_version_dialog(page: ft.Page, state):
+    """Open the version dialog — changelog when up to date, update UI when
+    a newer build was found. The dialog reads observable state itself."""
+    from components.version_dialog import show_version_dialog
+
+    show_version_dialog(page)
 
 
 def build_about_section(page: ft.Page, state, services) -> ft.Column:
@@ -77,18 +69,23 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Container(height=tokens.SPACE_SM),
-                        ft.Container(content=ft.Row(
-                            controls=[
-                                ft.Text("App Version", size=tokens.FONT_SM),
-                                ft.Text(
-                                    f"v{constants.APP_VERSION}",
-                                    size=tokens.FONT_SM,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
-                                    weight=ft.FontWeight.W_500,
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ), ink=True, tooltip="Tap to view changelog", on_click=lambda e: _open_version_dialog(page),)
+                        ft.Container(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Text("App Version", size=tokens.FONT_SM),
+                                    ft.Text(
+                                        f"v{constants.APP_VERSION}",
+                                        size=tokens.FONT_SM,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        weight=ft.FontWeight.W_500,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            ink=True,
+                            tooltip="Tap to view changelog",
+                            on_click=lambda e: _open_version_dialog(page, state),
+                        ),
                         ft.Row(
                             controls=[
                                 ft.Text("Powered by", size=tokens.FONT_SM),

@@ -355,7 +355,9 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 build_tab_switcher(active_tab, _switch_tab),
                 build_help_button(
                     page,
-                    lambda: "terminal" if session_kb_ref.current["tab"] == 1 else "notebook",
+                    lambda: (
+                        "terminal" if session_kb_ref.current["tab"] == 1 else "notebook"
+                    ),
                 ),
                 theme_btn,
             ],

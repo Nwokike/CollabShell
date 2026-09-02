@@ -340,6 +340,63 @@ def AppShell() -> Control:
         on_click=lambda e: controller.toggle_theme(),
     )
 
+    def _build_version_chip():
+        """Sherlock/KTV-style version chip in top-right header: shows current version
+        normally, flips to an Update pill when a newer build is found."""
+        if state.update_available:
+            update_data = state.update_data or {}
+            label = (
+                update_data.get("version", "Update")
+                if update_data.get("type") != "announcement"
+                else "News"
+            )
+            content = ft.Row(
+                controls=[
+                    ft.Text(
+                        f"Update: {label} Available!"
+                        if update_data.get("type") != "announcement"
+                        else "News",
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.PRIMARY,
+                        no_wrap=True,
+                    ),
+                    ft.Container(
+                        width=6,
+                        height=6,
+                        border_radius=3,
+                        bgcolor=ft.Colors.PRIMARY,
+                    ),
+                ],
+                spacing=6,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+            return ft.Container(
+                content=content,
+                padding=ft.Padding(10, 4, 10, 4),
+                border_radius=10,
+                bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.PRIMARY),
+                border=ft.Border.all(1.5, ft.Colors.PRIMARY),
+                ink=True,
+                tooltip="New update available — tap to view",
+                on_click=lambda e: controller.open_version_dialog(),
+            )
+        return ft.Container(
+            content=ft.Text(
+                f"v{constants.APP_VERSION}",
+                size=11,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                no_wrap=True,
+            ),
+            padding=ft.Padding(10, 4, 10, 4),
+            border_radius=10,
+            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE_VARIANT),
+            ink=True,
+            tooltip="What's New — version & changelog",
+            on_click=lambda e: controller.open_version_dialog(),
+        )
+
     header_bar = ft.Container(
         content=ft.Row(
             controls=[
@@ -357,10 +414,12 @@ def AppShell() -> Control:
                     on_click=lambda e: controller.open_history(),
                     visible=state.current_tab == 0,
                 ),
+                _build_version_chip(),
                 build_help_button(page, "global"),
                 theme_btn,
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=tokens.SPACE_XS,
         ),
         padding=ft.Padding(
             tokens.SPACE_LG, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM
