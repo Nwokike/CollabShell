@@ -1,9 +1,9 @@
 {
-  "build_number": 11,
-  "version": "2.1.1",
+  "build_number": 12,
+  "version": "2.1.2",
   "type": "update",
-  "title": "CollabShell 2.1.1",
-  "release_notes": "- Sessions no longer die after hours idle — the runtime proxy token now refreshes automatically on resume, session sync, and 404\n- Terminal tabs reconnect with a fresh token instead of erroring\n- Files browser self-heals after long sessions\n- Kernel execution no longer drops a live session on a stale token\n- Update notifications: version chip and changelog dialog\n- Check for Updates button in the version dialog",
+  "title": "CollabShell 2.1.2",
+  "release_notes": "- Fixed the false \"update available\" prompt from 2.1.1. One version spot was missed in the last bump, so the app kept flagging 2.1.1 as new even though you already had it\n- General bug fixes and stability improvements\n- Expanded automated test coverage, including a guard that keeps the version numbers in sync across every release",
   "mandatory": false,
   "github_url": "https://github.com/Nwokike/CollabShell/releases/latest",
   "playstore_url": "https://play.google.com/store/apps/details?id=ng.kiri.collabshell"
