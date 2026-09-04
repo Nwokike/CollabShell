@@ -4,11 +4,12 @@ current APP_VERSION in sync when bumping (guarded by tests)."""
 
 CHANGELOG: dict[str, str] = {
     "2.1.2": (
-        "- Fixed the false 'update available' prompt — the last build\n"
-        "  missed a version bump in one spot, so 2.1.1 kept showing as new\n"
+        "- Fixed the false 'update available' prompt from 2.1.1 — one\n"
+        "  version spot was missed in the last bump, so the app kept\n"
+        "  flagging 2.1.1 as new even though you already had it\n"
         "- General bug fixes and stability improvements\n"
         "- Expanded automated test coverage, including a guard that keeps\n"
-        "  version numbers in sync across every release"
+        "  the version numbers in sync across every release"
     ),
     "2.1.1": (
         "- Sessions no longer die after hours idle — the runtime proxy token\n"
