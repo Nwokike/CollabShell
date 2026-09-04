@@ -3,6 +3,11 @@ date — works fully offline. One line per release; keep the entry for the
 current APP_VERSION in sync when bumping (guarded by tests)."""
 
 CHANGELOG: dict[str, str] = {
+    "2.1.2": (
+        "- Fixed phantom update prompt — build number is now in sync\n"
+        "  across the app, store config, and update feed\n"
+        "- No more 'update available' for the version you already run"
+    ),
     "2.1.1": (
         "- Sessions no longer die after hours idle — the runtime proxy token\n"
         "  now refreshes automatically on resume, session sync, and 404\n"
