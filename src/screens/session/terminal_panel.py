@@ -253,8 +253,7 @@ def _make_entry_handlers(
         # auto-update so a tab-switch remount skips one full-tree diff.
         ft.context.disable_auto_update()
         try:
-            with mt._terminal._lock:
-                mt._terminal._pending_writes.clear()
+            mt.clear_pending()
             for chunk in list(entry.scrollback):
                 mt.send_bytes(chunk)
         finally:
@@ -343,7 +342,7 @@ def _TerminalHost(
         )
         mt.on_resize = handlers["on_resize"]
         # Firmware-level remount hook (Dart `initState` → "mount" event).
-        mt._terminal.on_mount = handlers["on_mount"]
+        mt.on_mount = handlers["on_mount"]
         # Dart-intercepted host shortcuts (flet-terminal ≥0.3.8). The combos
         # are consumed before the PTY, so they arrive only as events.
         if on_shortcut is not None:
