@@ -104,7 +104,7 @@ jobs:
         run: |
           set -o pipefail
           java -version
-          uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi --python-version 3.12 -vv 2>&1 | tee android_apk_build.log
+          uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi --python-version 3.14 -vv 2>&1 | tee android_apk_build.log
       - name: Publish build log to release (on failure)
         if: failure()
         uses: softprops/action-gh-release@v2
@@ -165,7 +165,7 @@ jobs:
         run: |
           set -o pipefail
           java -version
-          uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --python-version 3.12 -vv 2>&1 | tee android_aab_build.log
+          uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --python-version 3.14 -vv 2>&1 | tee android_aab_build.log
       - name: Publish build log to release (on failure)
         if: failure()
         uses: softprops/action-gh-release@v2
