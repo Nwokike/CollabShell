@@ -77,6 +77,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          yes | sdkmanager --licenses > /dev/null || true
       - name: Pre-compile binary wheels (google-colab-cli, primp)
         run: |
           mkdir -p ${{ github.workspace }}/wheels
@@ -130,6 +134,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          yes | sdkmanager --licenses > /dev/null || true
       - name: Pre-compile binary wheels (google-colab-cli, primp)
         run: |
           mkdir -p ${{ github.workspace }}/wheels
