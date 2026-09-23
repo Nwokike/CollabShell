@@ -37,6 +37,11 @@ bundle_id = "ng.kiri.collabshell"
 # 16 KB check, and it preserves phone/tablet/TV device reach.
 target_arch = ["arm64-v8a", "armeabi-v7a"]
 
+# Native wheels in the dependency tree (pydantic-core, pyzmq, cryptography,
+# rpds) are extracted next to the app instead of read from the zipped
+# site-packages.
+extract_packages = ["pydantic_core", "pyzmq", "cryptography", "_cffi_backend", "rpds"]
+
 [tool.flet.android.meta_data]
 "com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~7138516733"
 
