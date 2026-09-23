@@ -143,6 +143,20 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             if fn:
                 fn(*args)
 
+        async def _share_session_url(e=None):
+            url = f"https://colab.research.google.com/drive/{session_name}"
+            try:
+                await ft.Share().share_text(url, title="CollabShell session")
+            except Exception:
+                # Desktop/web have no share sheet — fall back to clipboard.
+                try:
+                    await ft.Clipboard().set(url)
+                    controller.show_snack("🔗 Session URL copied")
+                except Exception:
+                    controller.show_snack(
+                        "Could not share session URL", is_error=True
+                    )
+
         ts = terminal_ps_ref.current
         fab = build_session_fab(
             mode="terminal" if active_tab == 1 else "notebook",
@@ -181,6 +195,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 ft.UrlLauncher().launch_url,
                 f"https://colab.research.google.com/drive/{session_name}",
             ),
+            on_share_session=lambda e: page.run_task(_share_session_url, e),
             on_view_logs=lambda e: controller.open_history(session_name),
             on_restart=_on_restart,
             on_stop=_on_stop,

@@ -249,10 +249,16 @@ def _make_entry_handlers(
         mt = entry.mt
         if mt is None:
             return
-        with mt._terminal._lock:
-            mt._terminal._pending_writes.clear()
-        for chunk in list(entry.scrollback):
-            mt.send_bytes(chunk)
+        # The replay only queues method invokes; suppress the end-of-handler
+        # auto-update so a tab-switch remount skips one full-tree diff.
+        ft.context.disable_auto_update()
+        try:
+            with mt._terminal._lock:
+                mt._terminal._pending_writes.clear()
+            for chunk in list(entry.scrollback):
+                mt.send_bytes(chunk)
+        finally:
+            ft.context.enable_auto_update()
 
     def _on_mount(e=None):
         # Fired by the Dart side whenever the xterm view is (re)created —

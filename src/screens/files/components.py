@@ -29,7 +29,7 @@ def fmt_size(size_bytes: float | None) -> str:
     return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
-def build_empty_dir_view(on_upload) -> ft.Control:
+def build_empty_dir_view(on_upload, upload_action=None) -> ft.Control:
     """Centered placeholder when current directory has zero files."""
     return ft.Container(
         content=ft.Column(
@@ -55,6 +55,7 @@ def build_empty_dir_view(on_upload) -> ft.Control:
                     "Upload a file",
                     icon=ft.Icons.UPLOAD_ROUNDED,
                     on_click=on_upload,
+                    action=upload_action,
                 ),
             ],
             alignment=ft.MainAxisAlignment.CENTER,

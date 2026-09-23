@@ -208,6 +208,15 @@ class AppController:
         page.services.append(file_picker)
         page.file_picker = file_picker
 
+        def _on_picker_result(e):
+            # PickFiles client actions deliver their selection here; the
+            # awaited pick_files() used by ipynb import never fires this.
+            from screens.files.actions import run_armed_upload
+
+            page.run_task(run_armed_upload, e.files or [])
+
+        file_picker.on_result = _on_picker_result
+
         connectivity = ft.Connectivity()
         page.services.append(connectivity)
         page.connectivity = connectivity

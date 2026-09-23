@@ -119,6 +119,9 @@ def NotebookView(
     async def _run_cell(cell: CellData):
         if cell.is_running:
             return
+        from core.haptics import buzz
+
+        await buzz("medium")
         cell.is_running = True
         cell.outputs.clear()
         cell.outputs_rev += 1
@@ -148,6 +151,9 @@ def NotebookView(
             _save()
 
     def _stop_cell(cell: CellData):
+        from core.haptics import buzz
+
+        page.run_task(buzz, "heavy")
         services.colab.cancel()
         _append_output(
             cell, {"type": "error", "traceback": ["Execution cancelled by user"]}
@@ -280,10 +286,9 @@ def NotebookView(
 
         c_list = [c.to_dict() for c in cells_ref.current or []]
         if page.platform.is_mobile():
-            dl_dir = "/storage/emulated/0/Download"
-            if not os.path.exists(dl_dir):
-                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-            os.makedirs(dl_dir, exist_ok=True)
+            from screens.files.actions import resolve_download_dir
+
+            dl_dir = await resolve_download_dir(page)
             path = os.path.join(dl_dir, f"{session_name}.ipynb")
         else:
             try:
@@ -422,6 +427,9 @@ def NotebookView(
         )
 
     async def _do_stop():
+        from core.haptics import buzz
+
+        await buzz("heavy")
         controller.show_snack("Stopping session...")
         try:
             await services.colab.stop_session(

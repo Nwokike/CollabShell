@@ -40,6 +40,7 @@ def build_session_fab(
     on_mount_drive=None,
     on_auth_gcp=None,
     on_open_browser=None,
+    on_share_session=None,
     on_view_logs=None,
     on_restart=None,
     on_stop=None,
@@ -153,6 +154,9 @@ def build_session_fab(
         )
 
     menu_items.append(_item("Manage Files", ft.Icons.FOLDER_ROUNDED, on_manage_files))
+    menu_items.append(
+        _item("Share Session URL", ft.Icons.SHARE_ROUNDED, on_share_session)
+    )
     menu_items.extend(
         [
             _item("Restart Kernel", ft.Icons.REFRESH_ROUNDED, on_restart),

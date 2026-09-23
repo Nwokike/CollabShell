@@ -20,7 +20,7 @@ def _snack(page: ft.Page, message: str, is_error: bool = False):
     show_notification(page, message, is_error=is_error)
 
 
-async def _resolve_download_dir(page: ft.Page) -> str:
+async def resolve_download_dir(page: ft.Page) -> str:
     """Best local download directory: platform answer first, fallbacks after.
 
     Only called on mobile; the platform method (StoragePaths) knows the real
@@ -45,6 +45,16 @@ async def _resolve_download_dir(page: ft.Page) -> str:
     return candidates[-1]
 
 
+_pending_upload: dict = {}
+
+
+def pop_upload_job() -> dict | None:
+    """Return and clear the upload context armed by handle_upload_async."""
+    ctx = _pending_upload.copy()
+    _pending_upload.clear()
+    return ctx or None
+
+
 async def handle_upload_async(
     page: ft.Page,
     colab_service,
@@ -54,14 +64,36 @@ async def handle_upload_async(
     fetch_listing_fn,
     state=None,
 ):
-    """FilePicker dialog to upload local files to the Colab filesystem."""
-    picked_files = await page.file_picker.pick_files(
-        dialog_title="Select file to upload",
-        allow_multiple=True,
-        with_data=bool(getattr(page, "web", False)),
+    """Arm the upload context for this button's PickFiles client action.
+
+    The PickFiles action on the button opens the picker inside the gesture;
+    the selection arrives at FilePicker.on_result (wired in main.py), which
+    calls run_armed_upload() with the picked files.
+    """
+    _pending_upload.clear()
+    _pending_upload.update(
+        page=page,
+        colab_service=colab_service,
+        current_path=current_path,
+        session_name=session_name,
+        auth_method=auth_method,
+        fetch_listing_fn=fetch_listing_fn,
+        state=state,
     )
-    if not picked_files:
+
+
+async def run_armed_upload(picked_files: list) -> None:
+    """Process the files a PickFiles action delivered to on_result."""
+    ctx = pop_upload_job()
+    if not ctx or not picked_files:
         return
+    page = ctx["page"]
+    colab_service = ctx["colab_service"]
+    current_path = ctx["current_path"]
+    session_name = ctx["session_name"]
+    auth_method = ctx["auth_method"]
+    fetch_listing_fn = ctx["fetch_listing_fn"]
+    state = ctx["state"]
 
     for picked in picked_files:
         remote_path = posixpath.normpath(posixpath.join(current_path, picked.name))
@@ -182,7 +214,7 @@ async def handle_download_async(
 
     async def _do_downloads():
         mobile_download_dir = (
-            await _resolve_download_dir(page) if page.platform.is_mobile() else None
+            await resolve_download_dir(page) if page.platform.is_mobile() else None
         )
         for item in selected_items:
             name = item["name"]

@@ -216,6 +216,12 @@ def show_manage_files_modal(
                         ft.Icons.UPLOAD_FILE_ROUNDED,
                         tooltip="Upload files",
                         icon_size=tokens.ICON_SM,
+                        action=ft.PickFiles(
+                            page.file_picker,
+                            dialog_title="Select file to upload",
+                            allow_multiple=True,
+                            with_data=bool(getattr(page, "web", False)),
+                        ),
                         on_click=lambda _: page.run_task(
                             handle_upload_async,
                             page,
@@ -263,7 +269,13 @@ def show_manage_files_modal(
                     auth_method,
                     _fetch_listing,
                     state,
-                )
+                ),
+                upload_action=ft.PickFiles(
+                    page.file_picker,
+                    dialog_title="Select file to upload",
+                    allow_multiple=True,
+                    with_data=bool(getattr(page, "web", False)),
+                ),
             )
         else:
             list_items = [

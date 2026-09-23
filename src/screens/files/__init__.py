@@ -369,6 +369,12 @@ def FilesScreen(session_name: str) -> ft.Control:
                             ft.IconButton(
                                 ft.Icons.UPLOAD_FILE_ROUNDED,
                                 tooltip="Upload file",
+                                action=ft.PickFiles(
+                                    page.file_picker,
+                                    dialog_title="Select file to upload",
+                                    allow_multiple=True,
+                                    with_data=bool(getattr(page, "web", False)),
+                                ),
                                 on_click=lambda e: page.run_task(
                                     handle_upload_async,
                                     page,
@@ -444,7 +450,13 @@ def FilesScreen(session_name: str) -> ft.Control:
                 state.auth_method,
                 _fetch,
                 state,
-            )
+            ),
+            upload_action=ft.PickFiles(
+                page.file_picker,
+                dialog_title="Select file to upload",
+                allow_multiple=True,
+                with_data=bool(getattr(page, "web", False)),
+            ),
         )
     else:
         list_items = [
