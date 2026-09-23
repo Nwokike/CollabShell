@@ -12,6 +12,9 @@ dependencies = [
     "flet-desktop>=1.0.1; sys_platform == 'win32'",
     "flet-terminal>=0.3.9",
     "google-colab-cli>=0.7.2",
+    # 2.13.5 (current latest) pins pydantic-core 2.46.5, which has no Android
+    # wheel anywhere; 2.13.4 / core 2.46.4 does (flet's mobile index).
+    "pydantic==2.13.4",
     "rich>=15.0.0",
     "flet-local-auth>=1.0.1",
 ]
@@ -74,7 +77,8 @@ dev = [
 # colab_request interception is dead on the pin (verified: ImportError on
 # 0.8.0). 0.15.0 is pre-rename (KernelClient still exists) and colab_cli's
 # dual-client support handles ColabKernelClient. Drop this override the moment
-# upstream widens the pin or adds import fallbacks.
+# upstream widens the pin (googlecolab/google-colab-cli#138). Android builds
+# still package 0.8.0 until that PR lands — same as every previous release.
 override-dependencies = ["jupyter-kernel-client==0.15.0"]
 
 [tool.ruff]
