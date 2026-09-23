@@ -62,14 +62,10 @@ async def new_session_impl(
                 uuid.uuid4(), variant=variant, accelerator=accelerator, shape=shape
             )
         except TooManyAssignmentsError as e:
-            # The Colab backend returns 412 when it refuses the assignment —
-            # too many active sessions or a temporary usage/capacity limit.
-            # Surface an actionable message instead of a raw traceback.
             raise ValueError(
-                "Allocation refused (precondition failed). This can mean too "
-                "many active sessions, or a temporary usage or capacity limit "
-                "for the requested runtime. Stop a session to free one up, "
-                "wait and retry, or try a different accelerator."
+                "Couldn't get a runtime right now. Colab may be full, or "
+                "you may have too many sessions open. Stop a session or "
+                "try again in a few minutes."
             ) from e
         except ColabRequestError as e:
             status = get_status_code(e)
@@ -79,15 +75,13 @@ async def new_session_impl(
                     "You may not have quota. Try T4 (free) or CPU."
                 ) from e
             if status is not None and status >= 500:
+                if shape:
+                    raise ValueError(
+                        "High-RAM is currently not available. Try again "
+                        "later, or create the session without High-RAM."
+                    ) from e
                 raise ValueError(
-                    f"Colab returned a server error (HTTP {status}) — this is "
-                    "usually temporary capacity. Wait a moment and retry."
-                    + (
-                        " If you requested High-RAM, also try once without it "
-                        "to check whether the shape was refused."
-                        if shape
-                        else ""
-                    )
+                    "Colab is temporarily unavailable. Please try again in a moment."
                 ) from e
             raise
 

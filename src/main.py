@@ -33,7 +33,12 @@ def _install_bytes_safe_streams():
         def write(self, data):
             if isinstance(data, (bytes, bytearray)):
                 data = bytes(data).decode("utf-8", errors="ignore")
-            return self._inner.write(data)
+            try:
+                return self._inner.write(data)
+            except OSError:
+                # The console/pipe can already be gone during shutdown —
+                # a late log write must never crash the exit path.
+                return None
 
         def flush(self):
             try:
@@ -129,6 +134,7 @@ class AppController:
         self.ad_service: AdService | None = None
         self.colab_service: ColabService | None = None
         self.update_service: UpdateService | None = None
+        self._torn_down = False
 
     async def check_for_updates(self, notify_if_latest: bool = False) -> None:
         """Check version.json on main for a newer build or announcement.
@@ -587,6 +593,9 @@ class AppController:
             explicitly. Session stop is time-bounded so a hung network call
             can't block exit; the storage flush always runs afterwards.
             """
+            if self._torn_down:
+                return
+            self._torn_down = True
             logger.info("Teardown (%s): stopping sessions, flushing storage", reason)
             try:
                 if not state.keep_alive_on_disconnect and state.active_sessions:
@@ -602,6 +611,8 @@ class AppController:
                         await self.storage.flush()
                     except Exception:
                         logger.warning("Storage flush failed", exc_info=True)
+
+        self._teardown = _teardown
 
         # Desktop close: intercept the native close signal, clean up, then
         # destroy — without this, packaged builds exit with no cleanup at all.
@@ -728,8 +739,13 @@ class AppController:
             logger.exception("Suppressed exception")
 
 
+_last_controller: AppController | None = None
+
+
 async def main(page: ft.Page):
+    global _last_controller
     controller = AppController(page)
+    _last_controller = controller
     await controller.init()
 
 
@@ -738,3 +754,12 @@ if __name__ == "__main__":
 
     assets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
     ft.run(main, assets_dir=assets_path)
+
+    # ft.run also returns on Ctrl+C / SIGINT, which never fires the window
+    # close event — give a live controller one last cleanup pass. Idempotent:
+    # the window-close path has usually run it already.
+    if _last_controller is not None and not _last_controller._torn_down:
+        try:
+            asyncio.run(_last_controller._teardown("interrupt exit"))
+        except Exception:
+            logger.warning("Exit cleanup failed", exc_info=True)
