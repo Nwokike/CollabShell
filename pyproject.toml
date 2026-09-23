@@ -15,11 +15,13 @@ dependencies = [
     # Android builds package with Python 3.14 and resolve these fresh inside
     # the APK (uv.lock does not apply there). Versions below are the newest
     # whose Android wheels exist for 3.14 — pydantic-core 2.46.5, rpds-py
-    # 2026.6.3 and cryptography 50.0.1 ship none; 2.46.4 / 2026.5.1 / 48.0.0
-    # do (flet's mobile index carries the Android builds).
+    # 2026.6.3, cryptography 50.0.1 and pyarrow 25.0.1 ship none; the pinned
+    # versions do (flet's mobile index carries the Android builds). pyarrow
+    # arrives via jupyter-mimetypes, which leaves it unpinned upstream.
     "pydantic==2.13.4",
     "rpds-py==2026.5.1",
     "cryptography==48.0.0",
+    "pyarrow==24.0.0",
     "rich>=15.0.0",
     "flet-local-auth>=1.0.1",
 ]
