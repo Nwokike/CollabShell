@@ -26,6 +26,12 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
             constants.STORAGE_LOG_FORMAT, state.default_log_format
         )
 
+    async def _on_exec_env_change(e):
+        state.default_exec_env = (e.control.value or "").strip()
+        await services.storage.set(
+            constants.STORAGE_EXEC_ENV, state.default_exec_env
+        )
+
     return ft.Column(
         controls=[
             section_header("EXECUTION"),
@@ -111,6 +117,21 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=tokens.SPACE_LG,
                         ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        # Environment variables prelude
+                        ft.TextField(
+                            value=state.default_exec_env,
+                            label="Environment Variables",
+                            hint_text="KEY=VALUE, one per line",
+                            prefix_icon=ft.Icons.TERM_ROUNDED,
+                            multiline=True,
+                            min_lines=2,
+                            max_lines=4,
+                            border_radius=tokens.RADIUS_MD,
+                            text_size=tokens.FONT_SM,
+                            on_blur=lambda e: page.run_task(_on_exec_env_change, e),
+                        ),
+                        tip_text(constants.TIP_EXEC_ENV),
                     ],
                 ),
                 margin=ft.Margin(

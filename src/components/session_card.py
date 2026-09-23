@@ -13,7 +13,8 @@ def build_session_card(
 ) -> ft.Container:
     """Build a session card showing name, hardware, status, and last execution.
 
-    session dict keys: name, accelerator, variant, status, running, last_execution, accelerator_label
+    session dict keys: name, accelerator, variant, status, running,
+    last_execution, accelerator_label, machine_shape
     """
     name = session.get("name", "?")
     variant = session.get("variant", "DEFAULT")
@@ -46,6 +47,11 @@ def build_session_card(
                                     weight=ft.FontWeight.W_600,
                                 ),
                                 hardware_badge(accel_str, variant),
+                                *(
+                                    [hardware_badge("High-RAM", variant)]
+                                    if session.get("machine_shape") == "HIGH_RAM"
+                                    else []
+                                ),
                             ],
                             spacing=tokens.SPACE_SM,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,

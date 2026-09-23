@@ -43,6 +43,46 @@ def parse_outputs_to_controls(outputs: list) -> list[ft.Control]:
                     output_controls.append(
                         ft.Text(f"Image Error: {e}", color=AppColors.ERROR)
                     )
+            elif "text/markdown" in data:
+                md = data["text/markdown"]
+                if isinstance(md, list):
+                    md = "".join(md)
+                output_controls.append(
+                    ft.Markdown(
+                        str(md),
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    )
+                )
+            elif "text/html" in data:
+                # Mirror colab_cli's render_display_data priority: html goes
+                # through html2text (already a colab_cli dependency), then
+                # falls back to the plain ANSI path when conversion fails.
+                html = data["text/html"]
+                if isinstance(html, list):
+                    html = "".join(html)
+                md_text = None
+                try:
+                    import html2text
+
+                    md_text = html2text.html2text(str(html))
+                except Exception:
+                    md_text = None
+                if md_text:
+                    output_controls.append(
+                        ft.Markdown(
+                            md_text,
+                            selectable=True,
+                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        )
+                    )
+                elif "text/plain" in data:
+                    output_controls.append(
+                        parse_ansi_to_flet_text(
+                            raw_text=data["text/plain"],
+                            default_size=tokens.FONT_SM,
+                        )
+                    )
             elif "text/plain" in data:
                 output_controls.append(
                     parse_ansi_to_flet_text(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 
@@ -15,7 +16,20 @@ from core.theme import AppColors
 logger = logging.getLogger(__name__)
 
 
-def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
+def _notify_copy(page: ft.Page) -> None:
+    from core.notifications import show_notification
+
+    show_notification(page, "Logs copied to clipboard")
+
+
+def _read_log_tail(log_file: str) -> str:
+    with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+        return "".join(f.readlines()[-200:])
+
+
+async def _open_logs_dialog(page: ft.Page) -> None:
+    # colab.log rotates at 5 MB — read it off the event loop so opening the
+    # dialog never freezes the UI (Flet 1.0 runs handlers inline).
     memory_logs = MemoryLogHandler.get_logs()
     if memory_logs:
         log_text = "\n".join(memory_logs)
@@ -23,13 +37,15 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
         log_file = os.path.join(resolve_storage_dir(), "colab.log")
         if os.path.exists(log_file):
             try:
-                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-                    log_text = "".join(f.readlines()[-200:])
+                log_text = await asyncio.to_thread(_read_log_tail, log_file)
             except Exception:
                 log_text = "Could not read log file."
         else:
             log_text = "No activity logs recorded yet."
+    page.show_dialog(build_logs_dialog(page, log_text))
 
+
+def build_logs_dialog(page: ft.Page, log_text: str) -> ft.AlertDialog:
     log_control = ft.Text(
         value=log_text,
         size=tokens.FONT_XS,
@@ -37,15 +53,6 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
         color=AppColors.TERMINAL_GREEN,
         selectable=True,
     )
-
-    async def _copy(e):
-        try:
-            await ft.Clipboard().set(log_control.value)
-            from core.notifications import show_notification
-
-            show_notification(page, "Logs copied to clipboard")
-        except Exception:
-            logger.exception("Suppressed exception")
 
     return ft.AlertDialog(
         modal=True,
@@ -99,7 +106,8 @@ def build_logs_dialog(page: ft.Page) -> ft.AlertDialog:
             ft.IconButton(
                 icon=ft.Icons.COPY_ROUNDED,
                 tooltip="Copy logs",
-                on_click=lambda e: page.run_task(_copy, e),
+                action=ft.CopyToClipboard(data=log_text),
+                on_click=lambda e: _notify_copy(page),
             ),
             ft.TextButton("Close", on_click=lambda e: page.pop_dialog()),
         ],
@@ -128,8 +136,8 @@ def build_logs_section(page: ft.Page, state, services) -> ft.Column:
                         ft.FilledButton(
                             "Open Terminal",
                             icon=ft.Icons.TERMINAL_ROUNDED,
-                            on_click=lambda e: page.show_dialog(
-                                build_logs_dialog(page)
+                            on_click=lambda e: page.run_task(
+                                _open_logs_dialog, page
                             ),
                         ),
                     ],

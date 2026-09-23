@@ -20,6 +20,31 @@ def _snack(page: ft.Page, message: str, is_error: bool = False):
     show_notification(page, message, is_error=is_error)
 
 
+async def _resolve_download_dir(page: ft.Page) -> str:
+    """Best local download directory: platform answer first, fallbacks after.
+
+    Only called on mobile; the platform method (StoragePaths) knows the real
+    per-device download directory, with the classic Android/POSIX paths kept
+    as fallbacks for devices where it is unavailable.
+    """
+    candidates: list[str] = []
+    try:
+        platform_dl = await ft.StoragePaths().get_downloads_directory()
+        if platform_dl:
+            candidates.append(platform_dl)
+    except Exception:
+        logger.debug("StoragePaths.get_downloads_directory unavailable", exc_info=True)
+    candidates.append("/storage/emulated/0/Download")
+    candidates.append(os.path.join(os.path.expanduser("~"), "Downloads"))
+    for candidate in candidates:
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return candidates[-1]
+
+
 async def handle_upload_async(
     page: ft.Page,
     colab_service,
@@ -156,6 +181,9 @@ async def handle_download_async(
         return
 
     async def _do_downloads():
+        mobile_download_dir = (
+            await _resolve_download_dir(page) if page.platform.is_mobile() else None
+        )
         for item in selected_items:
             name = item["name"]
             is_dir = item.get("type") == "directory" or item.get("is_dir", False)
@@ -165,9 +193,7 @@ async def handle_download_async(
             default_name = f"{name}.zip" if is_dir else name
 
             if page.platform.is_mobile():
-                dl_dir = "/storage/emulated/0/Download"
-                if not os.path.exists(dl_dir):
-                    dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                dl_dir = mobile_download_dir
                 os.makedirs(dl_dir, exist_ok=True)
                 name_part, ext_part = os.path.splitext(default_name)
                 counter = 1
@@ -182,7 +208,7 @@ async def handle_download_async(
                         dialog_title=f"Save {default_name}",
                         file_name=default_name,
                     )
-                except ValueError, Exception:
+                except Exception:
                     dl_dir = "/storage/emulated/0/Download"
                     if not os.path.exists(dl_dir):
                         dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")

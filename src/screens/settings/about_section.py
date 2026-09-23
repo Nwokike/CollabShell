@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import flet as ft
@@ -45,6 +46,43 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
             await ft.UrlLauncher().launch_url(constants.TERMS_OF_SERVICE_URL)
         except Exception:
             logger.exception("Suppressed exception")
+
+    async def _show_usage(e=None):
+        """Show the compute-unit balance from colab_cli's `colab usage` API."""
+
+        def _fetch():
+            from colab_cli.auth import AuthProvider
+            from colab_cli.common import State
+            from colab_cli.consumption import format_consumption_status
+
+            st = State()
+            st.auth_provider = (
+                AuthProvider.ADC
+                if state.auth_method == "adc"
+                else AuthProvider.OAUTH2
+            )
+            return format_consumption_status(st.client.get_consumption_user_info())
+
+        try:
+            text = await asyncio.to_thread(_fetch)
+        except Exception as ex:
+            logger.warning("Compute usage lookup failed: %s", ex)
+            text = f"Could not load compute usage right now.\n\n{ex}"
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("Compute Usage", weight=ft.FontWeight.BOLD),
+                content=ft.Text(
+                    text,
+                    selectable=True,
+                    font_family="RobotoMono",
+                    size=tokens.FONT_SM,
+                ),
+                actions=[
+                    ft.TextButton("Close", on_click=lambda ev: page.pop_dialog())
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
 
     return ft.Column(
         controls=[
@@ -97,6 +135,23 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                                 ),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Container(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Text("Compute Usage", size=tokens.FONT_SM),
+                                    ft.Text(
+                                        "Balance · burn rate · runtimes",
+                                        size=tokens.FONT_SM,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        weight=ft.FontWeight.W_500,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            ink=True,
+                            tooltip="Tap to check your compute-unit balance",
+                            on_click=lambda e: page.run_task(_show_usage, e),
                         ),
                         ft.Divider(
                             height=1,

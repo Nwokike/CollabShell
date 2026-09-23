@@ -1,10 +1,43 @@
 import asyncio
 import datetime
 import logging
+import re
 import time
 from collections.abc import Callable
 
 logger = logging.getLogger("colab_execution")
+
+
+def _build_env_prelude() -> str:
+    """Build `import os; os.environ[...] = ...` from the exec-env setting.
+
+    Mirrors colab_cli's --env handling: one KEY=VALUE per line; comments and
+    malformed lines are skipped with a warning.
+    """
+    from core.state import state as app_state
+
+    raw = (app_state.default_exec_env or "").strip()
+    if not raw:
+        return ""
+    lines = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            logger.warning(
+                "Ignoring invalid env entry %r (expected KEY=VALUE)", line
+            )
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            logger.warning("Ignoring invalid env key %r", key)
+            continue
+        lines.append(f"os.environ[{key!r}] = {value!r}")
+    if not lines:
+        return ""
+    return "import os\n" + "\n".join(lines) + "\n"
 
 
 async def exec_code_impl(
@@ -271,9 +304,17 @@ async def exec_code_impl(
 
             wrapped_user_stdin_hook = _app_stdin_hook
 
+        # Settings-supplied env vars become a prelude on top of the user's
+        # code; history logs the original code only, so the prelude stays
+        # invisible in the session log.
+        exec_code = code
+        env_prelude = _build_env_prelude()
+        if env_prelude:
+            exec_code = env_prelude + code
+
         def _execute_main():
             return runtime.execute_code(
-                code,
+                exec_code,
                 output_hook=output_hook if on_output else None,
                 timeout=timeout,
                 allow_stdin=intercept_oauth or (active_stdin_hook is not None),

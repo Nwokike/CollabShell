@@ -153,7 +153,8 @@ def _make_entry_handlers(
             ps.status_ok = False
             ps.connecting = True
         try:
-            client = colab_service.get_terminal_client(
+            client = await asyncio.to_thread(
+                colab_service.get_terminal_client,
                 session_info["url"],
                 session_info["token"],
                 _on_stdout,
@@ -191,7 +192,8 @@ def _make_entry_handlers(
                         colab_service, session_name
                     )
                     if session_info:
-                        client = colab_service.get_terminal_client(
+                        client = await asyncio.to_thread(
+                            colab_service.get_terminal_client,
                             session_info["url"],
                             session_info["token"],
                             _on_stdout,

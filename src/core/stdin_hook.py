@@ -127,26 +127,24 @@ def show_stdin_dialog(page: ft.Page, prompt, snack_func=None, **kwargs):
 
     content_controls = [ft.Text(display_text, size=tokens.FONT_SM, selectable=True)]
     if extracted_url:
-
-        async def _launch_url_task(e=None):
-            await ft.UrlLauncher().launch_url(extracted_url)
-
-        async def _copy_url_task(e=None):
-            await ft.Clipboard().set(extracted_url)
-            if snack_func:
-                snack_func("Copied URL to clipboard!")
-
+        # Client actions run inside the gesture — required for clipboard/new
+        # tab to work in browsers, with no Python round trip.
         content_controls.append(
             ft.Row(
                 [
                     ft.FilledButton(
                         "🌐 Open Link in Browser",
-                        on_click=lambda e: page.run_task(_launch_url_task, e),
+                        action=ft.OpenUrl(extracted_url),
                     ),
                     ft.IconButton(
                         ft.Icons.COPY_ROUNDED,
                         tooltip="Copy URL",
-                        on_click=lambda e: page.run_task(_copy_url_task, e),
+                        action=ft.CopyToClipboard(data=extracted_url),
+                        on_click=(
+                            (lambda e: snack_func("Copied URL to clipboard!"))
+                            if snack_func
+                            else None
+                        ),
                     ),
                 ],
                 wrap=True,

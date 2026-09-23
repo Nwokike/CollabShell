@@ -37,15 +37,6 @@ def _launch(page: ft.Page, url: str):
     page.run_task(_run)
 
 
-def _pop_and_launch(page: ft.Page, url: str):
-    """Dismiss the dialog, then hand the URL to the browser/app store."""
-    try:
-        page.pop_dialog()
-    except Exception:
-        logger.exception("Suppressed exception")
-    _launch(page, url)
-
-
 async def check_from_dialog(page: ft.Page):
     """Live re-check from the up-to-date dialog; morphs it to update mode
     if the server now reports a newer build."""
@@ -76,14 +67,16 @@ def _build_update_buttons(page: ft.Page, data: dict) -> list[ft.Control]:
             ft.FilledButton(
                 content=ft.Text("Google Play", font_family="Outfit"),
                 icon=ft.Icons.SHOP_ROUNDED,
-                on_click=lambda e, u=data["playstore_url"]: _pop_and_launch(page, u),
+                action=ft.OpenUrl(data["playstore_url"]),
+                on_click=lambda e: page.pop_dialog(),
             )
         )
         buttons.append(
             ft.OutlinedButton(
                 content=ft.Text("Direct APK (GitHub)", font_family="Outfit"),
                 icon=ft.Icons.DOWNLOAD_ROUNDED,
-                on_click=lambda e, u=github_url: _pop_and_launch(page, u),
+                action=ft.OpenUrl(github_url),
+                on_click=lambda e: page.pop_dialog(),
             )
         )
     else:
@@ -91,7 +84,8 @@ def _build_update_buttons(page: ft.Page, data: dict) -> list[ft.Control]:
             ft.FilledButton(
                 content=ft.Text("Download from GitHub", font_family="Outfit"),
                 icon=ft.Icons.DOWNLOAD_ROUNDED,
-                on_click=lambda e, u=github_url: _pop_and_launch(page, u),
+                action=ft.OpenUrl(github_url),
+                on_click=lambda e: page.pop_dialog(),
             )
         )
     if not data.get("mandatory"):

@@ -20,6 +20,35 @@ from core.theme import AppColors
 logger = logging.getLogger("AccountSection")
 
 
+async def _verify_sensitive_action(page: ft.Page, reason: str) -> bool:
+    """Gate credential-wiping actions behind device biometrics when available.
+
+    Fails open when the platform has no local auth (Linux/web) or the device
+    offers no biometric capability, and closed when the user cancels or the
+    prompt errors.
+    """
+    try:
+        from flet_local_auth import LocalAuthentication, LocalAuthException
+    except ImportError:
+        return True
+    try:
+        auth_service = LocalAuthentication()
+        if not (
+            await auth_service.is_device_supported()
+            and await auth_service.can_check_biometrics()
+        ):
+            return True
+        return bool(await auth_service.authenticate(reason))
+    except ft.FletUnsupportedPlatformException:
+        return True
+    except LocalAuthException as exc:
+        logger.info("Local auth declined: %s", exc)
+        return False
+    except Exception:
+        logger.warning("Local-auth gate failed", exc_info=True)
+        return False
+
+
 def build_account_section(page: ft.Page, state, services) -> ft.Column:
     # ── Auth status indicator ─────────────────────────────────────────────────
     auth_status_icon = (
@@ -47,6 +76,14 @@ def build_account_section(page: ft.Page, state, services) -> ft.Column:
 
         async def _confirm_reauth(ev=None):
             page.pop_dialog()
+            if not await _verify_sensitive_action(
+                page,
+                "Verify it's you before clearing your Google Colab credentials",
+            ):
+                from core.notifications import show_notification
+
+                show_notification(page, "Verification cancelled", is_error=True)
+                return
             try:
                 await services.colab.clear_token()
             except Exception as ex:

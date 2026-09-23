@@ -1,28 +1,25 @@
 [project]
 name = "collabshell"
-version = "2.1.2"
+version = "2.2.0"
 description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "flet>=0.86.5",
-    "flet-ads>=0.86.5",
+    "flet>=1.0.1",
+    "flet-ads>=1.0.1",
     "httpx>=0.28.1",
-    "flet-cli>=0.86.5; sys_platform == 'win32'",
-    "flet-desktop>=0.86.5; sys_platform == 'win32'",
+    "flet-cli>=1.0.1; sys_platform == 'win32'",
+    "flet-desktop>=1.0.1; sys_platform == 'win32'",
     "flet-terminal>=0.3.8",
-    "google-colab-cli>=0.6.0",
-    # google-colab-cli 0.6.0 calls jupyter_kernel_client.KernelClient(...),
-    # which jupyter-kernel-client 1.0.0 renamed to JupyterKernelClient.
-    # Pin below 1.0 until colab_cli supports the new API.
-    "jupyter-kernel-client<1.0",
+    "google-colab-cli>=0.7.2",
     "rich>=15.0.0",
+    "flet-local-auth>=1.0.1",
 ]
 
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 12
+build_number = 13
 
 [tool.flet.app]
 path = "src"
@@ -63,6 +60,17 @@ dev = [
 ]
 
 
+
+[tool.uv]
+# TODO(upstream): google-colab-cli 0.7.2 pins jupyter-kernel-client==0.8.0,
+# but its own ws dispatcher (runtime._apply_ws_hook) imports symbols that only
+# exist in the 0.9-0.15 era (wsclient.JupyterSubprotocol,
+# deserialize_msg_from_ws_default, _subprotocol) — so Drive-OAuth
+# colab_request interception is dead on the pin (verified: ImportError on
+# 0.8.0). 0.15.0 is pre-rename (KernelClient still exists) and colab_cli's
+# dual-client support handles ColabKernelClient. Drop this override the moment
+# upstream widens the pin or adds import fallbacks.
+override-dependencies = ["jupyter-kernel-client==0.15.0"]
 
 [tool.ruff]
 lint.extend-ignore = ["BLE001", "S110"]

@@ -19,6 +19,13 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
         state.default_tpu = e.control.value or ""
         await services.storage.set(constants.STORAGE_DEFAULT_TPU, state.default_tpu)
 
+    async def _on_high_mem_default(e):
+        state.default_high_mem = bool(e.control.value)
+        await services.storage.set(
+            constants.STORAGE_DEFAULT_HIGH_MEM,
+            str(state.default_high_mem).lower(),
+        )
+
     return ft.Column(
         controls=[
             section_header("HARDWARE DEFAULTS"),
@@ -103,6 +110,37 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
                                         _on_tpu_default, e
+                                    ),
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_LG,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        # Default High-RAM row
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.MEMORY_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Default High-RAM",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(constants.TIP_HIGH_MEM),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
+                                ),
+                                ft.Switch(
+                                    value=state.default_high_mem,
+                                    on_change=lambda e: page.run_task(
+                                        _on_high_mem_default, e
                                     ),
                                 ),
                             ],

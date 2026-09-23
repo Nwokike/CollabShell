@@ -2,8 +2,8 @@
 
 APP_NAME = "Colab Shell"
 APP_FULL_NAME = "Colab Shell: Notebook & TTY"
-APP_VERSION = "2.1.2"
-APP_BUILD_NUMBER = 12
+APP_VERSION = "2.2.0"
+APP_BUILD_NUMBER = 13
 UPDATE_CONFIG_URL = (
     "https://raw.githubusercontent.com/Nwokike/CollabShell/main/version.json"
 )
@@ -24,6 +24,8 @@ STORAGE_KEEP_ALIVE_ON_DISCONNECT = "colab_keep_alive_on_disconnect"
 STORAGE_LOG_FORMAT = "colab_log_format"
 STORAGE_DRIVE_MOUNT_PATH = "colab_drive_mount_path"
 STORAGE_LOGTOSTDERR = "colab_logtostderr"
+STORAGE_DEFAULT_HIGH_MEM = "colab_default_high_mem"
+STORAGE_EXEC_ENV = "colab_exec_env"
 
 # ── Hardware options (from colab_cli.client.Accelerator) ──────────────────────
 # Free tier: CPU (always), T4 GPU (limited), TPU v5e1/v6e1 (limited)
@@ -97,5 +99,13 @@ TIP_KEEP_ALIVE = (
 )
 TIP_TIMEOUT = "Maximum time to wait for code execution to complete."
 TIP_DRIVE_MOUNT = "Mounts your Google Drive to access files from Colab."
+TIP_HIGH_MEM = (
+    "Request a high-RAM runtime with more memory. Works for CPU, T4, G4, A100 "
+    "and H100; L4 and TPU runtimes have a fixed shape."
+)
+TIP_EXEC_ENV = (
+    "Environment variables injected before every code execution "
+    "(one KEY=VALUE per line)."
+)
 TIP_AUTH_OAUTH2 = "Sign in via browser. Recommended for most users."
 TIP_AUTH_ADC = "Uses gcloud Application Default Credentials. For advanced users."

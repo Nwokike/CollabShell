@@ -57,6 +57,8 @@ class AppState:
     default_log_format: str = "ipynb"
     drive_mount_path: str = "/content/drive"
     logtostderr: bool = True
+    default_high_mem: bool = False
+    default_exec_env: str = ""
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     is_authenticated: bool = False

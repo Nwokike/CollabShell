@@ -1,7 +1,10 @@
 """Platform-resilient key-value storage service.
 
-Uses a single local JSON file approach for desktop (storage/storage.json beside src),
-and the mobile sandbox directory for Android.
+Settings live in Flet's native SharedPreferences, which writes immediately —
+there is no debounce window that can lose the last change on exit. Notebook
+snapshots stay as individual JSON files beside them. A one-time import
+carries any values previously kept in storage.json, which stays on disk as a
+backup.
 """
 
 from __future__ import annotations
@@ -10,7 +13,6 @@ import asyncio
 import json
 import logging
 import re
-import time
 from pathlib import Path
 
 import flet as ft
@@ -21,11 +23,8 @@ from core.storage_patch import resolve_storage_dir
 
 logger = logging.getLogger(__name__)
 
-# Use Flet sandbox data storage path on Android/iOS mobile to avoid permission issues
 _STORAGE_DIR = Path(resolve_storage_dir())
-
-_STORAGE_FILE = _STORAGE_DIR / "storage.json"
-_WRITE_DEBOUNCE_SEC = 1.0
+_LEGACY_STORAGE_FILE = _STORAGE_DIR / "storage.json"
 
 
 def _slugify(name: str) -> str:
@@ -34,102 +33,68 @@ def _slugify(name: str) -> str:
 
 
 class StorageService:
-    """Wraps persistent key-value storage mimicking Sherlock/DDGS."""
+    """Key-value settings on SharedPreferences + JSON notebook snapshots."""
 
     def __init__(self, page: ft.Page):
         self._page = page
-        self._data: dict[str, str] = {}
+        # Service auto-registers with the current page; hold a reference so
+        # flet doesn't unregister it while the app runs.
+        self._prefs = ft.SharedPreferences()
         self._lock = asyncio.Lock()
-        self._dirty = False
-        self._last_write: float = 0.0
-        self._pending_write_task: asyncio.Task | None = None
+        self._migrated = False
+        logger.info("StorageService: using native SharedPreferences")
 
-        logger.info("StorageService: using local storage.json")
-        self._load()
-
-    def _load(self) -> None:
-        _STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        if _STORAGE_FILE.exists():
-            try:
-                raw = _STORAGE_FILE.read_bytes()
-                if raw:
-                    self._data = json.loads(raw.decode("utf-8"))
-                else:
-                    self._data = {}
-            except Exception as e:
-                logger.warning("StorageService._load failed: %s", e)
-                self._data = {}
-        else:
-            self._data = {}
-
-    def _save_now(self) -> None:
-        try:
-            _STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-            data_bytes = json.dumps(self._data, ensure_ascii=False, indent=2).encode(
-                "utf-8"
-            )
-            # Backup the current file before overwriting (only if content changed)
-            if _STORAGE_FILE.exists():
-                old = _STORAGE_FILE.read_bytes()
-                if old != data_bytes:
-                    bak = _STORAGE_FILE.with_suffix(".json.bak")
-                    bak.write_bytes(old)
-            # Atomic write via temp file + rename
-            tmp = _STORAGE_FILE.with_suffix(".json.tmp")
-            tmp.write_bytes(data_bytes)
-            tmp.replace(_STORAGE_FILE)
-            self._dirty = False
-            self._last_write = time.monotonic()
-        except Exception as e:
-            logger.warning("StorageService._save_now failed: %s", e)
-
-    def _schedule_write(self) -> None:
-        if self._pending_write_task:
+    async def _ensure_migrated(self) -> None:
+        if self._migrated:
             return
-        try:
-            loop = asyncio.get_running_loop()
-            self._pending_write_task = loop.call_later(
-                _WRITE_DEBOUNCE_SEC,
-                lambda: loop.create_task(self._flush_task()),
-            )
-        except RuntimeError:
-            self._save_now()
-
-    async def _flush_task(self) -> None:
-        try:
-            await self.flush()
-        finally:
-            self._pending_write_task = None
+        async with self._lock:
+            if self._migrated:
+                return
+            try:
+                if _LEGACY_STORAGE_FILE.exists():
+                    raw = await asyncio.to_thread(_LEGACY_STORAGE_FILE.read_bytes)
+                    legacy = json.loads(raw.decode("utf-8")) if raw else {}
+                    imported = 0
+                    for key, value in legacy.items():
+                        if isinstance(value, str) and not await self._prefs.contains_key(
+                            key
+                        ):
+                            await self._prefs.set(key, value)
+                            imported += 1
+                    logger.info(
+                        "Imported %d legacy storage.json settings (of %d)",
+                        imported,
+                        len(legacy),
+                    )
+            except Exception as e:
+                logger.warning("Legacy settings import failed: %s", e)
+            finally:
+                self._migrated = True
 
     async def get(self, key: str, default=None) -> str | None:
-        async with self._lock:
-            return self._data.get(key, default)
+        await self._ensure_migrated()
+        value = await self._prefs.get(key)
+        return default if value is None else str(value)
 
     async def set(self, key: str, value) -> None:
         if not isinstance(value, str):
             value = str(value)
-        async with self._lock:
-            self._data[key] = value
-            self._dirty = True
-        self._schedule_write()
+        await self._ensure_migrated()
+        await self._prefs.set(key, value)
 
     async def remove(self, key: str) -> None:
-        async with self._lock:
-            self._data.pop(key, None)
-            self._dirty = True
-        self._schedule_write()
+        await self._ensure_migrated()
+        await self._prefs.remove(key)
 
     async def contains(self, key: str) -> bool:
-        async with self._lock:
-            return key in self._data
+        await self._ensure_migrated()
+        return bool(await self._prefs.contains_key(key))
 
     async def delete(self, key: str) -> None:
         await self.remove(key)
 
     async def flush(self) -> None:
-        async with self._lock:
-            if self._dirty:
-                self._save_now()
+        """No-op: SharedPreferences writes land immediately."""
 
     def _get_notebook_file(self, session_name: str) -> Path:
         return _STORAGE_DIR / f"notebook_{_slugify(session_name)}.json"
@@ -137,8 +102,10 @@ class StorageService:
     async def save_notebook(self, session_name: str, cells: list[dict]) -> None:
         try:
             nb_file = self._get_notebook_file(session_name)
-            # Atomic write: temp + rename (same pattern as _save_now)
-            data_bytes = json.dumps(cells, ensure_ascii=False, indent=2).encode("utf-8")
+            # Atomic write: temp + rename
+            data_bytes = json.dumps(cells, ensure_ascii=False, indent=2).encode(
+                "utf-8"
+            )
             tmp = nb_file.with_suffix(".json.tmp")
             tmp.write_bytes(data_bytes)
             tmp.replace(nb_file)

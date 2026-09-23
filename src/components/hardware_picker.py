@@ -12,6 +12,8 @@ def build_hardware_picker(
     gpu_ref=None,
     tpu_ref=None,
     hardware_type_ref=None,
+    high_mem_ref=None,
+    high_mem_default: bool = False,
 ) -> ft.Container:
     """Build the hardware selection UI for new sessions.
 
@@ -36,6 +38,8 @@ def build_hardware_picker(
 
         gpu_dropdown.visible = is_gpu
         tpu_dropdown.visible = is_tpu
+        # High-RAM only applies to CPU/GPU shapes; TPU runtimes are fixed.
+        high_mem_row.visible = not is_tpu
 
         e.control.page.update()
 
@@ -92,6 +96,35 @@ def build_hardware_picker(
         visible=False,
     )
 
+    # High-RAM shape (colab_cli Shape.HIGH_RAM). resolve_assign_shape drops
+    # the flag for L4/v5e1/v6e1, which have a fixed shape.
+    high_mem_row = ft.Row(
+        controls=[
+            ft.Switch(
+                ref=high_mem_ref,
+                value=high_mem_default,
+                tooltip=constants.TIP_HIGH_MEM,
+            ),
+            ft.Column(
+                controls=[
+                    ft.Text(
+                        "High-RAM",
+                        size=tokens.FONT_MD,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                    ft.Text(
+                        "More memory for large datasets",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                ],
+                spacing=0,
+                expand=True,
+            ),
+        ],
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
     # Create button
     create_btn = ft.FilledButton(
         content=ft.Text("Create Session"),
@@ -128,6 +161,8 @@ def build_hardware_picker(
                 gpu_dropdown,
                 # TPU dropdown
                 tpu_dropdown,
+                # High-RAM toggle (hidden while TPU is selected)
+                high_mem_row,
                 ft.Divider(height=tokens.SPACE_LG, color=ft.Colors.TRANSPARENT),
                 # Create
                 create_btn,

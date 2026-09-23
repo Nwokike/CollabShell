@@ -59,6 +59,7 @@ def show_new_session_sheet(
     gpu_ref = ft.Ref[ft.Dropdown]()
     tpu_ref = ft.Ref[ft.Dropdown]()
     hardware_type_ref = ft.Ref[ft.SegmentedButton]()
+    high_mem_ref = ft.Ref[ft.Switch]()
 
     async def _on_create(e):
         name = name_ref.current.value.strip() if name_ref.current else ""
@@ -76,8 +77,12 @@ def show_new_session_sheet(
         )
         tpu = (
             tpu_ref.current.value
-            if (tpu_ref.current and selected_hw == "TPU")
+            if (tpu_ref and selected_hw == "TPU")
             else None
+        )
+
+        high_mem = (
+            bool(high_mem_ref.current.value) if high_mem_ref.current else False
         )
 
         paid_gpus = {"L4", "G4", "A100", "H100"}
@@ -158,6 +163,7 @@ def show_new_session_sheet(
                 tpu=tpu if tpu else None,
                 auth_method=state.auth_method,
                 keep_alive=state.keep_alive_enabled,
+                high_mem=high_mem,
             )
             logger.info("Session created successfully: %s", result)
             loading_dialog.open = False
@@ -200,6 +206,8 @@ def show_new_session_sheet(
         gpu_ref=gpu_ref,
         tpu_ref=tpu_ref,
         hardware_type_ref=hardware_type_ref,
+        high_mem_ref=high_mem_ref,
+        high_mem_default=state.default_high_mem,
     )
 
     hw_dialog = ft.AlertDialog(

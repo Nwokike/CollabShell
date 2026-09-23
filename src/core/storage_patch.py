@@ -124,108 +124,14 @@ def apply_storage_patches():
         wsgiref_simple_server.make_server = lambda *a, **k: None
         wsgiref.simple_server = wsgiref_simple_server
 
-    # Android/mobile Jupyter client may be incomplete or missing entirely;
-    # ensure all expected attributes exist so downstream imports don't fail.
-    if "jupyter_kernel_client" not in sys.modules:
-        try:
-            import jupyter_kernel_client  # noqa: F401 — ensures it's in sys.modules
-        except ImportError:
-
-            def _make_stub_module(fullname):
-                mod = types.ModuleType(fullname)
-                sys.modules[fullname] = mod
-                return mod
-
-            _make_stub_module("jupyter_kernel_client")
-
-    ctx = sys.modules["jupyter_kernel_client"]
-
-    # Patch every public attribute that the real module exposes
-    _jupyter_kernel_client_attrs = {
-        "JupyterSubprotocol": None,
-        "KernelClient": None,
-        "KernelHttpManager": None,
-        "KernelWebSocketClient": None,
-        "KonsoleApp": None,
-        "LanguageSnippets": None,
-        "SNIPPETS_REGISTRY": None,
-        "VariableDescription": None,
-        "client": None,
-        "constants": None,
-        "konsoleapp": None,
-        "log": None,
-        "manager": None,
-        "models": None,
-        "shell": None,
-        "snippets": None,
-        "utils": None,
-        "wsclient": None,
-    }
-
-    for name in _jupyter_kernel_client_attrs:
-        if not hasattr(ctx, name):
-            setattr(ctx, name, None)
-
-    # JupyterSubprotocol is special — create a proper enum so code that checks
-    # isinstance(value, JupyterSubprotocol) or accesses .value doesn't crash.
-    if ctx.JupyterSubprotocol is None:
-        import enum
-
-        class MockJupyterSubprotocol(enum.Enum):
-            DEFAULT = "v1.kernel.websocket.jupyter.org"
-
-        ctx.JupyterSubprotocol = MockJupyterSubprotocol
-
-    # Ensure wsclient submodule exists (some imports access it directly)
-    if "jupyter_kernel_client.wsclient" not in sys.modules:
-        wsclient_mod = types.ModuleType("jupyter_kernel_client.wsclient")
-        sys.modules["jupyter_kernel_client.wsclient"] = wsclient_mod
-        ctx.wsclient = wsclient_mod
-        wsclient_mod.JupyterSubprotocol = ctx.JupyterSubprotocol
-
-    import colab_cli.auth
     import colab_cli.common
-    import colab_cli.history
     import colab_cli.state
 
-    # Override token path
-    colab_cli.auth.TOKEN_CONFIG_PATH = os.path.join(storage_dir, "token.json")
-
-    # Patch State.__init__ so every new State instance gets the correct paths
-    original_state_init = colab_cli.common.State.__init__
-
-    def patched_state_init(self, *args, **kwargs):
-        original_state_init(self, *args, **kwargs)
-        self.config_path = os.path.join(storage_dir, "sessions.json")
-        self.client_oauth_config = os.path.join(storage_dir, "oauth_config.json")
-
-    colab_cli.common.State.__init__ = patched_state_init
-
-    # Override HistoryLogger init so all logs go to canonical storage/history directory
-    original_history_init = colab_cli.history.HistoryLogger.__init__
-    canonical_history_dir = os.path.join(storage_dir, "history")
-    os.makedirs(canonical_history_dir, exist_ok=True)
-
-    def patched_history_init(
-        self, log_dir: str = "~/.config/colab-cli/history", *args, **kwargs
-    ):
-        if (
-            not log_dir
-            or log_dir == "~/.config/colab-cli/history"
-            or log_dir == os.path.expanduser("~/.config/colab-cli/history")
-        ):
-            log_dir = canonical_history_dir
-        original_history_init(self, log_dir, *args, **kwargs)
-
-    colab_cli.history.HistoryLogger.__init__ = patched_history_init
-
-    # Override SettingsStore and StateStore default paths
-    colab_cli.state.SettingsStore.__init__.__defaults__ = (
-        os.path.join(storage_dir, "settings.json"),
-    )
-    colab_cli.state.StateStore.__init__.__defaults__ = (
-        os.path.join(storage_dir, "sessions.json"),
-    )
+    # colab_cli's ~/.config paths (token, sessions, settings, history, oauth
+    # config) all resolve through the HOME/USERPROFILE redirect set in
+    # main.py, and the jupyter-kernel-client symbols the Drive-OAuth hook
+    # needs come from the version override in pyproject.toml — neither needs
+    # monkey-patching here anymore.
 
     def patched_setup_logging(log_to_stderr: bool):
         import logging

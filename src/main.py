@@ -6,13 +6,13 @@ Main entry point: Bootstraps services and mounts the React-like component tree v
 from __future__ import annotations
 
 import asyncio
-import atexit
 import logging
+import os
 import sys
 
 import flet as ft
 
-from core.storage_patch import apply_storage_patches
+from core.storage_patch import apply_storage_patches, resolve_storage_dir
 
 
 def _install_bytes_safe_streams():
@@ -58,6 +58,17 @@ def _install_bytes_safe_streams():
 
 
 _install_bytes_safe_streams()
+
+# Point expanduser("~") at app storage BEFORE colab_cli is imported (its
+# token/session/settings/history paths all resolve through ~). On Windows
+# USERPROFILE wins over HOME, so set both; on POSIX HOME is what counts.
+# This is standard env behavior, which lets core/storage_patch skip every
+# path monkey-patch it used to apply.
+_storage_home = os.path.join(resolve_storage_dir(), "home")
+os.makedirs(_storage_home, exist_ok=True)
+os.environ["HOME"] = _storage_home
+os.environ["USERPROFILE"] = _storage_home
+
 apply_storage_patches()
 
 from app_shell import AppShell
@@ -465,6 +476,16 @@ class AppController:
             if saved_tpu:
                 state.default_tpu = saved_tpu
 
+            saved_high_mem = await self.storage.get(
+                constants.STORAGE_DEFAULT_HIGH_MEM
+            )
+            if saved_high_mem is not None:
+                state.default_high_mem = saved_high_mem == "true"
+
+            saved_exec_env = await self.storage.get(constants.STORAGE_EXEC_ENV)
+            if saved_exec_env is not None:
+                state.default_exec_env = saved_exec_env
+
             saved_timeout = await self.storage.get(constants.STORAGE_DEFAULT_TIMEOUT)
             if saved_timeout:
                 try:
@@ -540,36 +561,8 @@ class AppController:
     def _register_lifecycle_handlers(self):
         page = self.page
 
-        # Disconnect cleanup
-        def _cleanup_sessions():
-            if state.keep_alive_on_disconnect or not state.active_sessions:
-                return
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                for s in state.active_sessions:
-                    name = s.get("name")
-                    if name:
-                        try:
-                            loop.run_until_complete(
-                                self.colab_service.stop_session(
-                                    name, auth_method=state.auth_method
-                                )
-                            )
-                        except Exception as exc:
-                            logger.warning(
-                                "Cleanup failed for session %s: %s", name, exc
-                            )
-                loop.close()
-            except Exception as e:
-                logger.warning("atexit cleanup encountered error: %s", e)
-
-        atexit.register(_cleanup_sessions)
-
-        async def on_disconnect(e=None):
-            if state.keep_alive_on_disconnect or not state.active_sessions:
-                return
-            for s in state.active_sessions:
+        async def _stop_active_sessions():
+            for s in list(state.active_sessions):
                 name = s.get("name")
                 if name:
                     try:
@@ -577,14 +570,69 @@ class AppController:
                             name, auth_method=state.auth_method
                         )
                     except Exception as exc:
+                        logger.warning("Cleanup failed for session %s: %s", name, exc)
+
+        async def _teardown(reason: str):
+            """Stop sessions (unless keep-alive) and persist storage.
+
+            Flet 1.0 packaged builds never run atexit, so every exit path —
+            window close, web disconnect, mobile detach — calls this
+            explicitly. Session stop is time-bounded so a hung network call
+            can't block exit; the storage flush always runs afterwards.
+            """
+            logger.info("Teardown (%s): stopping sessions, flushing storage", reason)
+            try:
+                if not state.keep_alive_on_disconnect and state.active_sessions:
+                    try:
+                        await asyncio.wait_for(_stop_active_sessions(), 8.0)
+                    except Exception:
                         logger.warning(
-                            "Disconnect cleanup failed for %s: %s", name, exc
+                            "Session stop did not finish in time", exc_info=True
                         )
+            finally:
+                if self.storage:
+                    try:
+                        await self.storage.flush()
+                    except Exception:
+                        logger.warning("Storage flush failed", exc_info=True)
+
+        # Desktop close: intercept the native close signal, clean up, then
+        # destroy — without this, packaged builds exit with no cleanup at all.
+        page.window.prevent_close = True
+
+        async def _on_window_event(e: ft.WindowEvent):
+            if e.type != ft.WindowEventType.CLOSE:
+                return
+            page.window.on_event = None
+            await _teardown("window close")
+            await page.window.destroy()
+
+        page.window.on_event = _on_window_event
+
+        async def on_disconnect(e=None):
+            await _teardown("web disconnect")
 
         page.on_disconnect = on_disconnect
 
         # Android lifecycle handler
         async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
+            if e.state in (
+                ft.AppLifecycleState.HIDE,
+                ft.AppLifecycleState.PAUSE,
+                ft.AppLifecycleState.DETACH,
+            ):
+                # Background/exit: persist the debounced settings store now —
+                # the OS may kill the process without another chance. DETACH
+                # means the mobile app is going away for good, so run the
+                # full teardown instead of just the flush.
+                if e.state == ft.AppLifecycleState.DETACH:
+                    await _teardown("mobile detach")
+                elif self.storage:
+                    try:
+                        await self.storage.flush()
+                    except Exception:
+                        logger.warning("Lifecycle storage flush failed", exc_info=True)
+                return
             if e.state not in (
                 ft.AppLifecycleState.RESUME,
                 ft.AppLifecycleState.SHOW,

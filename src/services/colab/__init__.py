@@ -65,10 +65,13 @@ class ColabService:
         tpu: str | None = None,
         auth_method: str = "oauth2",
         keep_alive: bool = True,
+        high_mem: bool = False,
     ) -> dict:
         from services.colab.session_ops import new_session_impl
 
-        return await new_session_impl(self, name, gpu, tpu, auth_method, keep_alive)
+        return await new_session_impl(
+            self, name, gpu, tpu, auth_method, keep_alive, high_mem
+        )
 
     async def list_sessions(self, auth_method: str = "oauth2") -> list:
         from services.colab.session_ops import list_sessions_impl

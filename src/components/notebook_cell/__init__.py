@@ -128,6 +128,7 @@ def NotebookCell(
             on_move_down=on_move_down,
             on_delete=on_delete,
             on_copy=lambda: page.run_task(_copy_code_task),
+            copy_data=cell.source,
         )
 
     # ── Markdown cell ─────────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ def NotebookCell(
                         min_lines=2,
                         max_lines=8,
                         text_size=tokens.FONT_SM,
-                        border_color=ft.Colors.TRANSPARENT,
+                        border=ft.NoInputBorder(),
                         bgcolor=ft.Colors.TRANSPARENT,
                         ref=editor_ref,
                         on_focus=lambda e: _report_focus(True),
@@ -356,7 +357,7 @@ def NotebookCell(
                     text_style=ft.TextStyle(
                         font_family="RobotoMono", size=tokens.FONT_SM
                     ),
-                    border_color=ft.Colors.TRANSPARENT,
+                    border=ft.NoInputBorder(),
                     bgcolor=ft.Colors.TRANSPARENT,
                     ref=editor_ref,
                     on_focus=lambda e: _report_focus(True),

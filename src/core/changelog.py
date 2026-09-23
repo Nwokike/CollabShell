@@ -3,6 +3,25 @@ date — works fully offline. One line per release; keep the entry for the
 current APP_VERSION in sync when bumping (guarded by tests)."""
 
 CHANGELOG: dict[str, str] = {
+    "2.2.0": (
+        "- Upgraded to Flet 1.0: snappier copy/open buttons (client-side\n"
+        "  actions), a biometric check before clearing your Google\n"
+        "  credentials, and more reliable platform storage\n"
+        "- High-RAM machine shape for new sessions (CPU/T4/G4/A100/H100),\n"
+        "  shown as a badge on session cards\n"
+        "- Environment variables (KEY=VALUE) injected before every code run\n"
+        "  — Settings → Execution\n"
+        "- Tap Compute Usage in Settings → About for compute-unit balance,\n"
+        "  burn rate, and active runtimes (google-colab-cli 0.7.2)\n"
+        "- Notebook cells render Markdown & HTML outputs (pandas DataFrames,\n"
+        "  rich reprs) instead of dropping them\n"
+        "- Drive mount credentials propagate reliably again; friendly\n"
+        "  messages for quota/capacity errors instead of tracebacks\n"
+        "- Fixed two crash-on-import bugs, a terminal-open UI freeze, and\n"
+        "  session cleanup when closing the app\n"
+        "- Settings save instantly (native storage) with existing\n"
+        "  preferences imported automatically"
+    ),
     "2.1.2": (
         "- Fixed the false 'update available' prompt from 2.1.1 — one\n"
         "  version spot was missed in the last bump, so the app kept\n"

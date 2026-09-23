@@ -11,6 +11,7 @@ async def new_session_impl(
     tpu: str | None = None,
     auth_method: str = "oauth2",
     keep_alive: bool = True,
+    high_mem: bool = False,
 ) -> dict:
     """Create a new Colab session."""
     await service._ensure_online()
@@ -19,7 +20,13 @@ async def new_session_impl(
         import uuid
 
         from colab_cli.auth import AuthProvider
-        from colab_cli.client import Accelerator, ColabRequestError, Variant
+        from colab_cli.client import (
+            Accelerator,
+            ColabRequestError,
+            TooManyAssignmentsError,
+            Variant,
+            resolve_assign_shape,
+        )
         from colab_cli.common import State
         from colab_cli.state import SessionState
         from colab_cli.utils import get_status_code
@@ -48,10 +55,22 @@ async def new_session_impl(
             }
             accelerator = mapping.get(gpu.lower(), Accelerator.T4)
 
+        shape = resolve_assign_shape(accelerator, high_mem=high_mem)
+
         try:
             res = st.client.assign(
-                uuid.uuid4(), variant=variant, accelerator=accelerator
+                uuid.uuid4(), variant=variant, accelerator=accelerator, shape=shape
             )
+        except TooManyAssignmentsError as e:
+            # The Colab backend returns 412 when it refuses the assignment —
+            # too many active sessions or a temporary usage/capacity limit.
+            # Surface an actionable message instead of a raw traceback.
+            raise ValueError(
+                "Allocation refused (precondition failed). This can mean too "
+                "many active sessions, or a temporary usage or capacity limit "
+                "for the requested runtime. Stop a session to free one up, "
+                "wait and retry, or try a different accelerator."
+            ) from e
         except ColabRequestError as e:
             if get_status_code(e) == 400 and accelerator != Accelerator.NONE:
                 raise ValueError(
@@ -84,6 +103,7 @@ async def new_session_impl(
             endpoint=endpoint,
             variant=variant.value,
             accelerator=accelerator.value,
+            machine_shape=shape.name if shape else "STANDARD",
         )
 
         if keep_alive:
@@ -130,6 +150,7 @@ async def new_session_impl(
                 "endpoint": endpoint,
                 "variant": variant.value,
                 "accelerator": accelerator.value,
+                "machine_shape": s.machine_shape,
             },
         )
 
@@ -138,6 +159,7 @@ async def new_session_impl(
             "endpoint": endpoint,
             "variant": variant.value,
             "accelerator": accelerator.value,
+            "machine_shape": s.machine_shape,
             "status": "READY",
         }
 
@@ -194,6 +216,10 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
         recovered_count = 0
         for a in assignments:
             name = name_by_ep.get(a.endpoint)
+            _shape = getattr(a, "machine_shape", None)
+            _shape_name = (
+                _shape.name if hasattr(_shape, "name") else str(_shape or "STANDARD")
+            )
 
             if not name:
                 recovered_count += 1
@@ -208,6 +234,7 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
                     endpoint=a.endpoint,
                     variant=a.variant.name,
                     accelerator=a.accelerator.value,
+                    machine_shape=_shape_name,
                 )
                 st.store.add(recovered_session)
                 local_sessions[name] = recovered_session
@@ -238,6 +265,7 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
                     "accelerator": a.accelerator.value,
                     "variant": a.variant.name,
                     "accelerator_label": accel_label,
+                    "machine_shape": _shape_name,
                     "status": status,
                     "running": running,
                     "last_execution": last_exec,

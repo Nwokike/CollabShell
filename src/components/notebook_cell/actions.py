@@ -8,14 +8,22 @@ from core.theme import AppColors
 logger = logging.getLogger("colab")
 
 
-def make_actions_row(on_move_up=None, on_move_down=None, on_delete=None, on_copy=None):
+def make_actions_row(
+    on_move_up=None,
+    on_move_down=None,
+    on_delete=None,
+    on_copy=None,
+    copy_data: str | None = None,
+):
     controls = []
     if on_copy:
+        copy_value = (copy_data or "").strip()
         controls.append(
             ft.IconButton(
                 ft.Icons.COPY_ROUNDED,
                 icon_size=tokens.ICON_SM,
                 tooltip="Copy Code",
+                action=ft.CopyToClipboard(data=copy_value) if copy_value else None,
                 on_click=lambda e: on_copy() if on_copy else None,
             )
         )
