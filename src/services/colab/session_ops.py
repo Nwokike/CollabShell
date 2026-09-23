@@ -72,11 +72,23 @@ async def new_session_impl(
                 "wait and retry, or try a different accelerator."
             ) from e
         except ColabRequestError as e:
-            if get_status_code(e) == 400 and accelerator != Accelerator.NONE:
+            status = get_status_code(e)
+            if status == 400 and accelerator != Accelerator.NONE:
                 raise ValueError(
                     f"Accelerator '{accelerator.value}' rejected. "
                     "You may not have quota. Try T4 (free) or CPU."
-                )
+                ) from e
+            if status is not None and status >= 500:
+                raise ValueError(
+                    f"Colab returned a server error (HTTP {status}) — this is "
+                    "usually temporary capacity. Wait a moment and retry."
+                    + (
+                        " If you requested High-RAM, also try once without it "
+                        "to check whether the shape was refused."
+                        if shape
+                        else ""
+                    )
+                ) from e
             raise
 
         from colab_cli.client import PostAssignmentResponse

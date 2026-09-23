@@ -153,9 +153,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     await ft.Clipboard().set(url)
                     controller.show_snack("🔗 Session URL copied")
                 except Exception:
-                    controller.show_snack(
-                        "Could not share session URL", is_error=True
-                    )
+                    controller.show_snack("Could not share session URL", is_error=True)
 
         ts = terminal_ps_ref.current
         fab = build_session_fab(

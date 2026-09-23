@@ -57,9 +57,7 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
 
             st = State()
             st.auth_provider = (
-                AuthProvider.ADC
-                if state.auth_method == "adc"
-                else AuthProvider.OAUTH2
+                AuthProvider.ADC if state.auth_method == "adc" else AuthProvider.OAUTH2
             )
             return format_consumption_status(st.client.get_consumption_user_info())
 
@@ -77,9 +75,7 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                     font_family="RobotoMono",
                     size=tokens.FONT_SM,
                 ),
-                actions=[
-                    ft.TextButton("Close", on_click=lambda ev: page.pop_dialog())
-                ],
+                actions=[ft.TextButton("Close", on_click=lambda ev: page.pop_dialog())],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
         )

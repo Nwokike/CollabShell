@@ -56,9 +56,9 @@ class StorageService:
                     legacy = json.loads(raw.decode("utf-8")) if raw else {}
                     imported = 0
                     for key, value in legacy.items():
-                        if isinstance(value, str) and not await self._prefs.contains_key(
-                            key
-                        ):
+                        if isinstance(
+                            value, str
+                        ) and not await self._prefs.contains_key(key):
                             await self._prefs.set(key, value)
                             imported += 1
                     logger.info(
@@ -103,9 +103,7 @@ class StorageService:
         try:
             nb_file = self._get_notebook_file(session_name)
             # Atomic write: temp + rename
-            data_bytes = json.dumps(cells, ensure_ascii=False, indent=2).encode(
-                "utf-8"
-            )
+            data_bytes = json.dumps(cells, ensure_ascii=False, indent=2).encode("utf-8")
             tmp = nb_file.with_suffix(".json.tmp")
             tmp.write_bytes(data_bytes)
             tmp.replace(nb_file)

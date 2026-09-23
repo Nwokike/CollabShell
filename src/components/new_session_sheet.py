@@ -75,15 +75,9 @@ def show_new_session_sheet(
             if (gpu_ref.current and selected_hw == "GPU")
             else None
         )
-        tpu = (
-            tpu_ref.current.value
-            if (tpu_ref and selected_hw == "TPU")
-            else None
-        )
+        tpu = tpu_ref.current.value if (tpu_ref and selected_hw == "TPU") else None
 
-        high_mem = (
-            bool(high_mem_ref.current.value) if high_mem_ref.current else False
-        )
+        high_mem = bool(high_mem_ref.current.value) if high_mem_ref.current else False
 
         paid_gpus = {"L4", "G4", "A100", "H100"}
         if gpu in paid_gpus:

@@ -136,9 +136,7 @@ def build_logs_section(page: ft.Page, state, services) -> ft.Column:
                         ft.FilledButton(
                             "Open Terminal",
                             icon=ft.Icons.TERMINAL_ROUNDED,
-                            on_click=lambda e: page.run_task(
-                                _open_logs_dialog, page
-                            ),
+                            on_click=lambda e: page.run_task(_open_logs_dialog, page),
                         ),
                     ],
                     spacing=tokens.SPACE_XS,

@@ -25,9 +25,7 @@ def _build_env_prelude() -> str:
         if not line or line.startswith("#"):
             continue
         if "=" not in line:
-            logger.warning(
-                "Ignoring invalid env entry %r (expected KEY=VALUE)", line
-            )
+            logger.warning("Ignoring invalid env entry %r (expected KEY=VALUE)", line)
             continue
         key, value = line.split("=", 1)
         key, value = key.strip(), value.strip()

@@ -485,9 +485,7 @@ class AppController:
             if saved_tpu:
                 state.default_tpu = saved_tpu
 
-            saved_high_mem = await self.storage.get(
-                constants.STORAGE_DEFAULT_HIGH_MEM
-            )
+            saved_high_mem = await self.storage.get(constants.STORAGE_DEFAULT_HIGH_MEM)
             if saved_high_mem is not None:
                 state.default_high_mem = saved_high_mem == "true"
 
