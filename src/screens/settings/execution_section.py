@@ -119,8 +119,8 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
                         # Environment variables prelude
                         ft.TextField(
                             value=state.default_exec_env,
-                            label="Environment Variables",
-                            hint_text="KEY=VALUE, one per line",
+                            label="Environment Variables & Secrets",
+                            hint_text="KEY=VALUE per line — API keys, tokens, flags",
                             prefix_icon=ft.Icons.TERMINAL_ROUNDED,
                             multiline=True,
                             min_lines=2,

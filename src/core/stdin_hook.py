@@ -169,7 +169,13 @@ def show_stdin_dialog(page: ft.Page, prompt, snack_func=None, **kwargs):
     )
 
     async def _show():
+        # One visible dialog at a time: a progress modal must never cover
+        # the sign-in prompt — the VM is blocked waiting for this answer.
+        replaced = page.pop_dialog()
+        if replaced is not None:
+            logger.info("[stdin_hook] paused a dialog behind the sign-in prompt")
         page.show_dialog(dialog)
+        logger.info("[stdin_hook] sign-in dialog shown")
         await asyncio.sleep(0)
         page.update()
 

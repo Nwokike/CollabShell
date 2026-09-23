@@ -7,7 +7,7 @@ import logging
 import flet as ft
 
 from components.shortcuts_help import build_help_button
-from core import tokens
+from core import constants, tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
 from core.styles import hardware_badge, status_dot
 from screens.files.modal import show_manage_files_modal
@@ -143,6 +143,44 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             if fn:
                 fn(*args)
 
+        def _open_env_dialog(e=None):
+            field = ft.TextField(
+                value=state.default_exec_env,
+                label="Environment Variables & Secrets",
+                hint_text="KEY=VALUE per line — API keys, tokens, flags",
+                multiline=True,
+                min_lines=3,
+                max_lines=6,
+                border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
+                text_size=tokens.FONT_SM,
+            )
+
+            async def _save(ev=None):
+                state.default_exec_env = (field.value or "").strip()
+                await services.storage.set(
+                    constants.STORAGE_EXEC_ENV, state.default_exec_env
+                )
+                page.pop_dialog()
+                controller.show_snack("Environment variables saved")
+
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text(
+                        "Environment Variables & Secrets",
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    content=ft.Container(field, width=tokens.INPUT_WIDTH_LG),
+                    actions=[
+                        ft.TextButton("Cancel", on_click=lambda ev: page.pop_dialog()),
+                        ft.FilledButton(
+                            "Save", on_click=lambda ev: page.run_task(_save)
+                        ),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                    modal=True,
+                )
+            )
+
         async def _share_session_url(e=None):
             url = f"https://colab.research.google.com/drive/{session_name}"
             try:
@@ -163,6 +201,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             # Notebook
             on_export_ipynb=lambda e: _call(nb_actions, "export_ipynb"),
             on_import_ipynb=lambda e: _call(nb_actions, "import_ipynb"),
+            on_env_vars=lambda e: _open_env_dialog(),
             on_clear_all=lambda e: _call(nb_actions, "clear_all"),
             # Shared
             on_manage_files=lambda e: show_manage_files_modal(

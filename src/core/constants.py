@@ -100,12 +100,12 @@ TIP_KEEP_ALIVE = (
 TIP_TIMEOUT = "Maximum time to wait for code execution to complete."
 TIP_DRIVE_MOUNT = "Mounts your Google Drive to access files from Colab."
 TIP_HIGH_MEM = (
-    "Request a high-RAM runtime with more memory. Works for CPU, T4, G4, A100 "
-    "and H100; L4 and TPU runtimes have a fixed shape."
+    "Not available on free Colab accounts (needs Pro or higher). Works for "
+    "CPU, T4, G4, A100 and H100; L4 and TPU runtimes have a fixed shape."
 )
 TIP_EXEC_ENV = (
-    "Environment variables injected before every code execution "
-    "(one KEY=VALUE per line)."
+    "Secrets and settings your code can read on every run — one KEY=VALUE "
+    "per line. Values stay on your device."
 )
 TIP_AUTH_OAUTH2 = "Sign in via browser. Recommended for most users."
 TIP_AUTH_ADC = "Uses gcloud Application Default Credentials. For advanced users."

@@ -20,6 +20,49 @@ def _close_active_auth(page: ft.Page):
         logger.exception("Suppressed exception")
 
 
+def _finish(page: ft.Page, progress: ft.AlertDialog, ok: bool, message: str):
+    """Show the outcome of a VM operation.
+
+    Morphs the live progress dialog when it is still open; if it yielded to
+    a sign-in prompt (and was popped), shows a fresh dialog instead.
+    """
+    title = "Success" if ok else "Failed"
+    icon = ft.Icons.CHECK_CIRCLE_ROUNDED if ok else ft.Icons.ERROR_ROUNDED
+    color = AppColors.SUCCESS if ok else AppColors.ERROR
+    content = ft.Row(
+        [
+            ft.Icon(icon, color=color, size=tokens.ICON_LG),
+            ft.Text(message, size=tokens.FONT_SM, weight=ft.FontWeight.BOLD),
+        ],
+        spacing=tokens.SPACE_SM,
+    )
+
+    def _close(e=None):
+        _close_active_auth(page)
+
+    actions = [ft.FilledButton("Done" if ok else "Close", on_click=_close)]
+
+    if progress.open:
+        progress.title = ft.Text(title)
+        progress.content = content
+        progress.actions = actions
+        progress.update()
+    else:
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text(title), content=content, actions=actions, modal=True
+            )
+        )
+
+    if ok:
+
+        async def _auto_close():
+            await asyncio.sleep(1.5)
+            _close_active_auth(page)
+
+        page.run_task(_auto_close)
+
+
 async def on_mount_drive(
     page: ft.Page,
     session_name: str,
@@ -81,52 +124,10 @@ async def on_mount_drive(
             raise RuntimeError(
                 "Drive mount did not complete. Check authorization and retry."
             )
-        if dialog.open:
-            dialog.title = ft.Text("Success")
-            dialog.content = ft.Row(
-                [
-                    ft.Icon(
-                        ft.Icons.CHECK_CIRCLE_ROUNDED,
-                        color=AppColors.SUCCESS,
-                        size=tokens.ICON_LG,
-                    ),
-                    ft.Text(
-                        f"Drive mounted at {state.drive_mount_path}",
-                        size=tokens.FONT_SM,
-                        weight=ft.FontWeight.BOLD,
-                    ),
-                ],
-                spacing=tokens.SPACE_SM,
-            )
-            dialog.actions = [
-                ft.FilledButton("Done", on_click=lambda e: _close_active_auth(page))
-            ]
-            dialog.update()
-
-            async def _auto_close():
-                await asyncio.sleep(1.5)
-                _close_active_auth(page)
-
-            page.run_task(_auto_close)
+        _finish(page, dialog, True, f"Drive mounted at {state.drive_mount_path}")
     except Exception as ex:
         logger.exception("Mount Drive failed")
-        if dialog.open:
-            dialog.title = ft.Text("Failed")
-            dialog.content = ft.Row(
-                [
-                    ft.Icon(
-                        ft.Icons.ERROR_ROUNDED,
-                        color=AppColors.ERROR,
-                        size=tokens.ICON_LG,
-                    ),
-                    ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
-                ],
-                spacing=tokens.SPACE_SM,
-            )
-            dialog.actions = [
-                ft.FilledButton("Close", on_click=lambda e: _close_active_auth(page))
-            ]
-            dialog.update()
+        _finish(page, dialog, False, f"Error: {ex}")
 
 
 async def on_auth_gcp(
@@ -187,49 +188,7 @@ async def on_auth_gcp(
         )
         if not ok:
             raise RuntimeError("GCP authentication did not complete. Retry.")
-        if dialog.open:
-            dialog.title = ft.Text("Success")
-            dialog.content = ft.Row(
-                [
-                    ft.Icon(
-                        ft.Icons.CHECK_CIRCLE_ROUNDED,
-                        color=AppColors.SUCCESS,
-                        size=tokens.ICON_LG,
-                    ),
-                    ft.Text(
-                        "GCP authenticated successfully on VM",
-                        size=tokens.FONT_SM,
-                        weight=ft.FontWeight.BOLD,
-                    ),
-                ],
-                spacing=tokens.SPACE_SM,
-            )
-            dialog.actions = [
-                ft.FilledButton("Done", on_click=lambda e: _close_active_auth(page))
-            ]
-            dialog.update()
-
-            async def _auto_close():
-                await asyncio.sleep(1.5)
-                _close_active_auth(page)
-
-            page.run_task(_auto_close)
+        _finish(page, dialog, True, "GCP authenticated successfully on VM")
     except Exception as ex:
         logger.exception("Auth GCP failed")
-        if dialog.open:
-            dialog.title = ft.Text("Failed")
-            dialog.content = ft.Row(
-                [
-                    ft.Icon(
-                        ft.Icons.ERROR_ROUNDED,
-                        color=AppColors.ERROR,
-                        size=tokens.ICON_LG,
-                    ),
-                    ft.Text(f"Error: {ex}", size=tokens.FONT_SM),
-                ],
-                spacing=tokens.SPACE_SM,
-            )
-            dialog.actions = [
-                ft.FilledButton("Close", on_click=lambda e: _close_active_auth(page))
-            ]
-            dialog.update()
+        _finish(page, dialog, False, f"Error: {ex}")

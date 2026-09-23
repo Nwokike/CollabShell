@@ -397,6 +397,11 @@ def AppShell() -> Control:
             on_click=lambda e: controller.open_version_dialog(),
         )
 
+    async def _show_usage(e=None):
+        from screens.settings.usage_section import show_usage_dialog
+
+        await show_usage_dialog(page, state)
+
     header_bar = ft.Container(
         content=ft.Row(
             controls=[
@@ -407,6 +412,12 @@ def AppShell() -> Control:
                     color=ft.Colors.ON_SURFACE,
                 ),
                 ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.SHOW_CHART_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Compute usage",
+                    on_click=lambda e: page.run_task(_show_usage, e),
+                ),
                 ft.IconButton(
                     icon=ft.Icons.HISTORY_ROUNDED,
                     icon_size=tokens.ICON_SM,

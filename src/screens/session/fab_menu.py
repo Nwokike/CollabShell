@@ -35,6 +35,7 @@ def build_session_fab(
     on_export_ipynb=None,
     on_import_ipynb=None,
     on_clear_all=None,
+    on_env_vars=None,
     # Shared session actions
     on_manage_files=None,
     on_mount_drive=None,
@@ -130,6 +131,13 @@ def build_session_fab(
         # one. Export and Clear All are only meaningful once cells exist.
         menu_items.append(
             _item("Import .ipynb / .py", ft.Icons.UPLOAD_FILE_ROUNDED, on_import_ipynb)
+        )
+        menu_items.append(
+            _item(
+                "Env Variables & Secrets",
+                ft.Icons.VPN_KEY_ROUNDED,
+                on_env_vars,
+            )
         )
         if has_cells:
             menu_items.extend(
