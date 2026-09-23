@@ -81,6 +81,10 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           yes | sdkmanager --licenses > /dev/null || true
+      - name: Install Linux build dependencies (flutter doctor checks all categories)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev mesa-utils
       - name: Pre-compile binary wheels (google-colab-cli, primp)
         run: |
           mkdir -p ${{ github.workspace }}/wheels
@@ -138,6 +142,10 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           yes | sdkmanager --licenses > /dev/null || true
+      - name: Install Linux build dependencies (flutter doctor checks all categories)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev mesa-utils
       - name: Pre-compile binary wheels (google-colab-cli, primp)
         run: |
           mkdir -p ${{ github.workspace }}/wheels
