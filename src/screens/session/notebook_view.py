@@ -15,7 +15,13 @@ from pathlib import Path
 
 import flet as ft
 
+from ai.notebook_bridge import NotebookBridge
 from components.notebook_cell import CellData, NotebookCell
+from components.notebook_cell.actions import (
+    error_to_text,
+    has_error,
+    outputs_to_text,
+)
 from components.notebook_toolbar import build_notebook_toolbar
 from components.shortcuts_help import open_shortcuts_help
 from core import constants, tokens
@@ -188,6 +194,114 @@ def NotebookView(
         cell.outputs.clear()
         cell.outputs_rev += 1
         _save()
+
+    # ── Assistant bridge (Phase 3) ───────────────────────────────────────────
+    # The Assistant edits the very cells this view renders, so a tool call
+    # lands on screen while the user watches. Everything the model can do
+    # to the notebook goes through these five functions.
+    def _cell_at(ref: str) -> tuple[int, CellData] | None:
+        try:
+            number = int(ref)
+        except (TypeError, ValueError):
+            return None
+        c_list = cells_ref.current or []
+        if not 1 <= number <= len(c_list):
+            return None
+        return number, c_list[number - 1]
+
+    def _bridge_snapshot() -> list:
+        return [{"type": c.type, "source": c.source} for c in cells_ref.current or []]
+
+    def _bridge_read(ref: str) -> str:
+        found = _cell_at(ref)
+        if found is None:
+            return f"There is no cell {ref}."
+        number, cell = found
+        parts = [f"Cell {number} ({cell.type}):", "", "```", cell.source or "", "```"]
+        text = outputs_to_text(list(cell.outputs))
+        if text:
+            parts.extend(["", "Output:", "```", text[:2000], "```"])
+        return "\n".join(parts)
+
+    def _bridge_set_source(ref: str, source: str) -> str:
+        found = _cell_at(ref)
+        if found is None:
+            return f"There is no cell {ref}."
+        number, cell = found
+        cell.source = source
+        cell.is_editing = False
+        _debounced_save()
+        return f"Cell {number} now holds {len(source.splitlines())} lines."
+
+    def _bridge_insert(after_ref: str | None, cell_type: str, source: str) -> str:
+        c_list = list(cells_ref.current or [])
+        anchor = -1
+        if after_ref is not None:
+            found = _cell_at(after_ref)
+            if found is None:
+                return f"There is no cell {after_ref} to insert after."
+            anchor = found[0]
+        new_cell = CellData(cell_type=cell_type, source=source)
+        new_cell.is_editing = False
+        c_list.insert(anchor + 1 if anchor >= 0 else len(c_list), new_cell)
+        _publish(c_list)
+        _save()
+        return f"Added a {cell_type} cell at position {anchor + 2 if anchor >= 0 else len(c_list)}."
+
+    async def _bridge_run(ref: str) -> str:
+        found = _cell_at(ref)
+        if found is None:
+            return f"There is no cell {ref}."
+        number, cell = found
+        if cell.type != "code":
+            return f"Cell {number} is markdown, which cannot run."
+        await _run_cell(cell)
+        text = outputs_to_text(list(cell.outputs))
+        if not text:
+            return f"Cell {number} ran with no output."
+        if has_error(list(cell.outputs)):
+            return f"Cell {number} failed:\n{text[:2000]}"
+        return f"Cell {number} output:\n{text[:2000]}"
+
+    def _ask_ai(cell: CellData):
+        """Chat icon on a cell: quick-ask sheet seeded with its code."""
+        from ai.cell_sheet import open_cell_sheet
+
+        if services.ai is None:
+            return
+        c_list = cells_ref.current or []
+        number = next((i + 1 for i, c in enumerate(c_list) if c.id == cell.id), 1)
+        open_cell_sheet(
+            page,
+            services,
+            number,
+            cell.source,
+            error_to_text(list(cell.outputs)),
+        )
+
+    # The bridge is only true while this view is mounted; detaching on
+    # unmount takes the notebook tools back out of the Assistant's catalog
+    # instead of leaving it aimed at a dead notebook.
+    def _attach_bridge(e=None):
+        if services.ai is not None:
+            services.ai.attach_notebook(
+                NotebookBridge(
+                    session_name,
+                    _bridge_snapshot,
+                    _bridge_read,
+                    _bridge_set_source,
+                    _bridge_insert,
+                    _bridge_run,
+                    alive=lambda: bool(cells_ref.current),
+                )
+            )
+
+    def _detach_bridge(e=None):
+        if services.ai is not None:
+            services.ai.detach_notebook()
+
+    ft.on_mounted(_attach_bridge)
+    ft.on_unmounted(_detach_bridge)
 
     # ── Active-cell operations (keyboard shortcuts) ──────────────────────────
     def _active_cell() -> CellData | None:
@@ -527,6 +641,7 @@ def NotebookView(
                 on_source_change=lambda value: _debounced_save(),
                 on_clear_output=lambda c=cell: _clear_cell_output(c),
                 on_open_terminal=on_switch_terminal,
+                on_ask_ai=(lambda c=cell: _ask_ai(c)) if services.ai else None,
                 is_active=cell.id == active_cell_id,
                 on_focus_change=_on_cell_focus,
                 focus_token=(focus_req[1] if focus_req[0] == cell.id else 0),

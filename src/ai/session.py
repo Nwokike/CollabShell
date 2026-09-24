@@ -18,7 +18,7 @@ import flet as ft
 from ai.credits import COST_PER_TURN, CreditsLedger
 from ai.router import DEFAULT_MODEL, AiModel, KiriRouter, RouterBusy, RouterUnavailable
 from ai.system_prompt import build_system_prompt
-from ai.tools import CONFIRM, TIERS, TOOL_SCHEMAS, ToolBox, label_for
+from ai.tools import CONFIRM, TIERS, ToolBox, label_for, schemas_for
 from core import constants
 
 logger = logging.getLogger("ai.session")
@@ -57,12 +57,14 @@ class AiSession:
         self.timeline: list[dict] = []  # agent step rows
         self.approval: dict | None = None  # pending confirm-tier tool call
         self.tools_enabled: bool = True
+        self.cell_focus: str = ""  # "cell 3" — the cell the user pointed at
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None
         self._task: asyncio.Task | None = None
         self._send_lock = asyncio.Lock()
         self._toolbox: ToolBox | None = None
+        self._notebook = None
         self._approval_event: asyncio.Event | None = None
         self._approval_granted = False
         self._pending = ""
@@ -82,6 +84,18 @@ class AiSession:
     def attach_colab(self, colab_service) -> None:
         """Give the Assistant a toolbox once the Colab service exists."""
         self._toolbox = ToolBox(colab_service)
+
+    def attach_notebook(self, bridge) -> None:
+        """Point the toolbox at the notebook currently on screen."""
+        self._notebook = bridge
+        if self._toolbox is not None:
+            self._toolbox.set_notebook(bridge)
+
+    def detach_notebook(self) -> None:
+        """The view is gone; its cells are no longer reachable."""
+        self._notebook = None
+        if self._toolbox is not None:
+            self._toolbox.set_notebook(None)
 
     def _load_settings(self) -> None:
         if self._storage is None:
@@ -198,10 +212,14 @@ class AiSession:
     def _tool_schemas(self) -> list[dict] | None:
         if not (self.tools_enabled and self._toolbox is not None):
             return None
-        return TOOL_SCHEMAS
+        return schemas_for(self._toolbox.has_notebook)
 
     def _context_messages(self) -> list[dict]:
-        prompt = build_system_prompt(tools_available=bool(self._tool_schemas()))
+        has_tools = bool(self._tool_schemas())
+        has_notebook = bool(self._toolbox and self._toolbox.has_notebook)
+        prompt = build_system_prompt(
+            tools_available=has_tools, notebook_available=has_notebook
+        )
         return [
             {"role": "system", "content": prompt},
             *self.messages[-MAX_HISTORY:],
@@ -263,7 +281,11 @@ class AiSession:
         row = self.timeline[-1]
 
         if TIERS.get(name, CONFIRM) == CONFIRM:
-            detail = str(args.get("code") or args)[:220]
+            # Show the user the thing itself — the code that will run or
+            # the source that will replace their cell — not a JSON blob.
+            detail = str(
+                args.get("source") or args.get("code") or args.get("path") or args
+            )[:220]
             self.approval = {"label": row["label"], "detail": detail}
             self._approval_granted = False
             self._approval_event = asyncio.Event()

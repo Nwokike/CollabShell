@@ -5,14 +5,20 @@ sessions, nothing else. Shape follows DDGS: the app owns execution, the
 model only proposes. Every tool is declared with an OpenAI function
 schema plus a safety tier:
 
-- ``auto``     read-only, runs without asking (list sessions, list files)
+- ``auto``     read-only, runs without asking (list sessions, list files,
+               list cells, read a cell)
 - ``confirm``  proposes and waits for the user (create/stop a session, run
-               code, install packages, mount Drive, authenticate GCP)
+               code, install packages, mount Drive, authenticate GCP, write
+               or insert a notebook cell, run a cell)
 
 State-changing tools never execute on a model decision alone: the panel
 shows the exact action and the user taps Allow. Every model call in the
 loop — including each step after a tool result — costs one turn of
 credits, so a multi-step request is charged per call.
+
+The notebook tools are only in the catalog while a notebook is open, and
+they act through `NotebookBridge` so the edit shows up on screen as it
+happens instead of being described after the fact.
 """
 
 from __future__ import annotations
@@ -131,6 +137,68 @@ TIERS: dict[str, str] = {
     "auth_gcp": CONFIRM,
 }
 
+# ── Notebook tools (Phase 3) ───────────────────────────────────────────
+# Only offered while a notebook is on screen. Reading is free; writing
+# goes through the same Allow/Deny card as everything else, so the
+# Assistant can never silently overwrite the user's code.
+NOTEBOOK_SCHEMAS: list[dict] = [
+    _fn(
+        "list_cells",
+        "List the cells in the open notebook: number, type, and first line.",
+    ),
+    _fn(
+        "read_cell",
+        "Read one cell's full source and its output or error text.",
+        {"cell": {"type": "integer", "description": "Cell number, 1-based."}},
+        ["cell"],
+    ),
+    _fn(
+        "set_cell_source",
+        "Replace a cell's code with new code. The user sees the cell "
+        "change on screen the moment this is allowed.",
+        {
+            "cell": {"type": "integer", "description": "Cell number, 1-based."},
+            "source": {"type": "string", "description": "Full replacement code."},
+        },
+        ["cell", "source"],
+    ),
+    _fn(
+        "insert_cell",
+        "Insert a new cell after an existing one (or at the end when no "
+        "cell number is given).",
+        {
+            "after": {"type": "integer", "description": "Cell number to insert after."},
+            "cell_type": {
+                "type": "string",
+                "enum": ["code", "markdown"],
+                "description": "Defaults to code.",
+            },
+            "source": {"type": "string", "description": "The new cell's content."},
+        },
+        ["source"],
+    ),
+    _fn(
+        "run_cell",
+        "Run a cell on the session's kernel and return its output.",
+        {"cell": {"type": "integer", "description": "Cell number, 1-based."}},
+        ["cell"],
+    ),
+]
+
+NOTEBOOK_TIERS: dict[str, str] = {
+    "list_cells": AUTO,
+    "read_cell": AUTO,
+    "set_cell_source": CONFIRM,
+    "insert_cell": CONFIRM,
+    "run_cell": CONFIRM,
+}
+TIERS.update(NOTEBOOK_TIERS)
+
+
+def schemas_for(has_notebook: bool) -> list[dict]:
+    """The catalog for what is actually reachable right now."""
+    return TOOL_SCHEMAS + (NOTEBOOK_SCHEMAS if has_notebook else [])
+
 
 def label_for(name: str, args: dict) -> str:
     """One user-legible line for the step timeline."""
@@ -153,6 +221,17 @@ def label_for(name: str, args: dict) -> str:
             return f"Mounting Drive on {args.get('session', '')}"
         case "auth_gcp":
             return f"Authenticating GCP on {args.get('session', '')}"
+        case "list_cells":
+            return "Reading the notebook"
+        case "read_cell":
+            return f"Reading cell {args.get('cell', '')}"
+        case "set_cell_source":
+            return f"Rewriting cell {args.get('cell', '')}"
+        case "insert_cell":
+            after = args.get("after")
+            return f"Adding a cell after {after}" if after else "Adding a cell"
+        case "run_cell":
+            return f"Running cell {args.get('cell', '')}"
     return name
 
 
@@ -166,8 +245,19 @@ class ToolResult:
 class ToolBox:
     """Executes catalog tools against the live Colab service."""
 
-    def __init__(self, colab_service):
+    def __init__(self, colab_service, notebook=None):
         self._colab = colab_service
+        # The open notebook, when there is one. None whenever no session is
+        # showing, which is what keeps the notebook tools out of the catalog.
+        self._notebook = notebook
+
+    def set_notebook(self, notebook) -> None:
+        self._notebook = notebook
+
+    @property
+    def has_notebook(self) -> bool:
+        bridge = self._notebook
+        return bridge is not None and bridge.is_alive()
 
     async def run(self, name: str, args: dict) -> ToolResult:
         handler = getattr(self, f"_tool_{name}", None)
@@ -258,3 +348,94 @@ class ToolBox:
     async def _tool_auth_gcp(self, args: dict) -> ToolResult:
         ok = await self._colab.auth_gcp_on_vm(args["session"], auth_method="oauth2")
         return ToolResult("GCP authenticated." if ok else "GCP auth did not complete.")
+
+    # ── notebook ─────────────────────────────────────────────────────────
+    # Every handler goes through the bridge, which is the live view: the
+    # cell the user is looking at is the cell that changes.
+
+    def _need_notebook(self):
+        if not self.has_notebook:
+            return ToolResult("No notebook is open right now.")
+        return None
+
+    def _cell_no(self, args: dict) -> int | None:
+        """Cell numbers are 1-based in every message the model sees."""
+        try:
+            number = int(args.get("cell"))
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 1 else None
+
+    async def _tool_list_cells(self, args: dict) -> ToolResult:
+        missing = self._need_notebook()
+        if missing:
+            return missing
+        cells = self._notebook.cells()
+        if not cells:
+            return ToolResult("The notebook is empty.")
+        lines = []
+        for i, cell in enumerate(cells, start=1):
+            first = next(
+                (
+                    ln.strip()
+                    for ln in (cell.get("source") or "").splitlines()
+                    if ln.strip()
+                ),
+                "",
+            )
+            if len(first) > 72:
+                first = first[:69] + "…"
+            lines.append(f"{i}. [{cell.get('type', 'code')}] {first or '(empty)'}")
+        return ToolResult("Notebook cells:\n" + "\n".join(lines))
+
+    async def _tool_read_cell(self, args: dict) -> ToolResult:
+        missing = self._need_notebook()
+        if missing:
+            return missing
+        number = self._cell_no(args)
+        if number is None:
+            return ToolResult("Give a cell number (1 = the first cell).")
+        cells = self._notebook.cells()
+        if not 1 <= number <= len(cells):
+            return ToolResult(
+                f"There is no cell {number} — the notebook has {len(cells)}."
+            )
+        return ToolResult(self._notebook.read(str(number)))
+
+    async def _tool_set_cell_source(self, args: dict) -> ToolResult:
+        missing = self._need_notebook()
+        if missing:
+            return missing
+        number = self._cell_no(args)
+        if number is None:
+            return ToolResult("Give a cell number (1 = the first cell).")
+        source = str(args.get("source") or "")
+        if not source.strip():
+            return ToolResult("The replacement code is empty — nothing written.")
+        return ToolResult(self._notebook.set_source(str(number), source))
+
+    async def _tool_insert_cell(self, args: dict) -> ToolResult:
+        missing = self._need_notebook()
+        if missing:
+            return missing
+        after = args.get("after")
+        after_ref = None if after is None else str(after)
+        cell_type = "markdown" if args.get("cell_type") == "markdown" else "code"
+        source = str(args.get("source") or "")
+        if not source.strip():
+            return ToolResult("The new cell is empty — nothing inserted.")
+        return ToolResult(self._notebook.insert(after_ref, cell_type, source))
+
+    async def _tool_run_cell(self, args: dict) -> ToolResult:
+        missing = self._need_notebook()
+        if missing:
+            return missing
+        number = self._cell_no(args)
+        if number is None:
+            return ToolResult("Give a cell number (1 = the first cell).")
+        cells = self._notebook.cells()
+        if not 1 <= number <= len(cells):
+            return ToolResult(
+                f"There is no cell {number} — the notebook has {len(cells)}."
+            )
+        return ToolResult(await self._notebook.run(str(number)))

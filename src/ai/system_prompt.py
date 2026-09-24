@@ -38,6 +38,18 @@ TOOLS_BASE = (
     "explain why once, then try a different approach or ask the user."
 )
 
+NOTEBOOK_BASE = (
+    "\n\nThe user has a notebook open. Its cells are numbered from 1 and "
+    "the screen shows the same numbers. You can read the notebook with "
+    "list_cells and read_cell, and change it with set_cell_source, "
+    "insert_cell, and run_cell — each of those asks the user first, and "
+    "the cell changes on screen the moment they allow it. Use cell numbers "
+    "exactly as the user gave them. When you rewrite a cell, put the whole "
+    "replacement in the tool call; do not paste code in chat as if it had "
+    "been written. When the user asks for code, write it into the notebook "
+    "rather than only describing it, unless they asked you not to."
+)
+
 
 @lru_cache(maxsize=1)
 def _colab_skill() -> str:
@@ -51,9 +63,13 @@ def _colab_skill() -> str:
         return ""
 
 
-def build_system_prompt(tools_available: bool = False) -> str:
+def build_system_prompt(
+    tools_available: bool = False, notebook_available: bool = False
+) -> str:
     skill = _colab_skill().strip()
     parts = [BASE + (TOOLS_BASE if tools_available else "")]
+    if notebook_available:
+        parts.append(NOTEBOOK_BASE)
     if skill:
         parts.append(
             "Background on Google Colab sessions (reference only, from the "

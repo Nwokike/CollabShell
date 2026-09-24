@@ -299,7 +299,7 @@ def AiPanelContent():
                     ft.Text(
                         "CollabShell Assistant",
                         size=tokens.FONT_MD,
-                        weight=ft.FontWeight.W_BOLD,
+                        weight=ft.FontWeight.BOLD,
                     ),
                     ft.Container(expand=True),
                     ft.IconButton(

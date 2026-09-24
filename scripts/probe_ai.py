@@ -123,7 +123,7 @@ from ai.session import AiSession as _AiSession
 
 class _FakeBox(ToolBox):
     def __init__(self):
-        pass
+        super().__init__(None)
 
     async def run(self, name, args):
         return types.SimpleNamespace(text=f"ok: {name}")
@@ -224,18 +224,29 @@ print("ad fixes: interstitial restock + no-fill unblock present", flush=True)
 # The settings section and the panel are pure constructors, so building
 # them catches a bad icon name or a wrong kwarg before the phone does.
 class _FakePage:
+    def __init__(self):
+        self.dialogs = []
+
     def run_task(self, *a, **k):
         return None
 
+    def show_dialog(self, dialog):
+        self.dialogs.append(dialog)
+
+    def pop_dialog(self):
+        if self.dialogs:
+            self.dialogs.pop()
+
 
 def _walk(control):
+    """Every control reachable through `controls` lists and `content` slots."""
     yield control
     for attr in ("controls", "content"):
         child = getattr(control, attr, None)
         if isinstance(child, (list, tuple)):
             for c in child:
                 yield from _walk(c)
-        elif child is not None and hasattr(child, "build"):
+        elif isinstance(child, ft.BaseControl):
             yield from _walk(child)
 
 
@@ -261,4 +272,75 @@ for needed in ("ai.timeline", "ai.approval", "resolve_approval"):
     assert needed in panel_src, f"panel lost {needed}"
 print("panel: timeline rows + approval card wired OK", flush=True)
 
-print("=== ALL PHASE 2 PROBES PASSED ===", flush=True)
+# ── Phase 3: the per-cell quick-ask sheet ─────────────────────────────
+from ai.cell_sheet import build_question, open_cell_sheet
+from components.notebook_cell.actions import make_actions_row
+
+cell_page = _FakePage()
+open_cell_sheet(cell_page, Services(ai=AiSession()), 3, "print('hello')")
+assert len(cell_page.dialogs) == 1
+sheet = list(_walk(cell_page.dialogs[0]))
+
+
+def _labels(controls):
+    """Every visible string, including ListTile titles Flet wraps in Text."""
+    found = set()
+    for c in controls:
+        if isinstance(c, ft.Text):
+            found.add(c.value or "")
+        if isinstance(c, ft.ListTile):
+            for slot in (c.title, c.subtitle):
+                if isinstance(slot, str):
+                    found.add(slot)
+                elif isinstance(slot, ft.Text):
+                    found.add(slot.value or "")
+    return found
+
+
+titles = _labels(sheet)
+assert "Cell 3" in titles and "print('hello')" in titles
+assert "Explain this cell" in titles and "Ask about it" in titles
+assert "Fix this error" not in titles, "no error, no fix button"
+
+# A failed cell offers the fix, and the error is what gets sent.
+fail_page = _FakePage()
+ai_for_fail = AiSession()
+open_cell_sheet(
+    fail_page, Services(ai=ai_for_fail), 2, "import nope", "ModuleNotFoundError: nope"
+)
+fail_titles = _labels(_walk(fail_page.dialogs[0]))
+assert "Fix this error" in fail_titles
+assert "ModuleNotFoundError" in build_question(
+    "fix", 2, "import nope", "ModuleNotFoundError: nope"
+)
+
+# The chat icon rides on every cell's action row. (copy_data is left off:
+# its client action needs a live page context, which an offline build has not.)
+row = make_actions_row(
+    on_move_up=lambda: None,
+    on_move_down=lambda: None,
+    on_delete=lambda: None,
+    on_copy=lambda: None,
+    on_ask_ai=lambda: None,
+)
+row_icons = [c.icon for c in row.controls if isinstance(c, ft.IconButton)]
+assert ft.Icons.CHAT_ROUNDED in row_icons, row_icons
+make_actions_row(
+    on_move_up=lambda: None, on_move_down=lambda: None, on_delete=lambda: None
+)
+print("cell sheet: explain/fix/ask build offline + chat icon on cells OK", flush=True)
+
+import screens.session.notebook_view as nv
+from ai.notebook_bridge import NotebookBridge
+
+for needed in (
+    "attach_notebook",
+    "detach_notebook",
+    "NotebookBridge",
+    "on_ask_ai",
+):
+    assert needed in inspect.getsource(nv), f"notebook view lost {needed}"
+assert hasattr(NotebookBridge, "run")
+print("notebook view: bridge attached on mount, detached on unmount OK", flush=True)
+
+print("=== ALL PROBES PASSED ===", flush=True)

@@ -66,7 +66,8 @@ class FakeRouter:
 
 
 class FakeBox(ToolBox):
-    def __init__(self, result_text="ok"):
+    def __init__(self, result_text="ok", notebook=None):
+        super().__init__(None, notebook)
         self.result_text = result_text
         self.ran: list[tuple[str, dict]] = []
 

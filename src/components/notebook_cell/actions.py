@@ -14,8 +14,21 @@ def make_actions_row(
     on_delete=None,
     on_copy=None,
     copy_data: str | None = None,
+    on_ask_ai=None,
 ):
     controls = []
+    if on_ask_ai:
+        # The chat icon is the Assistant's entry point everywhere — the FAB,
+        # the shortcut, and every cell. Same icon, same meaning.
+        controls.append(
+            ft.IconButton(
+                ft.Icons.CHAT_ROUNDED,
+                icon_size=tokens.ICON_SM,
+                icon_color=ft.Colors.PRIMARY,
+                tooltip="Ask the Assistant about this cell",
+                on_click=lambda e: on_ask_ai(),
+            )
+        )
     if on_copy:
         copy_value = (copy_data or "").strip()
         controls.append(
@@ -60,6 +73,66 @@ def _snack(page: ft.Page, message: str, is_error: bool = False):
     show_notification(page, message, is_error=is_error)
 
 
+def outputs_to_text(outputs: list) -> str:
+    """Flatten any output shape (stream, error, result) into plain text.
+
+    Shared with the Assistant so the cell sheet and "fix this error" show
+    exactly what the user sees, rather than a second, drifting parser.
+    """
+    parts: list[str] = []
+    for out in outputs or []:
+        if isinstance(out, str):
+            parts.append(out)
+            continue
+        if not isinstance(out, dict):
+            continue
+
+        out_type = out.get("type") or out.get("output_type")
+        if out_type == "stream":
+            txt = out.get("text", "")
+            if isinstance(txt, list):
+                txt = "".join(txt)
+            parts.append(str(txt))
+        elif out_type == "error":
+            tb = out.get("traceback", [])
+            tb_str = "\n".join(tb) if isinstance(tb, list) else str(tb)
+            ename, evalue = out.get("ename", ""), out.get("evalue", "")
+            head = f"{ename}: {evalue}" if ename or evalue else ""
+            parts.append("\n".join(x for x in (head, tb_str) if x))
+        elif out_type in ("execute_result", "display_data"):
+            data = out.get("data", {})
+            if "text/plain" in data:
+                txt = data["text/plain"]
+                if isinstance(txt, list):
+                    txt = "".join(txt)
+                parts.append(str(txt))
+        elif "text" in out:
+            txt = out["text"]
+            if isinstance(txt, list):
+                txt = "".join(txt)
+            parts.append(str(txt))
+    return "\n".join(p for p in parts if p).strip()
+
+
+def has_error(outputs: list) -> bool:
+    """True when the cell ended in an error worth offering to fix."""
+    return any(
+        isinstance(o, dict) and (o.get("type") or o.get("output_type")) == "error"
+        for o in (outputs or [])
+    )
+
+
+def error_to_text(outputs: list) -> str:
+    """Just the failing part — the traceback, without the noisy prints."""
+    return outputs_to_text([o for o in (outputs or []) if _is_error(o)])
+
+
+def _is_error(out) -> bool:
+    return (
+        isinstance(out, dict) and (out.get("type") or out.get("output_type")) == "error"
+    )
+
+
 async def copy_code(page: ft.Page, code: str):
     """Copy cell source code to clipboard."""
     if not code or not code.strip():
@@ -78,48 +151,10 @@ async def copy_output(page: ft.Page, outputs: list):
         _snack(page, "No output to copy.")
         return
 
-    text_to_copy = ""
-    for out in outputs:
-        if isinstance(out, str):
-            text_to_copy += out + "\n"
-            continue
-        if not isinstance(out, dict):
-            continue
-
-        out_type = out.get("type") or out.get("output_type")
-        if out_type == "stream":
-            txt = out.get("text", "")
-            if isinstance(txt, list):
-                txt = "".join(txt)
-            text_to_copy += str(txt) + "\n"
-        elif out_type == "error":
-            tb = out.get("traceback", [])
-            if isinstance(tb, list):
-                tb_str = "\n".join(tb)
-            else:
-                tb_str = str(tb)
-            ename = out.get("ename", "")
-            evalue = out.get("evalue", "")
-            if ename or evalue:
-                text_to_copy += f"{ename}: {evalue}\n"
-            text_to_copy += tb_str + "\n"
-        elif out_type in ["execute_result", "display_data"]:
-            data = out.get("data", {})
-            if "text/plain" in data:
-                txt = data["text/plain"]
-                if isinstance(txt, list):
-                    txt = "".join(txt)
-                text_to_copy += str(txt) + "\n"
-        elif "text" in out:
-            txt = out["text"]
-            if isinstance(txt, list):
-                txt = "".join(txt)
-            text_to_copy += str(txt) + "\n"
-
     import re
 
     ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-    final_text = ansi_escape.sub("", text_to_copy).strip()
+    final_text = ansi_escape.sub("", outputs_to_text(outputs)).strip()
 
     if final_text:
         try:

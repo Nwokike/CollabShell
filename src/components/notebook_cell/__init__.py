@@ -78,6 +78,7 @@ def NotebookCell(
     on_source_change: Callable[[str], None] | None = None,
     on_clear_output: Callable[[], None] | None = None,
     on_open_terminal: Callable[[], None] | None = None,
+    on_ask_ai: Callable[[], None] | None = None,
     is_active: bool = False,
     on_focus_change: Callable[[str, bool], None] | None = None,
     focus_token: int = 0,
@@ -130,6 +131,7 @@ def NotebookCell(
             on_delete=on_delete,
             on_copy=lambda: page.run_task(_copy_code_task),
             copy_data=cell.source,
+            on_ask_ai=on_ask_ai,
         )
 
     # ── Markdown cell ─────────────────────────────────────────────────────────
