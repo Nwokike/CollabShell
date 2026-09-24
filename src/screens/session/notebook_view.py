@@ -22,6 +22,7 @@ from core import constants, tokens
 from core.shortcuts import Binding
 from core.stdin_hook import show_stdin_dialog
 from core.styles import build_banner_ad
+from core.urls import get_url_launcher
 from screens.files.modal import show_manage_files_modal
 from screens.session.layout import build_action_row, build_keep_alive_card
 from screens.session.vm_ops import on_auth_gcp, on_mount_drive
@@ -495,7 +496,7 @@ def NotebookView(
             snack=controller.show_snack,
         ),
         on_open_browser=lambda e: page.run_task(
-            ft.UrlLauncher().launch_url,
+            get_url_launcher().launch_url,
             f"https://colab.research.google.com/drive/{session_name}",
         ),
         on_terminal=lambda e: on_switch_terminal(),

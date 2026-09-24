@@ -65,11 +65,16 @@ class CreditsLedger:
             return max(DAILY_CREDITS - used, 0)
 
     async def spend(self, count: int = COST_PER_TURN) -> bool:
-        """Charge `count` credits. False means the user is out."""
+        """Charge `count` credits. False means the user is at zero.
+
+        A turn is never aborted for being 1 credit short: it starts, the
+        balance clamps at zero, and the work completes — losing a user's
+        in-flight work over one credit is worse than one turn free.
+        """
         async with self._lock:
             window, used = await self._load()
             window, used = self._roll(window, used)
-            if used + count > DAILY_CREDITS:
+            if used >= DAILY_CREDITS:
                 return False
             await self._save(window, used + count)
             return True

@@ -11,6 +11,7 @@ from components.shortcuts_help import build_help_button
 from core import constants, tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
 from core.styles import hardware_badge, status_dot
+from core.urls import get_url_launcher
 from screens.files.modal import show_manage_files_modal
 from screens.session.fab_menu import build_session_fab
 from screens.session.layout import build_tab_switcher
@@ -230,7 +231,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 snack=controller.show_snack,
             ),
             on_open_browser=lambda e: page.run_task(
-                ft.UrlLauncher().launch_url,
+                get_url_launcher().launch_url,
                 f"https://colab.research.google.com/drive/{session_name}",
             ),
             on_ask_ai=lambda e: open_ai_panel(page, services),

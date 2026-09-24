@@ -244,7 +244,7 @@ def AppShell() -> Control:
                                 ft.IconButton(
                                     icon=ft.Icons.CHAT_ROUNDED,
                                     icon_size=tokens.ICON_SM,
-                                    tooltip="Ask AI",
+                                    tooltip="Assistant",
                                     on_click=lambda e: open_ai_panel(page, services),
                                 ),
                                 build_help_button(page, "global"),
@@ -433,7 +433,7 @@ def AppShell() -> Control:
                 ft.IconButton(
                     icon=ft.Icons.CHAT_ROUNDED,
                     icon_size=tokens.ICON_SM,
-                    tooltip="Ask AI",
+                    tooltip="Assistant",
                     on_click=lambda e: open_ai_panel(page, services),
                 ),
                 ft.IconButton(

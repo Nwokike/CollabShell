@@ -105,6 +105,22 @@ def solid_card(content: ft.Control, **kwargs) -> ft.Container:
     )
 
 
+# One AdService per page: a fresh instance per banner re-runs consent
+# state from scratch, so banners can be silently suppressed for the whole
+# session after the first one.
+_ad_services: dict[int, object] = {}
+
+
+def _banner_ad_service(page: ft.Page):
+    from services.ad_service import AdService
+
+    svc = _ad_services.get(id(page))
+    if svc is None:
+        svc = AdService(page)
+        _ad_services[id(page)] = svc
+    return svc
+
+
 def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     """Build a glass-container-wrapped banner ad (mobile only)."""
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
@@ -115,11 +131,8 @@ def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
     try:
         import flet_ads as fta
 
-        from services.ad_service import AdService
-
         if not unit_id:
-            ad_service = AdService(page)
-            unit_id = ad_service.banner_id
+            unit_id = _banner_ad_service(page).banner_id
 
         ad = fta.BannerAd(
             unit_id=unit_id,

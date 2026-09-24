@@ -38,7 +38,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
 
     return ft.Column(
         controls=[
-            section_header("AI ASSISTANT"),
+            section_header("ASSISTANT"),
             glass_card(
                 ft.Column(
                     controls=[
@@ -53,7 +53,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Ask AI",
+                                            "Assistant",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
@@ -105,6 +105,8 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                     options=options,
                                     hint_text="auto",
                                     width=tokens.INPUT_WIDTH_LG,
+                                    menu_height=300,
+                                    enable_filter=True,
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(_on_model, e),
                                 ),

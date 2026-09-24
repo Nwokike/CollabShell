@@ -17,6 +17,7 @@ from components.notebook_cell.actions import copy_code, copy_output, make_action
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from core.theme import AppColors
+from core.urls import get_url_launcher
 
 
 @ft.observable
@@ -200,7 +201,7 @@ def NotebookCell(
                                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
                                 selectable=True,
                                 on_tap_link=lambda e: page.run_task(
-                                    ft.UrlLauncher().launch_url, e.data
+                                    get_url_launcher().launch_url, e.data
                                 ),
                             ),
                             padding=tokens.SPACE_SM,

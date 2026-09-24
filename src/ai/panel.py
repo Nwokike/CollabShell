@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import flet as ft
 
+from ai.credits import COST_PER_TURN
 from ai.session import AiSession
 from core import tokens
 from core.theme import AppColors
@@ -42,7 +43,11 @@ def AiPanelContent():
 
     # ── Transcript ─────────────────────────────────────────────────────
     bubbles: list[ft.Control] = []
-    for m in ai.messages:
+    for index, m in enumerate(ai.messages):
+
+        def _delete(i=index, ev=None):
+            page.run_task(ai.delete_message, i)
+
         if m["role"] == "user":
             bubbles.append(
                 ft.Container(
@@ -61,16 +66,31 @@ def AiPanelContent():
                         tokens.SPACE_SM,
                     ),
                     align=ft.Alignment.CENTER_RIGHT,
+                    # Long-press deletes one message; the rest keep order.
+                    on_long_press=_delete,
                 )
             )
         else:
             bubbles.append(
-                ft.Markdown(
-                    m["content"],
-                    selectable=True,
-                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                ft.Container(
+                    content=ft.Markdown(
+                        m["content"],
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    ),
+                    on_long_press=_delete,
                 )
             )
+
+    receipt: ft.Control | None = None
+    if ai.steps_used:
+        receipt = ft.Text(
+            f"Assistant used {ai.steps_used} step"
+            f"{'s' if ai.steps_used != 1 else ''} · {ai.steps_used * COST_PER_TURN} credits",
+            size=tokens.FONT_XXS,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+            italic=True,
+        )
 
     # ── Current turn ───────────────────────────────────────────────────
     turn: list[ft.Control] = []
@@ -184,6 +204,7 @@ def AiPanelContent():
                 hint_text="Model",
                 width=210,
                 menu_height=300,
+                enable_filter=True,
                 text_size=tokens.FONT_XS,
                 on_select=lambda e: page.run_task(ai.select_model, e.control.value),
             ),
@@ -208,7 +229,7 @@ def AiPanelContent():
                         size=tokens.ICON_MD,
                     ),
                     ft.Text(
-                        "CollabShell AI",
+                        "CollabShell Assistant",
                         size=tokens.FONT_MD,
                         weight=ft.FontWeight.W_BOLD,
                     ),
@@ -236,7 +257,7 @@ def AiPanelContent():
             # Transcript — auto_scroll pins to the newest token and
             # suspends itself the moment the user scrolls up to read.
             ft.ListView(
-                controls=[*bubbles, *turn],
+                controls=[*([receipt] if receipt else []), *bubbles, *turn],
                 auto_scroll=True,
                 auto_scroll_animation=0,
                 spacing=tokens.SPACE_SM,

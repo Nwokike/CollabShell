@@ -34,6 +34,24 @@ class RouterUnavailable(Exception):
     """The router could not be reached, or answered with an error."""
 
 
+def _details_text(details) -> str:
+    """Flatten a structured `reasoning_details` stream into plain text.
+
+    Some upstreams stream reasoning as typed segments
+    (`[{"type": "text", "text": ...}, ...]`) rather than a string.
+    """
+    if isinstance(details, str):
+        return details
+    if isinstance(details, list):
+        parts = [
+            item.get("text") or ""
+            for item in details
+            if isinstance(item, dict) and item.get("text")
+        ]
+        return "".join(parts)
+    return ""
+
+
 @dataclass(frozen=True)
 class AiModel:
     """One model the router currently serves."""
@@ -126,12 +144,13 @@ class KiriRouter:
                         text = delta.get("content") or ""
                         # Kiri Router streams reasoning through untouched,
                         # but the dialect differs per upstream: most send
-                        # `reasoning`, one family sends `reasoning_content`.
-                        # Read both, prefer whichever arrived.
+                        # `reasoning`, one family sends `reasoning_content`,
+                        # structured ones send `reasoning_details` segments.
+                        # Read all three, prefer whichever arrived.
                         reasoning = (
                             delta.get("reasoning")
                             or delta.get("reasoning_content")
-                            or ""
+                            or _details_text(delta.get("reasoning_details"))
                         )
                         if not reasoning and text.startswith("[Reasoning:"):
                             # Safety net for the rare aggregated reply that

@@ -48,6 +48,7 @@ class AiSession:
         self.status: str = ""  # e.g. busy hints
         self.error: str = ""
         self.draft: str = ""  # lives here so minimizing keeps typed text
+        self.steps_used: int = 0  # model calls this conversation, for the receipt
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None
@@ -149,7 +150,14 @@ class AiSession:
         self.reasoning = ""
         self.error = ""
         self.status = ""
+        self.steps_used = 0
         await self._persist()
+
+    async def delete_message(self, index: int) -> None:
+        """Long-press removes one message; the rest keep their order."""
+        if 0 <= index < len(self.messages):
+            del self.messages[index]
+            await self._persist()
 
     # ── Chat loop ──────────────────────────────────────────────────────
 
@@ -202,7 +210,7 @@ class AiSession:
         text = (text or "").strip()
         if not text or not self.enabled:
             if not self.enabled:
-                self.error = "AI is turned off in Settings."
+                self.error = "The Assistant is turned off in Settings."
             return
         # One send at a time: without this, two fast taps both pass the
         # streaming check, both charge, and both streams corrupt the shared
@@ -216,10 +224,11 @@ class AiSession:
 
             if self.ledger is not None and not await self.ledger.spend(COST_PER_TURN):
                 self.credits_left = 0
-                self.error = "No AI credits left today. They refill in 24 hours."
+                self.error = "No Assistant credits left today. They refill in 24 hours."
                 return
 
             self.messages.append({"role": "user", "content": text})
+            self.steps_used += 1
             self._trim_history()
             self.streaming = True
             self.answer = ""

@@ -8,6 +8,7 @@ import flet as ft
 
 from core import constants, tokens
 from core.theme import AppColors
+from core.urls import get_url_launcher
 from screens.onboarding.slides import (
     build_page_1,
     build_page_2,
@@ -46,7 +47,7 @@ def OnboardingScreen() -> ft.Control:
 
         try:
             auth_url = await services.colab.get_auth_url()
-            await ft.UrlLauncher().launch_url(auth_url)
+            await get_url_launcher().launch_url(auth_url)
             set_show_verify(True)
             set_is_loading_auth(False)
         except Exception as ex:

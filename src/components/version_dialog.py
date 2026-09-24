@@ -22,6 +22,7 @@ from core.constants import APP_VERSION, ERR_NETWORK, GITHUB_RELEASES_URL
 from core.notifications import show_notification
 from core.state import state
 from core.theme import AppColors
+from core.urls import get_url_launcher
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 def _launch(page: ft.Page, url: str):
     async def _run():
         try:
-            await ft.UrlLauncher().launch_url(url)
+            await get_url_launcher().launch_url(url)
         except Exception as ex:
             logger.debug("Update URL launch failed: %s", ex)
             show_notification(page, ERR_NETWORK, is_error=True)
