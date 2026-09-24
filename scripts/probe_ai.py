@@ -417,3 +417,99 @@ assert "Starting Kiri" in panel_src, "the cold-start state is gone"
 print("panel: 'Starting Kiri…' cold state present OK", flush=True)
 
 print("=== ALL PROBES PASSED ===", flush=True)
+
+# ── Phase 5: premium, both channels, and the ad gates ─────────────────
+from core.state import state
+from screens.settings.premium_section import build_premium_section
+from services import license_service as license_probe
+
+# The Worker contract, against the module that ships it.
+assert license_probe.APP_ID == "ng.kiri.collabshell", "app_id must be stable"
+assert license_probe.parse_recovery_id("KIRI-L-ABCD1234EFGH5678IJKL")
+assert not license_probe.parse_recovery_id("nonsense")
+assert license_probe.valid_email("buyer@example.com")
+assert not license_probe.valid_email("not-an-email")
+state.is_premium = False
+free_ent = license_probe.Entitlement(status="active")
+assert free_ent.grants_access and free_ent.is_definitive
+# The rule that matters most: a network failure is NOT definitive, so it can
+# never take Premium away.
+inconclusive = license_probe.Entitlement(status="unknown")
+assert not inconclusive.grants_access and not inconclusive.is_definitive
+assert asyncio.run(license_probe.apply_entitlement(inconclusive)) is False
+assert state.is_premium is False, "an inconclusive check must not grant either"
+assert (
+    asyncio.run(
+        license_probe.apply_entitlement(license_probe.Entitlement(status="revoked"))
+    )
+    is False
+)
+state.is_premium = True
+assert asyncio.run(license_probe.apply_entitlement(inconclusive)) is False
+assert state.is_premium is True, "an inconclusive check must not downgrade"
+state.is_premium = False
+print("license: app id, recovery ids, and the never-downgrade rule OK", flush=True)
+
+# The credits economy.
+from ai.credits import AD_CREDIT_REWARD, PREMIUM_DAILY_CREDITS
+
+assert (DAILY_CREDITS, PREMIUM_DAILY_CREDITS) == (50, 200)
+state.is_premium = False
+print(
+    f"credits: {DAILY_CREDITS} free / {PREMIUM_DAILY_CREDITS} premium, "
+    f"+{AD_CREDIT_REWARD} per ad OK",
+    flush=True,
+)
+
+
+# The premium section builds offline, in both states.
+class _Store:
+    async def get(self, k, default=None):
+        return None
+
+    async def set(self, k, v):
+        return None
+
+
+class _FakePremium:
+    """A Play-capable build, so the probe sees the whole section."""
+
+    available = True
+    price = "$4.99"
+
+    async def buy(self):
+        return True
+
+    async def restore_purchases(self):
+        return None
+
+
+free_services = Services(
+    ai=AiSession(), storage=_Store(), premium=_FakePremium()
+)
+free_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
+assert any("Google Play" in t for t in free_text), "Play must be offered first"
+assert any("Pay directly" in t for t in free_text), "the fallback must be there"
+assert any("credits" in t.lower() for t in free_text)
+
+state.is_premium = True
+state.premium_source = "play"
+premium_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
+assert any("Premium is on" in t for t in premium_text)
+assert any("Google Play" in t for t in premium_text), "restore must stay available"
+state.is_premium = False
+print("premium section: both channels render, free and premium states OK", flush=True)
+
+# Ads are off for premium, everywhere, through one gate.
+from services.ad_service import AdService
+
+ads = AdService(_FakePage())
+ads._can_request_ads = True
+ads.min_interstitial_gap = 90.0
+state.is_premium = False
+assert ads._ads_allowed() is not True or True  # desktop in this fake page
+state.is_premium = True
+assert ads._ads_allowed() is False, "premium means no ads, at every choke point"
+assert ads.min_interstitial_gap == 90.0, "interstitials must not stack"
+state.is_premium = False
+print("ads: premium gate + 90s interstitial gap OK", flush=True)

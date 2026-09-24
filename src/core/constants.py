@@ -36,6 +36,21 @@ STORAGE_AI_CHATS = "colab_ai_chats"
 STORAGE_AI_ACTIVE_CHAT = "colab_ai_active_chat"
 STORAGE_AI_USED = "colab_ai_credits_used"
 STORAGE_AI_WINDOW = "colab_ai_credits_window"
+# Ad-earned credits: never expire, spent after the daily grant.
+STORAGE_AI_BONUS = "colab_ai_credits_bonus"
+# How much of the bonus has been charged, so a failed call can be refunded
+# to the ad credits it actually came from.
+STORAGE_AI_BONUS_SPENT = "colab_ai_credits_bonus_spent"
+
+# ── Premium ────────────────────────────────────────────────────────────────
+# Granted by either channel: Google Play Billing (default) or the Kiri License
+# Worker (fallback for users Google billing cannot serve).
+STORAGE_PREMIUM = "collab_premium"
+STORAGE_PREMIUM_SOURCE = "collab_premium_source"
+STORAGE_PREMIUM_PRODUCT = "collab_premium_product"
+# The Kiri recovery ID — the user's way back in after clearing app data.
+STORAGE_LICENSE_RECOVERY = "kiri_recovery_id"
+STORAGE_LICENSE_TOKEN = "kiri_license_token"
 
 # ── Hardware options (from colab_cli.client.Accelerator) ──────────────────────
 # Free tier: CPU (always), T4 GPU (limited), TPU v5e1/v6e1 (limited)

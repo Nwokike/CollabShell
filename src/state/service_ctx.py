@@ -19,6 +19,7 @@ class Services:
     storage: object = None
     ad_service: object = None
     ai: object = None  # ai.session.AiSession — the shared chat
+    premium: object = None  # services.premium_service.PremiumService
     page: object = None  # ft.Page ref for services that need it directly
 
 

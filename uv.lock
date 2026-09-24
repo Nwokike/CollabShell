@@ -258,6 +258,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "flet" },
     { name = "flet-ads" },
+    { name = "flet-billing" },
     { name = "flet-cli", marker = "sys_platform == 'win32'" },
     { name = "flet-desktop", marker = "sys_platform == 'win32'" },
     { name = "flet-local-auth" },
@@ -281,6 +282,7 @@ requires-dist = [
     { name = "cryptography", specifier = "==48.0.0" },
     { name = "flet", specifier = ">=1.0.1" },
     { name = "flet-ads", specifier = ">=1.0.1" },
+    { name = "flet-billing", specifier = ">=0.1.1" },
     { name = "flet-cli", marker = "sys_platform == 'win32'", specifier = ">=1.0.1" },
     { name = "flet-desktop", marker = "sys_platform == 'win32'", specifier = ">=1.0.1" },
     { name = "flet-local-auth", specifier = ">=1.0.1" },
@@ -423,6 +425,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/24/ff/1e169325b0bb0226ffac70a68689d59e75ec917501c004139df3ce53c8b5/flet_ads-1.0.1.tar.gz", hash = "sha256:627a607cf0e0145028e168d2413768729e08be011e2724dff078933e768302cb", size = 16566, upload-time = "2026-09-22T20:25:07.572Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/09/57d7469acb2da107a376f18c1196ea44aa6c0028a9b1a147a4f356b69425/flet_ads-1.0.1-py3-none-any.whl", hash = "sha256:78e87e24285063a14c71948fe6829ab6e04d8aae69fea1a0f362fe6bb42168a4", size = 21491, upload-time = "2026-09-22T20:25:06.54Z" },
+]
+
+[[package]]
+name = "flet-billing"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/a1/65e6b4ffa1010d5331b737732d8a770a5104b3ff992c9055414ccc5262db/flet_billing-0.1.1.tar.gz", hash = "sha256:3edbbf252e468d8a2590f9f4e5dd579a882aa865d9f336f14fd753edbf54afa3", size = 23190, upload-time = "2026-09-23T13:39:56.326Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/c6/7af76d645a7455cb73c79a54adc2556702220c9481f9059e937b034031ed/flet_billing-0.1.1-py3-none-any.whl", hash = "sha256:a6a4351e9ed7450615f0fb434c3866137be02afc18390eea288af870d5f9f85e", size = 21954, upload-time = "2026-09-23T13:39:55.216Z" },
 ]
 
 [[package]]

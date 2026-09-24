@@ -45,6 +45,18 @@ class AppState:
     cli_available: bool = False
     update_available: bool = False
     update_data: dict | None = None
+
+    # ── Premium ───────────────────────────────────────────────────────────────
+    # Granted by EITHER channel: Google Play Billing (the default) or the Kiri
+    # License Worker (the fallback for users Google billing cannot serve).
+    # Never a UI-only flag — each channel persists its own proof.
+    is_premium: bool = False
+    # "play" | "kiri" | "" — which channel granted it, for honest copy.
+    premium_source: str = ""
+    premium_product: str = ""
+    # True when premium rests on a locally verified signed token that the
+    # server has not confirmed this session.
+    premium_offline: bool = False
     onboarding_done: bool = False
 
     # ── Settings (every CLI flag exposed) ─────────────────────────────────────

@@ -100,6 +100,14 @@ from core.storage_patch import _memory_log_handler
 from core.theme import AppTheme
 from services.ad_service import AdService
 from services.colab import ColabService
+from services.license_service import (
+    LicenseError,
+    apply_entitlement,
+    cached_entitlement,
+    check_status,
+    store_entitlement,
+)
+from services.premium_service import PremiumService
 from services.storage_service import StorageService
 from services.update_service import UpdateService
 from state import ControllerMethods, ControllerMethodsCtx, ServiceCtx, Services
@@ -146,9 +154,51 @@ class AppController:
         self.page = page
         self.storage: StorageService | None = None
         self.ad_service: AdService | None = None
+        self.premium_service: PremiumService | None = None
         self.colab_service: ColabService | None = None
         self.update_service: UpdateService | None = None
         self._torn_down = False
+
+    # ── Premium ──────────────────────────────────────────────────────────────
+
+    async def _load_license_offline(self) -> None:
+        """Grant premium from a locally verified signed token.
+
+        Runs on the boot path with no network: a user who paid through the
+        fallback channel has their access immediately, online or not.
+        """
+        try:
+            entitlement = await cached_entitlement(self.storage)
+        except Exception:
+            logger.debug("Offline license check failed", exc_info=True)
+            return
+        if entitlement is not None and entitlement.grants_access:
+            await apply_entitlement(entitlement)
+            logger.info("Premium restored offline from a signed token")
+
+    async def _reconcile_premium(self) -> None:
+        """Confirm entitlement with the server after the first frame.
+
+        Play is reconciled through the store; the Worker through /status.
+        Neither failure ever removes access — only an authoritative ruling
+        from the channel that granted it does.
+        """
+        if self.premium_service is not None:
+            try:
+                await self.premium_service.reconcile()
+            except Exception:
+                logger.warning("Play reconcile failed", exc_info=True)
+        recovery_id = await self.storage.get(constants.STORAGE_LICENSE_RECOVERY)
+        if not recovery_id or state.premium_source == "play":
+            return
+        try:
+            entitlement = await check_status(recovery_id)
+        except LicenseError as e:
+            # Not definitive: keep whatever the token proved.
+            logger.info("License status check inconclusive: %s", e)
+            return
+        await store_entitlement(self.storage, entitlement)
+        await apply_entitlement(entitlement)
 
     async def check_for_updates(self, notify_if_latest: bool = False) -> None:
         """Check version.json on main for a newer build or announcement.
@@ -254,14 +304,25 @@ class AppController:
 
         self.storage = StorageService(page)
         self.ad_service = AdService(page)
+        state.ad_service = self.ad_service
 
-        # AI assistant shares the storage service for its credit ledger,
+        # The Assistant shares the storage service for its credit ledger,
         # settings, and chat history.
         from ai.session import ai_session
 
         ai_session.attach_storage(self.storage)
-        state.ad_service = self.ad_service
-        await self.ad_service.gather_consent()
+
+        # Premium has two channels: Play Billing (the default) and the Kiri
+        # License Worker (the fallback where Google billing cannot serve the
+        # user). Entitlement is resolved BEFORE ad consent, so a paying user
+        # is never asked about ads they will not see, and before ads preload.
+        self.premium_service = PremiumService(page, self.storage)
+        await self.premium_service.load_local()
+        await self._load_license_offline()
+        # Store reconciliation is a network round-trip: it runs after the
+        # first frame, never on the boot path.
+        page.run_task(self._reconcile_premium)
+        page.run_task(self.ad_service.gather_consent)
         page.run_task(self.ad_service.preload_interstitial)
 
         self.colab_service = ColabService()
@@ -458,6 +519,7 @@ class AppController:
             storage=self.storage,
             ad_service=self.ad_service,
             ai=ai_session,
+            premium=self.premium_service,
             page=page,
         )
 

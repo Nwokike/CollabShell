@@ -109,6 +109,9 @@ class AiSession:
         self.selected_model: str = DEFAULT_MODEL
         self.models: list[AiModel] = []
         self.models_loading: bool = False  # first fetch in flight, nothing to show
+        # Retries gave up and Kiri could not be reached. A picker that
+        # says "Starting…" forever is lying; this is how it stops.
+        self.models_unreachable: bool = False
         self.models_stale: bool = False  # showing cache; the live list failed
         self.credits_left: int = 0
         self.messages: list[dict] = []
@@ -335,18 +338,23 @@ class AiSession:
         warm start, the live list replaces it a moment later, and a failure
         leaves the cached list in place with a quiet note instead of a
         blank dropdown.
+
+        Three states, not two, because a retry loop that never gives up is
+        its own lie: after the last attempt the picker says it cannot reach
+        Kiri rather than sitting on "Starting…" forever.
         """
         if not self.models and not self.models_loading:
             cached = catalog.read_models()
             if cached:
                 self.models = cached
         self.models_loading = not self.models
+        self.models_unreachable = False
         try:
             models = await self.router.list_models()
         except RouterUnavailable:
             if not self.models:
-                # Nothing cached and nothing live: keep the "starting" state
-                # and try again rather than showing an empty picker forever.
+                # Keep the loading flag so the panel's retry loop runs again;
+                # the loop clears it once it gives up.
                 self.models_loading = True
                 self.status = "Still starting Kiri — trying again…"
                 return

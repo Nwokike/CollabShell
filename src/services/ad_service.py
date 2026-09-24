@@ -44,6 +44,11 @@ class AdService:
         self._active_rewarded_ad = None
         self._can_request_ads: bool = True
         self._consent_manager = None
+        # The gap DDGS/Sherlock enforce between interstitials. Without it a
+        # burst of actions (run cell, open files, export notebook) can stack
+        # three full-screen ads in a row and the app feels hostile.
+        self._last_interstitial_at: float = 0.0
+        self.min_interstitial_gap: float = 90.0
 
     @property
     def banner_id(self) -> str:
@@ -69,12 +74,37 @@ class AdService:
         except Exception:
             return False
 
+    def _premium(self) -> bool:
+        """Premium removes ads. One condition, checked at every choke point,
+        so no new ad surface can forget it."""
+        from core.state import state
+
+        return bool(getattr(state, "is_premium", False))
+
+    def _ads_allowed(self) -> bool:
+        """The single gate every ad surface goes through."""
+        if not _HAS_ADS or not self._is_mobile() or self._premium():
+            return False
+        return bool(self._can_request_ads)
+
+    def _gap_elapsed(self) -> bool:
+        import time as _time
+
+        return (_time.monotonic() - self._last_interstitial_at) >= (
+            self.min_interstitial_gap
+        )
+
     # ── Consent Management (UMP) ──────────────────────────────────────────────
 
     async def gather_consent(self):
-        """Run UMP consent flow. Only shows UI in regulated regions (EEA/UK)."""
-        if not _HAS_ADS or not self._is_mobile():
-            self._can_request_ads = True
+        """Run UMP consent flow. Only shows UI in regulated regions (EEA/UK).
+
+        A premium user is never shown the form: premium is resolved before
+        this runs, and asking someone who has already paid whether they
+        consent to ads they will never see is a bug, not a nicety.
+        """
+        if not _HAS_ADS or not self._is_mobile() or self._premium():
+            self._can_request_ads = not self._premium()
             return
         try:
             self._consent_manager = fta.ConsentManager()
@@ -103,8 +133,9 @@ class AdService:
     # ── Ad Controls ───────────────────────────────────────────────────────────
 
     def get_banner_ad(self) -> ft.Control:
-        """Return a banner ad control, or empty container on desktop."""
-        if not _HAS_ADS or not self._is_mobile() or not self._can_request_ads:
+        """Return a banner ad control, or empty container when there is no
+        ad to show (desktop, no consent, or premium)."""
+        if not self._ads_allowed():
             return ft.Container(width=0, height=0)
         try:
             from core import tokens
@@ -134,7 +165,10 @@ class AdService:
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Pre-load an interstitial ad for later display."""
         self._on_close = on_close
-        if not _HAS_ADS or not self._is_mobile() or not self._can_request_ads:
+        if not self._ads_allowed():
+            # Premium: drop any preloaded instance so a purchase mid-session
+            # actually stops the ads instead of leaving one queued.
+            self.interstitial = None
             return
         try:
             self.interstitial = fta.InterstitialAd(
@@ -162,10 +196,18 @@ class AdService:
         only reload used to happen on the rewarded ad's close — so after
         the first session-create, every later interstitial found an empty
         slot and silently no-opped.
+
+        Held to a minimum gap: a burst of actions must not stack three
+        full-screen ads in a row.
         """
         shown = False
         try:
+            if self._premium() or not self._gap_elapsed():
+                return False
             if self.interstitial:
+                import time as _time
+
+                self._last_interstitial_at = _time.monotonic()
                 await self.interstitial.show()
                 shown = True
             return shown
@@ -175,8 +217,9 @@ class AdService:
             await self.preload_interstitial(on_close=self._on_close)
 
     async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
-        """Show a rewarded interstitial ad, triggering on_close when closed."""
-        if not _HAS_ADS or not self._is_mobile():
+        """Show a rewarded ad. A premium user is not asked to watch one —
+        the action simply runs."""
+        if self._premium() or not _HAS_ADS or not self._is_mobile():
             if inspect.iscoroutinefunction(on_close):
                 await on_close()
             else:

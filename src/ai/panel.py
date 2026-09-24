@@ -38,14 +38,20 @@ def AiPanelContent():
     # Models are only worth fetching when the sheet is actually open. The
     # retry loop is what makes "Starting Kiri…" resolve on its own: a cold
     # router can take a few seconds, and the user should never have to
-    # close and reopen the sheet to get a picker.
+    # close and reopen the sheet to get a picker. When the retries run out
+    # the state becomes "unreachable" rather than sitting on "Starting…"
+    # forever — a label that never resolves is a lie about what is
+    # happening.
     async def _load_models():
-        for attempt in range(MODEL_RETRY_DELAYS):
+        for attempt in range(len(MODEL_RETRY_DELAYS)):
             await ai.refresh_models()
             if not ai.models_loading:
                 return
             if attempt < len(MODEL_RETRY_DELAYS) - 1:
                 await asyncio.sleep(MODEL_RETRY_DELAYS[attempt])
+        ai.models_loading = False
+        ai.models_unreachable = True
+        ai.status = "Can't reach Kiri. Check your connection and reopen."
 
     ft.on_mounted(lambda: page.run_task(_load_models))
 
@@ -285,9 +291,10 @@ def AiPanelContent():
     # ── Model picker ───────────────────────────────────────────────────
     # DropdownOption (not dropdown.Option) is the 1.0 name, and menu_height
     # is what makes the ~48-entry catalog scrollable instead of overflowing
-    # the sheet. With nothing cached and nothing live yet the picker says
-    # "Starting Kiri…" — the same honest waiting state the LM Router app
-    # shows — instead of sitting empty and looking broken.
+    # the sheet. Three honest states, the same ones the LM Router app
+    # distinguishes: a real list, a wait while Kiri starts, and a definite
+    # "cannot reach it" — never a neutral empty dropdown that could mean
+    # any of them.
     if ai.models:
         options = [ft.DropdownOption(m.id, _model_label(m)) for m in ai.models]
         model_control = ft.Dropdown(
@@ -301,10 +308,11 @@ def AiPanelContent():
             on_select=lambda e: page.run_task(ai.select_model, e.control.value),
         )
     else:
+        waiting = "Starting Kiri…" if not ai.models_unreachable else "Kiri unreachable"
         model_control = ft.Dropdown(
             value=None,
-            options=[ft.DropdownOption("starting", "Starting Kiri…")],
-            hint_text="Starting Kiri…",
+            options=[ft.DropdownOption("none", waiting)],
+            hint_text=waiting,
             width=210,
             disabled=True,
             text_size=tokens.FONT_XS,

@@ -16,6 +16,7 @@ from screens.settings.execution_section import build_execution_section
 from screens.settings.hardware_section import build_hardware_section
 from screens.settings.logs_section import build_logs_section
 from screens.settings.preferences_section import build_preferences_section
+from screens.settings.premium_section import build_premium_section
 from screens.settings.usage_section import build_usage_section
 from state import AppStateCtx, ServiceCtx
 
@@ -36,6 +37,7 @@ def SettingsScreen() -> ft.Control:
         controls=[
             build_preferences_section(page, state, services),
             build_account_section(page, state, services),
+            build_premium_section(page, state, services),
             build_ai_section(page, state, services),
             build_banner_ad(page),
             build_hardware_section(page, state, services),

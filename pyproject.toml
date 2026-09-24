@@ -25,6 +25,7 @@ dependencies = [
     "pyarrow==24.0.0",
     "rich>=15.0.0",
     "flet-local-auth>=1.0.1",
+    "flet-billing>=0.1.1",
 ]
 
 [tool.flet]
