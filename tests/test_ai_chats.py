@@ -385,3 +385,97 @@ def test_relative_time_reads_like_a_phone():
             "Dec",
         )
     )
+
+
+# ── The catalog only offers models that can actually answer ────────────
+
+
+def test_chat_capable_endpoints():
+    from ai.router import is_chat_eligible
+
+    assert is_chat_eligible({"id": "auto", "status": "active"})
+    assert is_chat_eligible({"id": "m1", "endpoint_type": "chat.completion"})
+    assert is_chat_eligible({"id": "m2", "endpoint_type": "chat.completions"})
+    assert is_chat_eligible({"id": "m3", "endpoint_type": "chat"})
+    # A row from before the endpoint_type field is trusted.
+    assert is_chat_eligible({"id": "m4"})
+
+
+def test_models_that_cannot_answer_chat_are_never_offered():
+    from ai.router import is_chat_eligible
+
+    # All three were `status: active` in the live catalog on 2026-09-24 —
+    # a status check alone offered all three, and every one is a dead end.
+    for model_id, endpoint in (
+        ("jev-1.13", "systemone"),
+        ("muse-spark-1.2-contributor", "response"),
+        ("muse-spark-1.3-contributor", "response"),
+    ):
+        assert not is_chat_eligible(
+            {"id": model_id, "status": "active", "endpoint_type": endpoint}
+        ), model_id
+
+
+def test_inactive_and_empty_rows_are_skipped():
+    from ai.router import is_chat_eligible
+
+    assert not is_chat_eligible({"id": "x", "status": "retired"})
+    assert not is_chat_eligible({"id": ""})
+    assert not is_chat_eligible({})
+
+
+def test_the_catalog_keeps_the_cap_for_advice():
+    from ai.router import AiModel, KiriRouter
+
+    router = KiriRouter()
+    router._catalog = [
+        AiModel("auto", "Free tier, rotates", cap_per_hour=None),
+        AiModel("tiny", "Free tier, ~10/hour", cap_per_hour=10),
+        AiModel("roomy", "Free tier, ~500/hour", cap_per_hour=500),
+    ]
+    assert router._catalog[1].looks_capped is True
+    assert router._catalog[2].looks_capped is False
+    assert router._catalog[0].looks_capped is False
+
+
+def test_a_rate_limit_names_the_cap_and_an_alternative():
+    from ai.router import AiModel, KiriRouter
+
+    router = KiriRouter()
+    router._catalog = [
+        AiModel("auto", "Free tier, rotates"),
+        AiModel("capped", "Free tier, ~10/hour", cap_per_hour=10),
+        AiModel("roomy", "Free tier, ~500/hour", cap_per_hour=500),
+    ]
+    advice = router.advice_for_rate_limit("capped")
+    assert "Free tier, ~10/hour" in advice
+    # The suggestion must be a model that is not itself capped.
+    suggested = advice.split("Try ")[-1].replace(" instead.", "")
+    assert suggested in ("auto", "roomy"), advice
+    assert "capped" not in suggested
+
+
+def test_auto_rate_limit_explains_the_pool():
+    from ai.router import AiModel, KiriRouter
+
+    router = KiriRouter()
+    router._catalog = [AiModel("auto", "Free tier, rotates")]
+    assert "rotates" in router.advice_for_rate_limit("auto")
+
+
+def test_a_capped_model_is_never_suggested_as_the_alternative():
+    from ai.router import AiModel, KiriRouter
+
+    router = KiriRouter()
+    router._catalog = [
+        AiModel("busy-a", cap_per_hour=5),
+        AiModel("busy-b", cap_per_hour=5),
+        AiModel("open", cap_per_hour=1000),
+    ]
+    assert "open" in router.advice_for_rate_limit("busy-a")
+
+
+def test_rate_limit_advice_without_a_catalog_still_reads_well():
+    from ai.router import KiriRouter
+
+    assert "busy" in KiriRouter().advice_for_rate_limit("auto")

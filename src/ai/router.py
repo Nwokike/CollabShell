@@ -21,6 +21,28 @@ logger = logging.getLogger("ai.router")
 ROUTER_BASE_URL = "https://router.kiri.ng"
 DEFAULT_MODEL = "auto"
 
+# Endpoint shapes verified to produce a usable chat reply. Kiri advertises
+# other shapes alongside them, but `response`/`responses` models answer
+# "Model ... is not supported" and `systemone` does not return an
+# OpenAI-shaped body at all — offering those is offering a dead end.
+# Verified 2026-09-24 against the live catalog and against the LM Router
+# app, which reaches the same conclusion independently.
+CHAT_CAPABLE_ENDPOINTS = frozenset({"chat.completion", "chat.completions", "chat"})
+
+
+def is_chat_eligible(model: dict) -> bool:
+    """Active, chat-capable, and something we can actually render."""
+    if not model or not model.get("id"):
+        return False
+    if model.get("status") not in (None, "active"):
+        return False
+    if model.get("id") == DEFAULT_MODEL:
+        return True  # the router composes a chat-shaped answer
+    endpoint = str(model.get("endpoint_type") or "").strip().lower()
+    # A row with no endpoint_type at all predates the field; trust it.
+    return not endpoint or endpoint in CHAT_CAPABLE_ENDPOINTS
+
+
 # Reasoning can take a while; the read timeout has to outlast it or long
 # thinking models look dead. The connect timeout stays short.
 _TIMEOUT = httpx.Timeout(connect=15.0, read=240.0, write=60.0, pool=30.0)
@@ -59,16 +81,27 @@ class AiModel:
     id: str
     rate_hint: str = ""
     latency_ms: int | None = None
+    # The router's own per-model cap, when it publishes one. Preferred over
+    # parsing the label: it is a number, and numbers do not drift.
+    cap_per_hour: int | None = None
 
     @property
     def is_auto(self) -> bool:
         return self.id == DEFAULT_MODEL
+
+    @property
+    def looks_capped(self) -> bool:
+        """A published cap under 200/hour — worth not suggesting."""
+        return self.cap_per_hour is not None and self.cap_per_hour < 200
 
 
 class KiriRouter:
     def __init__(self, base_url: str = ROUTER_BASE_URL):
         self.base_url = base_url.rstrip("/")
         self._client: httpx.AsyncClient | None = None
+        # The last catalog we saw, so a 429 can be explained in terms of
+        # the model the user actually picked.
+        self._catalog: list[AiModel] = []
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -81,7 +114,17 @@ class KiriRouter:
             self._client = None
 
     async def list_models(self) -> list[AiModel]:
-        """Active models only — the picker must never offer a dead one."""
+        """Active, chat-capable models only.
+
+        Two filters, and the second one matters more than it looks. Every
+        row Kiri serves is `status: active`, so a status check alone still
+        offers models whose endpoint cannot answer a chat request — as of
+        2026-09-24 three of the 48 served models are `systemone` or
+        `response`, and picking one returns an empty reply or a 401
+        (verified in the LM Router app's own catalog, which documents the
+        same conclusion). The picker must never offer a dead model, so both
+        are filtered here.
+        """
         try:
             resp = await self._get_client().get(f"{self.base_url}/v1/models")
             resp.raise_for_status()
@@ -93,17 +136,65 @@ class KiriRouter:
         for raw in resp.json().get("data") or []:
             if raw.get("status") not in (None, "active"):
                 continue
+            if not is_chat_eligible(raw):
+                logger.debug("Skipping non-chat endpoint: %s", raw.get("id"))
+                continue
             hint = (raw.get("rate_hint") or {}).get("label", "")
+            cap = (raw.get("rate_hint") or {}).get("approx_per_hour")
+            try:
+                cap = int(cap) if cap is not None else None
+            except (TypeError, ValueError):
+                cap = None
             models.append(
                 AiModel(
                     id=raw.get("id", ""),
                     rate_hint=hint,
                     latency_ms=raw.get("latency_ms"),
+                    cap_per_hour=cap,
                 )
             )
         # auto first, then alphabetical — auto is the default, not a peer.
         models.sort(key=lambda m: (not m.is_auto, m.id.lower()))
+        self._catalog = models
         return models
+
+    def advice_for_rate_limit(self, model_id: str) -> str:
+        """What to say when a model is capped, using what we know about it.
+
+        "Rate limited. Try again." reads like something is broken. The
+        router publishes a per-model cap and a pool of alternatives, so
+        the message can name the cap and point at a model that is not
+        capped — the difference between a dead end and a next step.
+        """
+        if not self._catalog:
+            return "Kiri's free tier is busy right now — try again shortly."
+        row = next((m for m in self._catalog if m.id == model_id), None)
+        if model_id == DEFAULT_MODEL:
+            hint = row.rate_hint if row else ""
+            return (
+                f"Rate limited right now. {hint} Try again shortly, or pick a "
+                "specific model."
+                if hint
+                else "Rate limited right now. Try again shortly, or pick a specific model."
+            )
+        alternatives = [m for m in self._catalog if m.id != model_id]
+        # Prefer a model whose own published cap says it can take the load.
+        alternatives.sort(
+            key=lambda m: (m.looks_capped, m.cap_per_hour or 10**9, m.id.lower())
+        )
+        suggestion = f" Try {alternatives[0].id} instead." if alternatives else ""
+        hint = row.rate_hint if row else ""
+        if hint:
+            return (
+                f"Rate limited. {hint}.{suggestion}"
+                if suggestion
+                else f"Rate limited. {hint}."
+            )
+        return (
+            f"Rate limited by this model.{suggestion}"
+            if suggestion
+            else ("Rate limited by this model. Try again in a moment.")
+        )
 
     async def stream_chat(
         self,

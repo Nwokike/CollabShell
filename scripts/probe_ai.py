@@ -10,7 +10,7 @@ sys.path.insert(0, "src")
 print("main import OK", flush=True)
 
 from ai.credits import COST_PER_TURN, DAILY_CREDITS, CreditsLedger
-from ai.router import KiriRouter, RouterUnavailable
+from ai.router import KiriRouter, RouterUnavailable, is_chat_eligible
 from ai.session import AiSession
 from ai.system_prompt import build_system_prompt
 
@@ -32,6 +32,21 @@ async def live():
         try:
             models = await r.list_models()
             assert models and models[0].is_auto
+            # Every offered model must be one that can actually answer.
+            import httpx
+
+            async with httpx.AsyncClient(timeout=20) as c:
+                raw = (await c.get("https://router.kiri.ng/v1/models")).json()
+            dead = [
+                m["id"]
+                for m in raw.get("data", [])
+                if m.get("status") == "active" and not is_chat_eligible(m)
+            ]
+            assert (
+                len(models)
+                < len([m for m in raw.get("data", []) if m.get("status") == "active"])
+                or not dead
+            ), f"offered a model that cannot chat: {dead}"
             chunks = []
             await r.stream_chat(
                 [{"role": "user", "content": "One word: name a Colab GPU."}],
@@ -40,7 +55,8 @@ async def live():
             )
             assert "".join(chunks).strip()
             print(
-                f"live: {len(models)} active models (auto first, "
+                f"live: {len(models)} chat-capable models of "
+                f"{len(raw.get('data', []))} served (auto first, "
                 f"{sum(1 for m in models if m.rate_hint)} with rate hints), "
                 "stream OK",
                 flush=True,

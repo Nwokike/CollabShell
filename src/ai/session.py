@@ -633,9 +633,10 @@ class AiSession:
                     self.status = "Reached the step limit for one task."
             except RouterBusy as e:
                 self.error = str(e)
-                self.status = (
-                    "Kiri's free tier is busy — try again shortly, or pick "
-                    "a specific model below."
+                # The router knows this model's cap and what else is
+                # available; say that instead of a bare "busy".
+                self.status = self.router.advice_for_rate_limit(
+                    self.answered_by or self.selected_model
                 )
                 await self._refund_if_unpaid()
             except RouterUnavailable as e:

@@ -69,6 +69,7 @@ def read_models() -> list[AiModel]:
                         id=item["id"],
                         rate_hint=item.get("rate_hint") or "",
                         latency_ms=item.get("latency_ms"),
+                        cap_per_hour=item.get("cap_per_hour"),
                     )
                 )
         return models
@@ -88,6 +89,7 @@ def write_models(models: list) -> None:
                     "is_auto": m.is_auto,
                     "rate_hint": m.rate_hint,
                     "latency_ms": m.latency_ms,
+                    "cap_per_hour": m.cap_per_hour,
                 }
                 for m in models
             ],
