@@ -29,6 +29,7 @@ from collections.abc import Callable
 import flet as ft
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
+from ai.terminal_bridge import TerminalBridge
 from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.state import state as app_state
@@ -100,6 +101,10 @@ class TerminalEntry:
         # Ring buffer of every stdout chunk (bytes) — replayed when the
         # terminal widget remounts so content survives tab switches.
         self.scrollback: deque[bytes] = deque(maxlen=_SCROLLBACK_CHUNKS)
+        # Set by the Assistant while it waits for a command to finish: a
+        # second buffer it can read without stealing from the ring. None
+        # means "not capturing", so the hot stdout path stays a no-op.
+        self.capture: list[bytes] | None = None
 
 
 @ft.observable
@@ -224,10 +229,12 @@ def _make_entry_handlers(
 
     def _on_stdout(text: str):
         # Mirror into the ring buffer first — this is what survives widget
-        # remounts and tab switches. send_bytes queues transparently when the
-        # Dart channel is not ready yet (e.g. right after a remount).
+        # remounts and tab switches. send_bytes queues transparently when
+        # the Dart channel is not ready yet (e.g. right after a remount).
         data = text.encode("utf-8", errors="ignore")
         entry.scrollback.append(data)
+        if entry.capture is not None:
+            entry.capture.append(data)
         if entry.mt is not None:
             entry.mt.send_bytes(data)
 
@@ -368,12 +375,14 @@ def TerminalPanel(
     colab_service,
     snack: Callable[[str], None] | None = None,
     register_actions: Callable[[dict], None] | None = None,
+    ai=None,
 ) -> ft.Control:
     """Multi-terminal panel with tab management, theming, and WS lifecycle.
 
     `ps` is passed as an observable argument so Flet auto-subscribes this
     component to it — any mutation re-renders the panel. The terminal color
-    theme follows the app's light/dark mode.
+    theme follows the app's light/dark mode. `ai` is the Assistant session,
+    which may drive this terminal when the user allows it.
     """
     page = ft.context.page
 
@@ -660,6 +669,41 @@ def TerminalPanel(
     ft.on_mounted(_on_mount)
     ft.use_effect(lambda: None, [], cleanup=_cleanup)
 
+    # ── Assistant bridge (Phase 4) ────────────────────────────────────────
+    # Commands run in this PTY, so the user watches them land in the
+    # terminal they already have open. Detaching on unmount takes the
+    # terminal tools out of the catalog rather than leaving the Assistant
+    # pointed at a closed socket.
+    def _attach_terminal_bridge(e=None):
+        if ai is not None:
+            ai.attach_terminal(
+                TerminalBridge(
+                    session_name, _active_entry, alive=lambda: bool(ps.terminals)
+                )
+            )
+
+    def _detach_terminal_bridge(e=None):
+        if ai is not None:
+            ai.detach_terminal()
+
+    ft.on_mounted(_attach_terminal_bridge)
+    ft.on_unmounted(_detach_terminal_bridge)
+
+    def _ask_ai_about_terminal(e=None):
+        if ai is None:
+            return
+        from ai.terminal_bridge import clean
+        from ai.terminal_sheet import open_terminal_sheet
+
+        entry = _active_entry()
+        raw = (
+            b"".join(list(getattr(entry, "scrollback", []) or [])[-40:])
+            if entry is not None
+            else b""
+        )
+        recent = clean(raw.decode("utf-8", errors="replace"))[-600:]
+        open_terminal_sheet(page, ai, recent)
+
     # Follow the app's light/dark mode: re-apply the terminal theme whenever
     # the requested mode changes or the OS flips brightness in SYSTEM mode.
     def _apply_app_theme():
@@ -790,6 +834,19 @@ def TerminalPanel(
         style=_compact_btn_style(),
         on_click=lambda e: (_zoom_in(), _refocus_terminal()),
     )
+    # Same chat icon as the FAB and every cell — one meaning everywhere.
+    ask_ai_btn = (
+        ft.IconButton(
+            icon=ft.Icons.CHAT_ROUNDED,
+            icon_size=tokens.ICON_SM,
+            icon_color=ft.Colors.PRIMARY,
+            tooltip="Ask the Assistant",
+            style=_compact_btn_style(),
+            on_click=lambda e: _ask_ai_about_terminal(),
+        )
+        if ai is not None
+        else None
+    )
 
     switcher_box = ft.Container(
         content=ft.Row(
@@ -806,6 +863,7 @@ def TerminalPanel(
                 theme_btn,
                 zoom_out_btn,
                 zoom_in_btn,
+                *([ask_ai_btn] if ask_ai_btn is not None else []),
             ],
             spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,

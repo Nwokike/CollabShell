@@ -273,7 +273,7 @@ def NotebookView(
         number = next((i + 1 for i, c in enumerate(c_list) if c.id == cell.id), 1)
         open_cell_sheet(
             page,
-            services,
+            services.ai,
             number,
             cell.source,
             error_to_text(list(cell.outputs)),

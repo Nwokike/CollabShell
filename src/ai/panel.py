@@ -381,10 +381,15 @@ def _model_label(model) -> str:
     return label
 
 
-def open_ai_panel(page, services) -> None:
-    """Show the AI sheet. Safe to call from any screen or shortcut."""
+def open_ai_panel(page, ai) -> None:
+    """Show the AI sheet. Safe to call from any screen or shortcut.
+
+    Takes the session, not the services object: the panel itself reads
+    `ServiceCtx` for everything else, and the only job of this argument
+    is the "is the Assistant even available" check.
+    """
     global _open_sheet
-    if services.ai is None:
+    if ai is None:
         return
     if _open_sheet is not None and _open_sheet.open:
         return  # already showing — never stack sheets

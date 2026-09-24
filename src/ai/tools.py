@@ -194,10 +194,45 @@ NOTEBOOK_TIERS: dict[str, str] = {
 }
 TIERS.update(NOTEBOOK_TIERS)
 
+# ── Terminal tools (Phase 4) ───────────────────────────────────────────
+# The command is typed into the user's own terminal, so they watch it
+# run. It is still confirm-gated: the Assistant never presses enter.
+TERMINAL_SCHEMAS: list[dict] = [
+    _fn(
+        "read_terminal",
+        "Read what the terminal has printed recently (ANSI colour codes "
+        "removed). Use it before guessing why a command failed.",
+    ),
+    _fn(
+        "run_command",
+        "Type a shell command into the user's terminal and wait for it to "
+        "finish, returning its output and exit code. The user watches it "
+        "run and approves it first.",
+        {
+            "command": {
+                "type": "string",
+                "description": "One shell command, without a trailing newline.",
+            },
+        },
+        ["command"],
+    ),
+]
 
-def schemas_for(has_notebook: bool) -> list[dict]:
+TERMINAL_TIERS: dict[str, str] = {
+    "read_terminal": AUTO,
+    "run_command": CONFIRM,
+}
+TIERS.update(TERMINAL_TIERS)
+
+
+def schemas_for(has_notebook: bool, has_terminal: bool = False) -> list[dict]:
     """The catalog for what is actually reachable right now."""
-    return TOOL_SCHEMAS + (NOTEBOOK_SCHEMAS if has_notebook else [])
+    schemas = list(TOOL_SCHEMAS)
+    if has_notebook:
+        schemas.extend(NOTEBOOK_SCHEMAS)
+    if has_terminal:
+        schemas.extend(TERMINAL_SCHEMAS)
+    return schemas
 
 
 def label_for(name: str, args: dict) -> str:
@@ -232,6 +267,10 @@ def label_for(name: str, args: dict) -> str:
             return f"Adding a cell after {after}" if after else "Adding a cell"
         case "run_cell":
             return f"Running cell {args.get('cell', '')}"
+        case "read_terminal":
+            return "Reading the terminal"
+        case "run_command":
+            return f"Running: {str(args.get('command') or '')[:40]}"
     return name
 
 
@@ -245,18 +284,27 @@ class ToolResult:
 class ToolBox:
     """Executes catalog tools against the live Colab service."""
 
-    def __init__(self, colab_service, notebook=None):
+    def __init__(self, colab_service, notebook=None, terminal=None):
         self._colab = colab_service
         # The open notebook, when there is one. None whenever no session is
         # showing, which is what keeps the notebook tools out of the catalog.
         self._notebook = notebook
+        self._terminal = terminal
 
     def set_notebook(self, notebook) -> None:
         self._notebook = notebook
 
+    def set_terminal(self, terminal) -> None:
+        self._terminal = terminal
+
     @property
     def has_notebook(self) -> bool:
         bridge = self._notebook
+        return bridge is not None and bridge.is_alive()
+
+    @property
+    def has_terminal(self) -> bool:
+        bridge = self._terminal
         return bridge is not None and bridge.is_alive()
 
     async def run(self, name: str, args: dict) -> ToolResult:
@@ -439,3 +487,27 @@ class ToolBox:
                 f"There is no cell {number} — the notebook has {len(cells)}."
             )
         return ToolResult(await self._notebook.run(str(number)))
+
+    # ── terminal ─────────────────────────────────────────────────────────
+    # Commands go into the user's own PTY: they see the command, its
+    # output, and the prompt return exactly as if they had typed it.
+
+    def _need_terminal(self):
+        if not self.has_terminal:
+            return ToolResult("No terminal is open right now.")
+        return None
+
+    async def _tool_read_terminal(self, args: dict) -> ToolResult:
+        missing = self._need_terminal()
+        if missing:
+            return missing
+        return ToolResult(self._terminal.output())
+
+    async def _tool_run_command(self, args: dict) -> ToolResult:
+        missing = self._need_terminal()
+        if missing:
+            return missing
+        command = str(args.get("command") or "").strip()
+        if not command:
+            return ToolResult("No command given.")
+        return ToolResult(await self._terminal.run(command))

@@ -234,7 +234,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 get_url_launcher().launch_url,
                 f"https://colab.research.google.com/drive/{session_name}",
             ),
-            on_ask_ai=lambda e: open_ai_panel(page, services),
+            on_ask_ai=lambda e: open_ai_panel(page, services.ai),
             on_share_session=lambda e: page.run_task(_share_session_url, e),
             on_view_logs=lambda e: controller.open_history(session_name),
             on_restart=_on_restart,
@@ -318,6 +318,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             services.colab,
             snack=controller.show_snack,
             register_actions=lambda actions: term_actions_ref.current.update(actions),
+            ai=services.ai,
         )
     else:
         terminal_panel = ft.Container()

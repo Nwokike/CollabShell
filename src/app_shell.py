@@ -81,7 +81,7 @@ def AppShell() -> Control:
             bindings.append(
                 (
                     Binding("K", ctrl=True, shift=True),
-                    lambda: open_ai_panel(page, services),
+                    lambda: open_ai_panel(page, services.ai),
                 )
             )
         return bindings
@@ -245,7 +245,7 @@ def AppShell() -> Control:
                                     icon=ft.Icons.CHAT_ROUNDED,
                                     icon_size=tokens.ICON_SM,
                                     tooltip="Assistant",
-                                    on_click=lambda e: open_ai_panel(page, services),
+                                    on_click=lambda e: open_ai_panel(page, services.ai),
                                 ),
                                 build_help_button(page, "global"),
                                 theme_btn,
@@ -434,7 +434,7 @@ def AppShell() -> Control:
                     icon=ft.Icons.CHAT_ROUNDED,
                     icon_size=tokens.ICON_SM,
                     tooltip="Assistant",
-                    on_click=lambda e: open_ai_panel(page, services),
+                    on_click=lambda e: open_ai_panel(page, services.ai),
                 ),
                 ft.IconButton(
                     icon=ft.Icons.SHOW_CHART_ROUNDED,

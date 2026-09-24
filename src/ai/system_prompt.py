@@ -50,6 +50,17 @@ NOTEBOOK_BASE = (
     "rather than only describing it, unless they asked you not to."
 )
 
+TERMINAL_BASE = (
+    "\n\nThe user has a terminal open on their Colab session. Read it "
+    "with read_terminal — use that before guessing why something failed, "
+    "because the real traceback is on their screen. To act, call "
+    "run_command with one command at a time: the command is typed into "
+    "their own terminal where they watch it run, and it asks them first. "
+    "Never join several commands with && or ; to save a round trip — one "
+    "call is one thing the user can see and approve. Use the output you "
+    "actually get; do not invent what a command printed."
+)
+
 
 @lru_cache(maxsize=1)
 def _colab_skill() -> str:
@@ -64,12 +75,16 @@ def _colab_skill() -> str:
 
 
 def build_system_prompt(
-    tools_available: bool = False, notebook_available: bool = False
+    tools_available: bool = False,
+    notebook_available: bool = False,
+    terminal_available: bool = False,
 ) -> str:
     skill = _colab_skill().strip()
     parts = [BASE + (TOOLS_BASE if tools_available else "")]
     if notebook_available:
         parts.append(NOTEBOOK_BASE)
+    if terminal_available:
+        parts.append(TERMINAL_BASE)
     if skill:
         parts.append(
             "Background on Google Colab sessions (reference only, from the "

@@ -65,6 +65,7 @@ class AiSession:
         self._send_lock = asyncio.Lock()
         self._toolbox: ToolBox | None = None
         self._notebook = None
+        self._terminal = None
         self._approval_event: asyncio.Event | None = None
         self._approval_granted = False
         self._pending = ""
@@ -96,6 +97,17 @@ class AiSession:
         self._notebook = None
         if self._toolbox is not None:
             self._toolbox.set_notebook(None)
+
+    def attach_terminal(self, bridge) -> None:
+        """Point the toolbox at the terminal currently on screen."""
+        self._terminal = bridge
+        if self._toolbox is not None:
+            self._toolbox.set_terminal(bridge)
+
+    def detach_terminal(self) -> None:
+        self._terminal = None
+        if self._toolbox is not None:
+            self._toolbox.set_terminal(None)
 
     def _load_settings(self) -> None:
         if self._storage is None:
@@ -212,13 +224,17 @@ class AiSession:
     def _tool_schemas(self) -> list[dict] | None:
         if not (self.tools_enabled and self._toolbox is not None):
             return None
-        return schemas_for(self._toolbox.has_notebook)
+        return schemas_for(
+            has_notebook=self._toolbox.has_notebook,
+            has_terminal=self._toolbox.has_terminal,
+        )
 
     def _context_messages(self) -> list[dict]:
         has_tools = bool(self._tool_schemas())
-        has_notebook = bool(self._toolbox and self._toolbox.has_notebook)
         prompt = build_system_prompt(
-            tools_available=has_tools, notebook_available=has_notebook
+            tools_available=has_tools,
+            notebook_available=bool(self._toolbox and self._toolbox.has_notebook),
+            terminal_available=bool(self._toolbox and self._toolbox.has_terminal),
         )
         return [
             {"role": "system", "content": prompt},
@@ -284,7 +300,11 @@ class AiSession:
             # Show the user the thing itself — the code that will run or
             # the source that will replace their cell — not a JSON blob.
             detail = str(
-                args.get("source") or args.get("code") or args.get("path") or args
+                args.get("source")
+                or args.get("code")
+                or args.get("command")
+                or args.get("path")
+                or args
             )[:220]
             self.approval = {"label": row["label"], "detail": detail}
             self._approval_granted = False
