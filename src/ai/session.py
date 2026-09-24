@@ -12,9 +12,11 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 
 import flet as ft
 
+from ai import catalog
 from ai.credits import COST_PER_TURN, CreditsLedger
 from ai.router import DEFAULT_MODEL, AiModel, KiriRouter, RouterBusy, RouterUnavailable
 from ai.system_prompt import build_system_prompt
@@ -24,6 +26,11 @@ from core import constants
 logger = logging.getLogger("ai.session")
 
 MAX_HISTORY = 40
+# Stored conversations. A user's own history, so it is generous — but
+# bounded, because every chat is rewritten to disk on every completed turn
+# and an unbounded list would grow forever on a phone.
+MAX_CHATS = 20
+_TITLE_CHARS = 42
 # Guards mirror DDGS's agent loop: a runaway task cannot drain the day.
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 10
@@ -31,6 +38,64 @@ APPROVAL_TIMEOUT_SECONDS = 300
 # Flet re-renders on every observable write; batching tokens keeps a fast
 # model from flooding the Dart bridge with one update per token.
 THROTTLE_SECONDS = 0.08
+
+
+def _clean_messages(raw) -> list[dict]:
+    """Only user/assistant turns survive a round trip through storage."""
+    if not raw:
+        return []
+    try:
+        loaded = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(loaded, list):
+        return []
+    return [
+        m
+        for m in loaded
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+    ][-MAX_HISTORY:]
+
+
+def _title_for(messages: list[dict]) -> str:
+    """A chat is named by its first question, like every chat app.
+
+    Empty stays empty — "New chat" is what the UI shows for a blank
+    thread, and storing it here would make the real first question look
+    like it was already named.
+    """
+    for m in messages:
+        if m.get("role") == "user":
+            text = " ".join(str(m.get("content") or "").split())
+            return text[:_TITLE_CHARS] + ("…" if len(text) > _TITLE_CHARS else "")
+    return ""
+
+
+def _new_chat(messages: list[dict] | None = None) -> dict:
+    messages = list(messages or [])
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "title": _title_for(messages),
+        "messages": messages,
+        "updated": time.time(),
+    }
+
+
+def _valid_chat(chat) -> bool:
+    return (
+        isinstance(chat, dict)
+        and isinstance(chat.get("id"), str)
+        and isinstance(chat.get("messages"), list)
+    )
+
+
+def _cap_chats(chats: list[dict]) -> list[dict]:
+    """Keep the newest MAX_CHATS. Deleting the oldest is the user's limit
+    being enforced, not a bug: nothing they can still open is dropped."""
+    if len(chats) <= MAX_CHATS:
+        return chats
+    ordered = sorted(chats, key=lambda c: float(c.get("updated") or 0), reverse=True)
+    return ordered[:MAX_CHATS]
 
 
 @ft.observable
@@ -43,6 +108,8 @@ class AiSession:
         self.enabled: bool = True
         self.selected_model: str = DEFAULT_MODEL
         self.models: list[AiModel] = []
+        self.models_loading: bool = False  # first fetch in flight, nothing to show
+        self.models_stale: bool = False  # showing cache; the live list failed
         self.credits_left: int = 0
         self.messages: list[dict] = []
         self.streaming: bool = False
@@ -58,6 +125,8 @@ class AiSession:
         self.approval: dict | None = None  # pending confirm-tier tool call
         self.tools_enabled: bool = True
         self.cell_focus: str = ""  # "cell 3" — the cell the user pointed at
+        self.chats: list[dict] = []  # stored conversations, newest first
+        self.active_chat_id: str = ""
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None
@@ -74,6 +143,8 @@ class AiSession:
         self._produced = False
         self._refund_pending = False
         self._reasoning_started = 0.0
+        # Which chat to reopen on the next restart.
+        self._restore_active = ""
 
     # ── Wiring ─────────────────────────────────────────────────────────
 
@@ -123,32 +194,96 @@ class AiSession:
             model = await self._storage.get(constants.STORAGE_AI_MODEL)
             if model:
                 self.selected_model = model
-            history = await self._storage.get(constants.STORAGE_AI_MESSAGES)
-            if history:
-                try:
-                    loaded = json.loads(history)
-                    if isinstance(loaded, list):
-                        self.messages = [
-                            m
-                            for m in loaded
-                            if isinstance(m, dict)
-                            and m.get("role") in ("user", "assistant")
-                        ][-MAX_HISTORY:]
-                except (TypeError, ValueError):
-                    logger.debug("stored AI history unreadable", exc_info=True)
+            await self._load_chats()
             self.credits_left = await self.ledger.remaining()
 
         ft.context.page.run_task(_load)
 
-    async def _persist(self) -> None:
+    async def _load_chats(self) -> None:
+        """Restore the chat list, carrying 2.3.0's single thread into it.
+
+        A 2.3.0 user has one saved conversation under the old key. It
+        becomes their first chat rather than being dropped on upgrade —
+        losing someone's history to an upgrade is not acceptable.
+        """
+        raw = None
+        if self._storage is not None:
+            raw = await self._storage.get(constants.STORAGE_AI_CHATS)
+        chats: list[dict] = []
+        if raw:
+            try:
+                loaded = json.loads(raw)
+                if isinstance(loaded, list):
+                    chats = [c for c in loaded if _valid_chat(c)]
+            except (TypeError, ValueError):
+                logger.debug("stored AI chats unreadable", exc_info=True)
+
+        if not chats and self._storage is not None:
+            legacy = await self._storage.get(constants.STORAGE_AI_MESSAGES)
+            messages = _clean_messages(legacy)
+            if messages:
+                chats = [_new_chat(messages)]
+                await self._persist_chats(chats)
+
+        chats = _cap_chats(chats)
+        self.chats = chats
+        active = self._restore_active
+        self._restore_active = ""
+        if not any(c["id"] == active for c in chats):
+            active = chats[0]["id"] if chats else ""
+        self.active_chat_id = active
+        self._open_chat(active)
+
+    def _open_chat(self, chat_id: str) -> None:
+        """Make one chat the one on screen — and the one the next save
+        writes to. Getting this wrong silently overwrites the wrong
+        conversation, so the active id is set here, not at the call sites.
+        """
+        chat = next((c for c in self.chats if c["id"] == chat_id), None)
+        self.active_chat_id = chat_id if chat is not None else ""
+        self.messages = list(chat["messages"]) if chat else []
+        self.answer = ""
+        self.reasoning = ""
+        self.error = ""
+        self.status = ""
+        self.answered_by = ""
+        self.timeline.clear()
+        self.steps_used = 0
+        if chat is not None:
+            chat["updated"] = time.time()
+
+    def _sync_active(self) -> None:
+        """Copy what is on screen back into its chat record."""
+        chat = next((c for c in self.chats if c["id"] == self.active_chat_id), None)
+        if chat is None:
+            chat = _new_chat(list(self.messages))
+            self.chats.insert(0, chat)
+            self.active_chat_id = chat["id"]
+            return
+        chat["messages"] = list(self.messages)
+        chat["updated"] = time.time()
+        if not chat["title"]:
+            chat["title"] = _title_for(self.messages)
+
+    async def _persist_chats(self, chats: list[dict] | None = None) -> None:
         if self._storage is None:
             return
         try:
             await self._storage.set(
-                constants.STORAGE_AI_MESSAGES, json.dumps(self.messages)
+                constants.STORAGE_AI_CHATS,
+                json.dumps(chats if chats is not None else self.chats),
+            )
+            await self._storage.set(
+                constants.STORAGE_AI_ACTIVE_CHAT,
+                self._restore_active or self.active_chat_id,
             )
         except Exception:
-            logger.debug("AI history save failed", exc_info=True)
+            logger.debug("AI chat save failed", exc_info=True)
+
+    async def _persist(self) -> None:
+        self._sync_active()
+        await self._persist_chats()
+        self.chats = _cap_chats(self.chats)
 
     def _trim_history(self) -> None:
         # The persisted blob is rewritten on every completed turn, so the list
@@ -156,22 +291,80 @@ class AiSession:
         if len(self.messages) > MAX_HISTORY:
             del self.messages[:-MAX_HISTORY]
 
+    # ── Chats ──────────────────────────────────────────────────────────
+
+    async def new_chat(self) -> None:
+        """Start a fresh thread. The old one stays in the list."""
+        self._sync_active()
+        chat = _new_chat([])
+        self.chats.insert(0, chat)
+        self.chats = _cap_chats(self.chats)
+        self._open_chat(chat["id"])
+        await self._persist_chats()
+
+    async def switch_chat(self, chat_id: str) -> None:
+        if chat_id == self.active_chat_id:
+            return
+        if self.streaming:
+            return  # switching mid-reply would strand the answer
+        self._sync_active()
+        self._open_chat(chat_id)
+        self._restore_active = chat_id
+        await self._persist_chats()
+
+    async def delete_chat(self, chat_id: str) -> None:
+        """Remove one chat. Deleting the last one leaves a clean sheet."""
+        if self.streaming:
+            return
+        self.chats = [c for c in self.chats if c["id"] != chat_id]
+        if self.active_chat_id == chat_id:
+            self.active_chat_id = self.chats[0]["id"] if self.chats else ""
+            self._open_chat(self.active_chat_id)
+        await self._persist_chats()
+
     # ── Models ─────────────────────────────────────────────────────────
 
     async def refresh_models(self) -> None:
+        """Show something immediately, then make it true.
+
+        The cached catalog goes up first so the picker is never empty on a
+        warm start, the live list replaces it a moment later, and a failure
+        leaves the cached list in place with a quiet note instead of a
+        blank dropdown.
+        """
+        if not self.models and not self.models_loading:
+            cached = catalog.read_models()
+            if cached:
+                self.models = cached
+        self.models_loading = not self.models
         try:
-            self.models = await self.router.list_models()
+            models = await self.router.list_models()
         except RouterUnavailable:
-            self.models = []
+            if not self.models:
+                # Nothing cached and nothing live: keep the "starting" state
+                # and try again rather than showing an empty picker forever.
+                self.models_loading = True
+                self.status = "Still starting Kiri — trying again…"
+                return
+            self.models_stale = True
+            self.status = "Showing the last known models — Kiri is not answering."
             return
-        # A pinned model the router currently does not serve stays pinned in
-        # storage; the picker just shows it unavailable, so coming back
-        # online restores the choice.
-        if self.selected_model not in {m.id for m in self.models}:
+        self.models = models
+        self.models_loading = False
+        self.models_stale = False
+        if self.selected_model not in {m.id for m in models}:
+            # A pinned model Kiri no longer serves would leave the dropdown
+            # pointing at an option that is not in its own list.
             self.status = (
                 f"{self.selected_model} is not being served right now — "
                 "auto will pick instead."
             )
+            self.selected_model = DEFAULT_MODEL
+            if self._storage is not None:
+                await self._storage.set(constants.STORAGE_AI_MODEL, DEFAULT_MODEL)
+        else:
+            self.status = ""
+        catalog.write_models(models)
 
     async def select_model(self, model_id: str) -> None:
         self.selected_model = model_id
@@ -205,12 +398,18 @@ class AiSession:
         self.approval = None
 
     async def clear_history(self) -> None:
+        """Clear this conversation without destroying the others."""
         self.messages.clear()
         self.answer = ""
         self.reasoning = ""
         self.error = ""
         self.status = ""
+        self.timeline.clear()
         self.steps_used = 0
+        chat = next((c for c in self.chats if c["id"] == self.active_chat_id), None)
+        if chat is not None:
+            chat["messages"] = []
+            chat["title"] = ""
         await self._persist()
 
     async def delete_message(self, index: int) -> None:

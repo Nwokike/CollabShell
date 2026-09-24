@@ -9,6 +9,8 @@ underneath — that visibility is the whole point.
 
 from __future__ import annotations
 
+import asyncio
+
 import flet as ft
 
 from ai.credits import COST_PER_TURN
@@ -21,6 +23,11 @@ from state import ServiceCtx
 # instead of stacking sheets that pop_dialog would bury under.
 _open_sheet: ft.BottomSheet | None = None
 
+# How long to wait between model-list attempts while Kiri is cold. Three
+# tries covers a busy free tier waking up without leaving the user staring
+# at "Starting…" for a minute.
+MODEL_RETRY_DELAYS = (1.5, 4.0, 10.0)
+
 
 @ft.component
 def AiPanelContent():
@@ -28,8 +35,24 @@ def AiPanelContent():
     ai: AiSession = services.ai
     page = ft.context.page
 
-    # Models are only worth fetching when the sheet is actually open.
-    ft.on_mounted(lambda: page.run_task(ai.refresh_models))
+    # Models are only worth fetching when the sheet is actually open. The
+    # retry loop is what makes "Starting Kiri…" resolve on its own: a cold
+    # router can take a few seconds, and the user should never have to
+    # close and reopen the sheet to get a picker.
+    async def _load_models():
+        for attempt in range(MODEL_RETRY_DELAYS):
+            await ai.refresh_models()
+            if not ai.models_loading:
+                return
+            if attempt < len(MODEL_RETRY_DELAYS) - 1:
+                await asyncio.sleep(MODEL_RETRY_DELAYS[attempt])
+
+    ft.on_mounted(lambda: page.run_task(_load_models))
+
+    def _open_chats(e=None):
+        from ai.chats_sheet import open_chats_sheet
+
+        open_chats_sheet(page, ai)
 
     async def _send():
         text = ai.draft
@@ -262,20 +285,33 @@ def AiPanelContent():
     # ── Model picker ───────────────────────────────────────────────────
     # DropdownOption (not dropdown.Option) is the 1.0 name, and menu_height
     # is what makes the ~48-entry catalog scrollable instead of overflowing
-    # the sheet.
-    options = [ft.DropdownOption(m.id, _model_label(m)) for m in ai.models]
+    # the sheet. With nothing cached and nothing live yet the picker says
+    # "Starting Kiri…" — the same honest waiting state the LM Router app
+    # shows — instead of sitting empty and looking broken.
+    if ai.models:
+        options = [ft.DropdownOption(m.id, _model_label(m)) for m in ai.models]
+        model_control = ft.Dropdown(
+            value=ai.selected_model,
+            options=options,
+            hint_text="Model",
+            width=210,
+            menu_height=300,
+            enable_filter=True,
+            text_size=tokens.FONT_XS,
+            on_select=lambda e: page.run_task(ai.select_model, e.control.value),
+        )
+    else:
+        model_control = ft.Dropdown(
+            value=None,
+            options=[ft.DropdownOption("starting", "Starting Kiri…")],
+            hint_text="Starting Kiri…",
+            width=210,
+            disabled=True,
+            text_size=tokens.FONT_XS,
+        )
     model_row = ft.Row(
         [
-            ft.Dropdown(
-                value=ai.selected_model if ai.models else None,
-                options=options,
-                hint_text="Model",
-                width=210,
-                menu_height=300,
-                enable_filter=True,
-                text_size=tokens.FONT_XS,
-                on_select=lambda e: page.run_task(ai.select_model, e.control.value),
-            ),
+            model_control,
             ft.Text(
                 f"{ai.credits_left} credits left today",
                 size=tokens.FONT_XS,
@@ -303,10 +339,19 @@ def AiPanelContent():
                     ),
                     ft.Container(expand=True),
                     ft.IconButton(
-                        ft.Icons.DELETE_OUTLINE_ROUNDED,
-                        tooltip="Clear chat",
+                        ft.Icons.ADD_ROUNDED,
+                        tooltip="New chat",
                         icon_size=tokens.ICON_SM,
-                        on_click=lambda e: page.run_task(ai.clear_history),
+                        on_click=lambda e: page.run_task(ai.new_chat),
+                    ),
+                    ft.IconButton(
+                        # The list doubles as the delete surface: each chat
+                        # has its own delete in there, so this button only
+                        # has to mean "my conversations".
+                        ft.Icons.FORUM_OUTLINED,
+                        tooltip="Chats",
+                        icon_size=tokens.ICON_SM,
+                        on_click=_open_chats,
                     ),
                     ft.IconButton(
                         # Minimize: pop the sheet, the reply keeps streaming.

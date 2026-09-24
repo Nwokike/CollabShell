@@ -224,6 +224,8 @@ print("ad fixes: interstitial restock + no-fill unblock present", flush=True)
 # The settings section and the panel are pure constructors, so building
 # them catches a bad icon name or a wrong kwarg before the phone does.
 class _FakePage:
+    height = 800
+
     def __init__(self):
         self.dialogs = []
 
@@ -241,7 +243,7 @@ class _FakePage:
 def _walk(control):
     """Every control reachable through `controls` lists and `content` slots."""
     yield control
-    for attr in ("controls", "content"):
+    for attr in ("controls", "content", "leading", "trailing"):
         child = getattr(control, attr, None)
         if isinstance(child, (list, tuple)):
             for c in child:
@@ -277,7 +279,7 @@ from ai.cell_sheet import build_question, open_cell_sheet
 from components.notebook_cell.actions import make_actions_row
 
 cell_page = _FakePage()
-open_cell_sheet(cell_page, Services(ai=AiSession()), 3, "print('hello')")
+open_cell_sheet(cell_page, AiSession(), 3, "print('hello')")
 assert len(cell_page.dialogs) == 1
 sheet = list(_walk(cell_page.dialogs[0]))
 
@@ -305,9 +307,7 @@ assert "Fix this error" not in titles, "no error, no fix button"
 # A failed cell offers the fix, and the error is what gets sent.
 fail_page = _FakePage()
 ai_for_fail = AiSession()
-open_cell_sheet(
-    fail_page, Services(ai=ai_for_fail), 2, "import nope", "ModuleNotFoundError: nope"
-)
+open_cell_sheet(fail_page, ai_for_fail, 2, "import nope", "ModuleNotFoundError: nope")
 fail_titles = _labels(_walk(fail_page.dialogs[0]))
 assert "Fix this error" in fail_titles
 assert "ModuleNotFoundError" in build_question(
@@ -342,5 +342,62 @@ for needed in (
     assert needed in inspect.getsource(nv), f"notebook view lost {needed}"
 assert hasattr(NotebookBridge, "run")
 print("notebook view: bridge attached on mount, detached on unmount OK", flush=True)
+
+# ── Phase 4: the terminal quick-ask sheet ──────────────────────────────
+from ai.terminal_sheet import open_terminal_sheet
+
+term_page = _FakePage()
+open_terminal_sheet(term_page, AiSession(), "$ ls\nfile.txt")
+term_titles = _labels(_walk(term_page.dialogs[0]))
+assert "Terminal" in term_titles
+assert "Explain the last output" in term_titles
+assert "Run a command" in term_titles
+print("terminal sheet: explain/run/ask build offline OK", flush=True)
+
+# ── Chat list, per-chat delete, and the catalog cache ──────────────────
+from ai.chats_sheet import open_chats_sheet
+
+chats_page = _FakePage()
+chats_ai = AiSession()
+chats_ai.chats = [
+    {"id": "a", "title": "why is my kernel dead", "messages": [], "updated": 0.0},
+    {"id": "b", "title": "", "messages": [], "updated": 0.0},
+]
+chats_ai.active_chat_id = "a"
+open_chats_sheet(chats_page, chats_ai)
+chat_labels = _labels(_walk(chats_page.dialogs[0]))
+assert "New chat" in chat_labels
+assert "why is my kernel dead" in chat_labels
+assert "New chat" in chat_labels  # the untitled one
+# Each row carries its own delete.
+deletes = [
+    c
+    for c in _walk(chats_page.dialogs[0])
+    if isinstance(c, ft.IconButton) and c.icon == ft.Icons.DELETE_OUTLINE_ROUNDED
+]
+assert len(deletes) == 2, f"one delete per chat, got {len(deletes)}"
+print("chats: list + per-chat delete build offline OK", flush=True)
+
+import os
+import tempfile
+
+from ai import catalog
+from ai.router import AiModel
+
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["FLET_APP_STORAGE_CACHE"] = tmp
+    catalog.write_models([AiModel("auto", "Free"), AiModel("m1")])
+    restored = catalog.read_models()
+    assert [m.id for m in restored] == ["auto", "m1"], "cache must round-trip"
+    assert restored[0].rate_hint == "Free"
+assert catalog.cache_dir() != catalog.CACHE_FILE
+print("catalog: written to the flet cache dir and read back OK", flush=True)
+
+# The picker has an honest waiting state instead of sitting empty.
+probe_ai.models = []
+probe_ai.models_loading = True
+panel_src = inspect.getsource(ai.panel)
+assert "Starting Kiri" in panel_src, "the cold-start state is gone"
+print("panel: 'Starting Kiri…' cold state present OK", flush=True)
 
 print("=== ALL PROBES PASSED ===", flush=True)

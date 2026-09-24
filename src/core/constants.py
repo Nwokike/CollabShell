@@ -31,7 +31,9 @@ STORAGE_EXEC_ENV = "colab_exec_env"
 STORAGE_AI_ENABLED = "colab_ai_enabled"
 STORAGE_AI_TOOLS_ENABLED = "colab_ai_tools_enabled"
 STORAGE_AI_MODEL = "colab_ai_model"
-STORAGE_AI_MESSAGES = "colab_ai_messages"
+STORAGE_AI_MESSAGES = "colab_ai_messages"  # 2.3.0 single thread, read once
+STORAGE_AI_CHATS = "colab_ai_chats"
+STORAGE_AI_ACTIVE_CHAT = "colab_ai_active_chat"
 STORAGE_AI_USED = "colab_ai_credits_used"
 STORAGE_AI_WINDOW = "colab_ai_credits_window"
 

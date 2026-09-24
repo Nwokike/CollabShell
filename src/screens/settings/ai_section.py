@@ -171,7 +171,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         tip_text(
-                                            "50 per day, one per model call. "
+                                            "50 per day, 2 per model call. "
                                             "Calls that fail are refunded."
                                         ),
                                     ],
@@ -179,7 +179,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                     expand=True,
                                 ),
                                 ft.TextButton(
-                                    "Clear chat",
+                                    "Clear this chat",
                                     icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
                                     on_click=lambda e: page.run_task(ai.clear_history),
                                 ),
