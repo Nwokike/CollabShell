@@ -6,6 +6,7 @@ import logging
 
 import flet as ft
 
+from ai.panel import open_ai_panel
 from components.shortcuts_help import build_help_button
 from core import constants, tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
@@ -232,6 +233,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                 ft.UrlLauncher().launch_url,
                 f"https://colab.research.google.com/drive/{session_name}",
             ),
+            on_ask_ai=lambda e: open_ai_panel(page, services),
             on_share_session=lambda e: page.run_task(_share_session_url, e),
             on_view_logs=lambda e: controller.open_history(session_name),
             on_restart=_on_restart,

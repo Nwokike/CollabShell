@@ -13,12 +13,15 @@ import logging
 import flet as ft
 from flet import Control
 
+# Imported at module level so the header icon and the global Ctrl+Shift+K
+# binding resolve without a per-call import.
+from ai.panel import open_ai_panel
 from components.offline_flow import OfflineFlow
 from components.shortcuts_help import build_help_button, open_shortcuts_help
 from core import constants, tokens
 from core.shortcuts import Binding, shortcuts_router
 from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
-from state import AppStateCtx, ControllerMethodsCtx
+from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("AppShell")
 
@@ -44,6 +47,7 @@ def AppShell() -> Control:
     """Top-level shell. Reads observable state; renders Onboarding, Subview, or Dashboard."""
     controller = ft.use_context(ControllerMethodsCtx)
     state = ft.use_context(AppStateCtx)
+    services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
     # ── 0. Global keyboard shortcuts (desktop) ────────────────────────────────
@@ -70,6 +74,14 @@ def AppShell() -> Control:
                         if state.active_subview == "session"
                         else "global",
                     ),
+                )
+            )
+            # Ctrl+Shift+K — AI from anywhere. Free binding (notebook's
+            # Shift+Enter family and terminal's Ctrl+Shift+[TWLFCV] untouched).
+            bindings.append(
+                (
+                    Binding("K", ctrl=True, shift=True),
+                    lambda: open_ai_panel(page, services),
                 )
             )
         return bindings
@@ -229,6 +241,12 @@ def AppShell() -> Control:
                                     weight=ft.FontWeight.W_700,
                                 ),
                                 ft.Container(expand=True),
+                                ft.IconButton(
+                                    icon=ft.Icons.AUTO_AWESOME_ROUNDED,
+                                    icon_size=tokens.ICON_SM,
+                                    tooltip="Ask AI",
+                                    on_click=lambda e: open_ai_panel(page, services),
+                                ),
                                 build_help_button(page, "global"),
                                 theme_btn,
                             ],
@@ -412,6 +430,12 @@ def AppShell() -> Control:
                     color=ft.Colors.ON_SURFACE,
                 ),
                 ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.AUTO_AWESOME_ROUNDED,
+                    icon_size=tokens.ICON_SM,
+                    tooltip="Ask AI",
+                    on_click=lambda e: open_ai_panel(page, services),
+                ),
                 ft.IconButton(
                     icon=ft.Icons.SHOW_CHART_ROUNDED,
                     icon_size=tokens.ICON_SM,

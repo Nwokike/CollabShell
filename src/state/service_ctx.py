@@ -18,6 +18,7 @@ class Services:
     colab: object = None
     storage: object = None
     ad_service: object = None
+    ai: object = None  # ai.session.AiSession — the shared chat
     page: object = None  # ft.Page ref for services that need it directly
 
 

@@ -156,14 +156,23 @@ class AdService:
         await self.preload_interstitial(on_close=self._on_close)
 
     async def show_interstitial(self) -> bool:
-        """Show a preloaded interstitial. Returns True if shown."""
-        if self.interstitial:
-            try:
+        """Show a preloaded interstitial. Returns True if shown.
+
+        Restocks in ``finally``: the served instance is single-use, and the
+        only reload used to happen on the rewarded ad's close — so after
+        the first session-create, every later interstitial found an empty
+        slot and silently no-opped.
+        """
+        shown = False
+        try:
+            if self.interstitial:
                 await self.interstitial.show()
-                return True
-            except Exception:
-                return False
-        return False
+                shown = True
+            return shown
+        except Exception:
+            return False
+        finally:
+            await self.preload_interstitial(on_close=self._on_close)
 
     async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
         """Show a rewarded interstitial ad, triggering on_close when closed."""
@@ -186,13 +195,24 @@ class AdService:
                 else:
                     on_close()
 
+            async def _failed(e):
+                # No fill is a network outcome, not a user outcome:
+                # downloads and exports must still run, exactly as they
+                # do on desktop where no ad exists.
+                logger.warning(
+                    "Rewarded interstitial failed: %s", getattr(e, "data", e)
+                )
+                self._active_rewarded_ad = None
+                if inspect.iscoroutinefunction(on_close):
+                    await on_close()
+                else:
+                    on_close()
+
             self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
                 on_close=lambda e: self.page.run_task(_close, e),
-                on_error=lambda e: logger.error(
-                    "Rewarded Interstitial error: %s", e.data
-                ),
+                on_error=lambda e: self.page.run_task(_failed, e),
             )
             return True
         except Exception as err:

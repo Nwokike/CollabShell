@@ -92,5 +92,10 @@ dev = [
 override-dependencies = ["jupyter-kernel-client==0.15.0"]
 
 [tool.ruff]
+# Pinned to 3.12, NOT the 3.14 that requires-python implies: the formatter
+# otherwise rewrites `except (A, B):` into the 3.14-only unparenthesized
+# form, which flet's Android packaging (CPython 3.12) refuses to compile —
+# it has silently broken the mobile build twice.
+target-version = "py312"
 lint.extend-ignore = ["BLE001", "S110"]
 

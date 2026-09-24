@@ -42,6 +42,7 @@ def build_session_fab(
     on_auth_gcp=None,
     on_open_browser=None,
     on_share_session=None,
+    on_ask_ai=None,
     on_view_logs=None,
     on_restart=None,
     on_stop=None,
@@ -161,6 +162,9 @@ def build_session_fab(
             ]
         )
 
+    # Ask AI leads the shared section: it is the one action that can start
+    # from any tab, and the reply lands in the notebook or terminal below.
+    menu_items.append(_item("Ask AI", ft.Icons.AUTO_AWESOME_ROUNDED, on_ask_ai))
     menu_items.append(_item("Manage Files", ft.Icons.FOLDER_ROUNDED, on_manage_files))
     menu_items.append(
         _item("Share Session URL", ft.Icons.SHARE_ROUNDED, on_share_session)

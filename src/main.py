@@ -240,6 +240,12 @@ class AppController:
 
         self.storage = StorageService(page)
         self.ad_service = AdService(page)
+
+        # AI assistant shares the storage service for its credit ledger,
+        # settings, and chat history.
+        from ai.session import ai_session
+
+        ai_session.attach_storage(self.storage)
         state.ad_service = self.ad_service
         await self.ad_service.gather_consent()
         page.run_task(self.ad_service.preload_interstitial)
@@ -435,6 +441,7 @@ class AppController:
             colab=self.colab_service,
             storage=self.storage,
             ad_service=self.ad_service,
+            ai=ai_session,
             page=page,
         )
 

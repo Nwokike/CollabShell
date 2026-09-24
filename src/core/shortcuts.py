@@ -112,6 +112,7 @@ SHORTCUT_DOCS: dict[str, tuple[str, list[tuple[str, str]]]] = {
                 "Ctrl+1 .. 5",
                 "Switch section: Home, Notebooks, Terminal, Files, Settings",
             ),
+            ("Ctrl+Shift+K", "Open the AI assistant"),
         ],
     ),
     "notebook": (

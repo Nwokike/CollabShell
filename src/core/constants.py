@@ -27,6 +27,13 @@ STORAGE_LOGTOSTDERR = "colab_logtostderr"
 STORAGE_DEFAULT_HIGH_MEM = "colab_default_high_mem"
 STORAGE_EXEC_ENV = "colab_exec_env"
 
+# ── AI assistant ─────────────────────────────────────────────────────────────
+STORAGE_AI_ENABLED = "colab_ai_enabled"
+STORAGE_AI_MODEL = "colab_ai_model"
+STORAGE_AI_MESSAGES = "colab_ai_messages"
+STORAGE_AI_USED = "colab_ai_credits_used"
+STORAGE_AI_WINDOW = "colab_ai_credits_window"
+
 # ── Hardware options (from colab_cli.client.Accelerator) ──────────────────────
 # Free tier: CPU (always), T4 GPU (limited), TPU v5e1/v6e1 (limited)
 # Paid: L4, G4, A100, H100
