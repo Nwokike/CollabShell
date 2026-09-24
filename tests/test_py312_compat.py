@@ -27,4 +27,6 @@ def test_source_parses_on_packaged_python(path: Path):
     try:
         ast.parse(source, filename=str(path), feature_version=PACKAGED_PYTHON)
     except SyntaxError as e:
-        pytest.fail(f"{path.name}:{e.lineno}: not valid on Python {PACKAGED_PYTHON}: {e.msg}")
+        pytest.fail(
+            f"{path.name}:{e.lineno}: not valid on Python {PACKAGED_PYTHON}: {e.msg}"
+        )

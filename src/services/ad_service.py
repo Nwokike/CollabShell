@@ -184,16 +184,27 @@ class AdService:
             return True
 
         try:
+            # Some mediation adapters fire on_error *and* on_close, or a
+            # double-tap races two show() calls on one single-use instance.
+            # The gated action (download / export) must run exactly once.
+            done = False
+
+            async def _run_action():
+                nonlocal done
+                if done:
+                    return
+                done = True
+                if inspect.iscoroutinefunction(on_close):
+                    await on_close()
+                else:
+                    on_close()
 
             async def _show(e):
                 await e.control.show()
 
             async def _close(e):
                 self._active_rewarded_ad = None
-                if inspect.iscoroutinefunction(on_close):
-                    await on_close()
-                else:
-                    on_close()
+                await _run_action()
 
             async def _failed(e):
                 # No fill is a network outcome, not a user outcome:
@@ -203,10 +214,7 @@ class AdService:
                     "Rewarded interstitial failed: %s", getattr(e, "data", e)
                 )
                 self._active_rewarded_ad = None
-                if inspect.iscoroutinefunction(on_close):
-                    await on_close()
-                else:
-                    on_close()
+                await _run_action()
 
             self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,

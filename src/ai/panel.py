@@ -16,28 +16,29 @@ from core import tokens
 from core.theme import AppColors
 from state import ServiceCtx
 
+# The open sheet, so a second shortcut/FAB tap focuses the existing one
+# instead of stacking sheets that pop_dialog would bury under.
+_open_sheet: ft.BottomSheet | None = None
+
 
 @ft.component
 def AiPanelContent():
     services = ft.use_context(ServiceCtx)
     ai: AiSession = services.ai
     page = ft.context.page
-    draft, set_draft = ft.use_state("")
 
     # Models are only worth fetching when the sheet is actually open.
     ft.on_mounted(lambda: page.run_task(ai.refresh_models))
 
     async def _send():
-        # Read `draft` at click time; the setter lives in this closure's
-        # component instance, so the snapshot cannot go stale.
-        text = draft
+        text = ai.draft
         if not text.strip() or ai.streaming:
             return
-        set_draft("")
+        ai.draft = ""
         await ai.send(text)
 
     def _update(e):
-        set_draft(e.control.value)
+        ai.draft = e.control.value or ""
 
     # ── Transcript ─────────────────────────────────────────────────────
     bubbles: list[ft.Control] = []
@@ -171,7 +172,10 @@ def AiPanelContent():
         )
 
     # ── Model picker ───────────────────────────────────────────────────
-    options = [ft.dropdown.Option(m.id, _model_label(m)) for m in ai.models]
+    # DropdownOption (not dropdown.Option) is the 1.0 name, and menu_height
+    # is what makes the ~48-entry catalog scrollable instead of overflowing
+    # the sheet.
+    options = [ft.DropdownOption(m.id, _model_label(m)) for m in ai.models]
     model_row = ft.Row(
         [
             ft.Dropdown(
@@ -179,6 +183,7 @@ def AiPanelContent():
                 options=options,
                 hint_text="Model",
                 width=210,
+                menu_height=300,
                 text_size=tokens.FONT_XS,
                 on_select=lambda e: page.run_task(ai.select_model, e.control.value),
             ),
@@ -198,7 +203,7 @@ def AiPanelContent():
             ft.Row(
                 [
                     ft.Icon(
-                        ft.Icons.AUTO_AWESOME_ROUNDED,
+                        ft.Icons.CHAT_ROUNDED,
                         color=ft.Colors.PRIMARY,
                         size=tokens.ICON_MD,
                     ),
@@ -246,7 +251,7 @@ def AiPanelContent():
             ft.Row(
                 [
                     ft.TextField(
-                        value=draft,
+                        value=ai.draft,
                         hint_text="Ask anything about your code or Colab…",
                         multiline=True,
                         shift_enter=True,
@@ -255,6 +260,8 @@ def AiPanelContent():
                         text_size=tokens.FONT_SM,
                         border_radius=tokens.RADIUS_MD,
                         on_change=_update,
+                        # Enter sends; Shift+Enter makes a newline.
+                        on_submit=lambda e: page.run_task(_send),
                     ),
                     ft.IconButton(
                         ft.Icons.STOP_ROUNDED
@@ -287,13 +294,22 @@ def _model_label(model) -> str:
 
 def open_ai_panel(page, services) -> None:
     """Show the AI sheet. Safe to call from any screen or shortcut."""
+    global _open_sheet
     if services.ai is None:
         return
-    page.show_dialog(
-        ft.BottomSheet(
-            content=ft.Container(content=AiPanelContent(), expand=True),
-            show_drag_handle=True,
-            # Keyboard-aware: the composer rises with the keyboard.
-            maintain_bottom_view_insets_padding=True,
-        )
+    if _open_sheet is not None and _open_sheet.open:
+        return  # already showing — never stack sheets
+    height = (page.height or 700) * 0.85
+    _open_sheet = ft.BottomSheet(
+        content=ft.Container(
+            content=AiPanelContent(),
+            height=height,
+        ),
+        show_drag_handle=True,
+        # The body is an expanding ListView: without scrollable=True the
+        # sheet ignores the height and stops around mid-screen.
+        scrollable=True,
+        # Keyboard-aware: the composer rises with the keyboard.
+        maintain_bottom_view_insets_padding=True,
     )
+    page.show_dialog(_open_sheet)

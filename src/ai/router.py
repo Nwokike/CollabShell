@@ -124,11 +124,18 @@ class KiriRouter:
                     for choice in chunk.get("choices") or []:
                         delta = choice.get("delta") or {}
                         text = delta.get("content") or ""
-                        reasoning = delta.get("reasoning") or ""
+                        # Kiri Router streams reasoning through untouched,
+                        # but the dialect differs per upstream: most send
+                        # `reasoning`, one family sends `reasoning_content`.
+                        # Read both, prefer whichever arrived.
+                        reasoning = (
+                            delta.get("reasoning")
+                            or delta.get("reasoning_content")
+                            or ""
+                        )
                         if not reasoning and text.startswith("[Reasoning:"):
-                            # Aggregated (non-streaming) replies fold the
-                            # thinking into a text prefix; split it back out
-                            # so the UI can keep it collapsible.
+                            # Safety net for the rare aggregated reply that
+                            # still folds thinking into a text prefix.
                             head, _, rest = text.partition("]")
                             reasoning = head.removeprefix("[Reasoning:").strip()
                             text = rest

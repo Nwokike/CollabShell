@@ -56,10 +56,10 @@ class StorageService:
                     legacy = json.loads(raw.decode("utf-8")) if raw else {}
                     imported = 0
                     for key, value in legacy.items():
-                        if isinstance(
-                            value, str
-                        ) and not await self._prefs.contains_key(key):
-                            await self._prefs.set(key, value)
+                        # Coerce rather than skip: a non-string in an old
+                        # store is still the user's setting.
+                        if not await self._prefs.contains_key(key):
+                            await self._prefs.set(key, str(value))
                             imported += 1
                     logger.info(
                         "Imported %d legacy storage.json settings (of %d)",

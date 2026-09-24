@@ -9,7 +9,7 @@ sys.path.insert(0, "src")
 
 print("main import OK", flush=True)
 
-from ai.credits import DAILY_CREDITS, CreditsLedger
+from ai.credits import COST_PER_TURN, DAILY_CREDITS, CreditsLedger
 from ai.router import KiriRouter, RouterUnavailable
 from ai.session import AiSession
 from ai.system_prompt import build_system_prompt
@@ -56,17 +56,18 @@ async def live():
 
 async def credits():
     c = CreditsLedger(FakeStorage())
+    assert COST_PER_TURN == 2, "a turn is two credits"
     assert await c.remaining() == DAILY_CREDITS
     for _ in range(3):
         assert await c.spend()
     await c.refund()
-    assert await c.remaining() == DAILY_CREDITS - 2
+    assert await c.remaining() == DAILY_CREDITS - 4  # 3 turns - one refund
     while await c.spend():
         pass
     assert await c.remaining() == 0 and not await c.spend()
     print(
-        f"credits: {DAILY_CREDITS}/day, per-call spend, refund on failure, "
-        "cap enforced",
+        f"credits: {DAILY_CREDITS}/day, {COST_PER_TURN} per model call, "
+        "refund on failure, cap enforced",
         flush=True,
     )
 
@@ -111,7 +112,7 @@ for f in (
     "models",
 ):
     assert f in vars(ai), f
-assert hasattr(ft, "BottomSheet") and hasattr(ft.Icons, "AUTO_AWESOME_ROUNDED")
+assert hasattr(ft, "BottomSheet") and hasattr(ft.Icons, "CHAT_ROUNDED")
 print(
     "wiring: FAB + Ctrl+Shift+K + header + settings + Services.ai + BottomSheet OK",
     flush=True,

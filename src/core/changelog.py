@@ -3,6 +3,22 @@ date — works fully offline. One line per release; keep the entry for the
 current APP_VERSION in sync when bumping (guarded by tests)."""
 
 CHANGELOG: dict[str, str] = {
+    "2.3.1": (
+        "- Fixed a silent data loss on upgrade: your Google login, saved\n"
+        "  sessions, and history now migrate from the old storage layout\n"
+        "  instead of appearing empty\n"
+        "- Windows: %APPDATA% now follows the app sandbox too, so user\n"
+        "  folders no longer split across two locations\n"
+        "- AI: the model list scrolls, the panel takes the full sheet\n"
+        "  height, Enter sends, and typed text survives minimize\n"
+        "- AI: 2 credits per model call (a turn), one send at a time, a\n"
+        "  stopped reply keeps its partial text, and chat history is\n"
+        "  bounded\n"
+        "- AI: chat icon everywhere; reads the reasoning_content dialect\n"
+        "  from Kiri upstreams that use it\n"
+        "- Ads: a rewarded ad that both errors and closes can no longer\n"
+        "  run a download or export twice"
+    ),
     "2.3.0": (
         "- AI assistant: ask anything from the header icon, the session FAB,\n"
         "  or Ctrl+Shift+K — it streams replies from Kiri Router with a\n"

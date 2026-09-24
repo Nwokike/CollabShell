@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import logging
 import os
+import shutil
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -21,10 +22,49 @@ def resolve_storage_dir() -> str:
     if storage_env:
         storage_dir = os.path.join(storage_env, "colab-cli")
     else:
-        # __file__ …/Colab/src/core/storage_patch.py → project root
+        # __file__ …/Collab/src/core/storage_patch.py → project root
         project_root = Path(__file__).resolve().parent.parent.parent
         storage_dir = os.path.join(project_root, "storage")
     return storage_dir
+
+
+def migrate_legacy_colab_paths() -> int:
+    """Copy 2.1.x flat storage into the HOME-redirected layout.
+
+    Up to 2.1.2 the five path monkey-patches forced colab_cli's files
+    flat into ``storage/``. With the HOME redirect they resolve under
+    ``storage/home/.config/colab-cli/`` instead — so without this an
+    upgrading user silently loses their Google login, all sessions, and
+    all history. Copies (never moves) and skips anything the new layout
+    already has, so it is safe to run on every start.
+    """
+    base = resolve_storage_dir()
+    home = os.path.join(base, "home")
+    config_dir = os.path.join(home, ".config", "colab-cli")
+    pairs = [
+        ("token.json", os.path.join(config_dir, "token.json")),
+        ("sessions.json", os.path.join(config_dir, "sessions.json")),
+        ("settings.json", os.path.join(config_dir, "settings.json")),
+        ("oauth_config.json", os.path.join(home, ".colab-cli-oauth-config.json")),
+    ]
+    copied = 0
+    for name, dst in pairs:
+        src = os.path.join(base, name)
+        if os.path.isfile(src) and not os.path.exists(dst):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            copied += 1
+            logger.info("Migrated %s into the new storage layout", name)
+    src_history = os.path.join(base, "history")
+    dst_history = os.path.join(config_dir, "history")
+    if os.path.isdir(src_history) and not os.path.exists(dst_history):
+        os.makedirs(config_dir, exist_ok=True)
+        shutil.copytree(src_history, dst_history)
+        copied += 1
+        logger.info("Migrated history/ into the new storage layout")
+    if copied:
+        logger.info("Storage migration moved %d item(s) from the old layout", copied)
+    return copied
 
 
 class MemoryLogHandler(logging.Handler):

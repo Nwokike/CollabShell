@@ -65,7 +65,9 @@ def repackage(wheel_bytes: bytes, dist: str, base: str) -> bytes:
         if name.endswith(".dist-info/METADATA"):
             lines = []
             for line in src.read(info).decode("utf-8").splitlines(keepends=True):
-                lines.append(f"Version: {base}\n" if line.startswith("Version:") else line)
+                lines.append(
+                    f"Version: {base}\n" if line.startswith("Version:") else line
+                )
             body = "".join(lines).encode("utf-8")
         else:
             body = src.read(info)

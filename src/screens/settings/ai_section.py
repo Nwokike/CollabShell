@@ -46,7 +46,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                         ft.Row(
                             controls=[
                                 ft.Icon(
-                                    ft.Icons.AUTO_AWESOME_ROUNDED,
+                                    ft.Icons.CHAT_ROUNDED,
                                     size=tokens.ICON_LG,
                                     color=ft.Colors.ON_SURFACE_VARIANT,
                                 ),

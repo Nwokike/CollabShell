@@ -242,7 +242,7 @@ def AppShell() -> Control:
                                 ),
                                 ft.Container(expand=True),
                                 ft.IconButton(
-                                    icon=ft.Icons.AUTO_AWESOME_ROUNDED,
+                                    icon=ft.Icons.CHAT_ROUNDED,
                                     icon_size=tokens.ICON_SM,
                                     tooltip="Ask AI",
                                     on_click=lambda e: open_ai_panel(page, services),
@@ -431,7 +431,7 @@ def AppShell() -> Control:
                 ),
                 ft.Container(expand=True),
                 ft.IconButton(
-                    icon=ft.Icons.AUTO_AWESOME_ROUNDED,
+                    icon=ft.Icons.CHAT_ROUNDED,
                     icon_size=tokens.ICON_SM,
                     tooltip="Ask AI",
                     on_click=lambda e: open_ai_panel(page, services),

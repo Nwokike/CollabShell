@@ -12,7 +12,11 @@ import sys
 
 import flet as ft
 
-from core.storage_patch import apply_storage_patches, resolve_storage_dir
+from core.storage_patch import (
+    apply_storage_patches,
+    migrate_legacy_colab_paths,
+    resolve_storage_dir,
+)
 
 
 def _install_bytes_safe_streams():
@@ -73,6 +77,16 @@ _storage_home = os.path.join(resolve_storage_dir(), "home")
 os.makedirs(_storage_home, exist_ok=True)
 os.environ["HOME"] = _storage_home
 os.environ["USERPROFILE"] = _storage_home
+if sys.platform == "win32":
+    # Windows resolves %APPDATA%/%LOCALAPPDATA% independently of
+    # %USERPROFILE%; without these the profile would be split in half —
+    # expanduser sandboxed, everything appdata real.
+    os.environ["APPDATA"] = os.path.join(_storage_home, "AppData", "Roaming")
+    os.environ["LOCALAPPDATA"] = os.path.join(_storage_home, "AppData", "Local")
+
+# Carry 2.1.x's flat storage (login, sessions, history) into the new layout
+# before colab_cli resolves anything.
+migrate_legacy_colab_paths()
 
 apply_storage_patches()
 

@@ -15,7 +15,7 @@ import time
 
 import flet as ft
 
-from ai.credits import CreditsLedger
+from ai.credits import COST_PER_TURN, CreditsLedger
 from ai.router import DEFAULT_MODEL, AiModel, KiriRouter, RouterBusy, RouterUnavailable
 from ai.system_prompt import build_system_prompt
 from core import constants
@@ -47,10 +47,12 @@ class AiSession:
         self.answered_by: str = ""
         self.status: str = ""  # e.g. busy hints
         self.error: str = ""
+        self.draft: str = ""  # lives here so minimizing keeps typed text
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None
         self._task: asyncio.Task | None = None
+        self._send_lock = asyncio.Lock()
         self._pending = ""
         self._pending_reasoning = ""
         self._last_push = 0.0
@@ -103,6 +105,12 @@ class AiSession:
         except Exception:
             logger.debug("AI history save failed", exc_info=True)
 
+    def _trim_history(self) -> None:
+        # The persisted blob is rewritten on every completed turn, so the list
+        # must be bounded or storage grows without limit.
+        if len(self.messages) > MAX_HISTORY:
+            del self.messages[:-MAX_HISTORY]
+
     # ── Models ─────────────────────────────────────────────────────────
 
     async def refresh_models(self) -> None:
@@ -111,13 +119,18 @@ class AiSession:
         except RouterUnavailable:
             self.models = []
             return
+        # A pinned model the router currently does not serve stays pinned in
+        # storage; the picker just shows it unavailable, so coming back
+        # online restores the choice.
         if self.selected_model not in {m.id for m in self.models}:
-            self.selected_model = DEFAULT_MODEL
-        if self._storage is not None:
-            await self._storage.set(constants.STORAGE_AI_MODEL, self.selected_model)
+            self.status = (
+                f"{self.selected_model} is not being served right now — "
+                "auto will pick instead."
+            )
 
     async def select_model(self, model_id: str) -> None:
         self.selected_model = model_id
+        self.status = ""
         if self._storage is not None:
             await self._storage.set(constants.STORAGE_AI_MODEL, model_id)
 
@@ -182,78 +195,92 @@ class AiSession:
         """A call that never produced tokens costs the user nothing."""
         if self._produced or self.ledger is None:
             return
-        await self.ledger.refund()
+        await self.ledger.refund(COST_PER_TURN)
         self.credits_left = await self.ledger.remaining()
 
     async def send(self, text: str) -> None:
         text = (text or "").strip()
-        if not text or self.streaming or not self.enabled:
+        if not text or not self.enabled:
             if not self.enabled:
                 self.error = "AI is turned off in Settings."
             return
-        if self._refund_pending:
-            self._refund_pending = False
-            await self._refund_if_unpaid()
+        # One send at a time: without this, two fast taps both pass the
+        # streaming check, both charge, and both streams corrupt the shared
+        # answer buffer while the first task becomes unstoppable.
+        async with self._send_lock:
+            if self.streaming:
+                return
+            if self._refund_pending:
+                self._refund_pending = False
+                await self._refund_if_unpaid()
 
-        if self.ledger is not None and not await self.ledger.spend(1):
-            self.credits_left = 0
-            self.error = "No AI credits left today. They refill in 24 hours."
-            return
+            if self.ledger is not None and not await self.ledger.spend(COST_PER_TURN):
+                self.credits_left = 0
+                self.error = "No AI credits left today. They refill in 24 hours."
+                return
 
-        self.messages.append({"role": "user", "content": text})
-        self.streaming = True
-        self.answer = ""
-        self.reasoning = ""
-        self.reasoning_open = True
-        self.error = ""
-        self.status = ""
-        self.answered_by = ""
-        self._pending = ""
-        self._pending_reasoning = ""
-        self._produced = False
-        self._reasoning_started = 0.0
-        self._last_push = 0.0
-        self.credits_left = await self.ledger.remaining() if self.ledger else 0
-        self._task = asyncio.current_task()
-        try:
-            self.answered_by = await self.router.stream_chat(
-                self._context_messages(),
-                model=self.selected_model,
-                on_delta=self._on_delta,
-                on_reasoning=self._on_reasoning,
-            )
-        except RouterBusy as e:
-            self.error = str(e)
-            self.status = "Kiri's free tier is busy — try again shortly, or pick a specific model below."
-            await self._refund_if_unpaid()
-        except RouterUnavailable as e:
-            self.error = str(e)
-            await self._refund_if_unpaid()
-        except asyncio.CancelledError:
-            self._refund_pending = True
-            self._flush(force=True)
-            self.streaming = False
-            self._task = None
-            raise
-        except Exception:
-            logger.exception("AI request failed")
-            self.error = "Something went wrong talking to Kiri."
-            await self._refund_if_unpaid()
-        else:
-            self._flush(force=True)
-            if self.answer:
-                self.messages.append({"role": "assistant", "content": self.answer})
-            await self._persist()
-        finally:
-            self.streaming = False
-            self._task = None
-            if self.ledger is not None:
-                self.credits_left = await self.ledger.remaining()
+            self.messages.append({"role": "user", "content": text})
+            self._trim_history()
+            self.streaming = True
+            self.answer = ""
+            self.reasoning = ""
+            self.reasoning_open = True
+            self.error = ""
+            self.status = ""
+            self.answered_by = ""
+            self._pending = ""
+            self._pending_reasoning = ""
+            self._produced = False
+            self._reasoning_started = 0.0
+            self._last_push = 0.0
+            self.credits_left = await self.ledger.remaining() if self.ledger else 0
+            self._task = asyncio.current_task()
+            try:
+                self.answered_by = await self.router.stream_chat(
+                    self._context_messages(),
+                    model=self.selected_model,
+                    on_delta=self._on_delta,
+                    on_reasoning=self._on_reasoning,
+                )
+            except RouterBusy as e:
+                self.error = str(e)
+                self.status = (
+                    "Kiri's free tier is busy — try again shortly, or pick "
+                    "a specific model below."
+                )
+                await self._refund_if_unpaid()
+            except RouterUnavailable as e:
+                self.error = str(e)
+                await self._refund_if_unpaid()
+            except asyncio.CancelledError:
+                # A stopped reply keeps whatever it said: persist the partial
+                # answer so a killed stream never silently vanishes.
+                self._flush(force=True)
+                if self.answer:
+                    self.messages.append({"role": "assistant", "content": self.answer})
+                await self._persist()
+                raise
+            except Exception:
+                logger.exception("AI request failed")
+                self.error = "Something went wrong talking to Kiri."
+                await self._refund_if_unpaid()
+            else:
+                self._flush(force=True)
+                if self.answer:
+                    self.messages.append({"role": "assistant", "content": self.answer})
+                self._trim_history()
+                await self._persist()
+            finally:
+                self.streaming = False
+                self._task = None
+                if self.ledger is not None:
+                    self.credits_left = await self.ledger.remaining()
 
     def stop(self) -> None:
-        """Stop the current reply; the credit is refunded if nothing was said."""
+        """Stop the current reply. Charged if it already said anything."""
         if self._task is not None and self.streaming:
-            self._refund_pending = True
+            if not self._produced:
+                self._refund_pending = True
             self._task.cancel()
 
 
