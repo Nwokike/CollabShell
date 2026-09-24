@@ -102,6 +102,10 @@ class KiriRouter:
         # The last catalog we saw, so a 429 can be explained in terms of
         # the model the user actually picked.
         self._catalog: list[AiModel] = []
+        # Why the last stream stopped. "length" with no text is the
+        # reasoning-model case: it thought until the budget ran out and
+        # said nothing, which needs a retry rather than a blank bubble.
+        self.last_finish_reason: str = ""
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -215,6 +219,7 @@ class KiriRouter:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         answered_by = model
+        self.last_finish_reason = ""
         raw_calls: dict[int, dict] = {}
         try:
             async with self._get_client().stream(
@@ -240,6 +245,8 @@ class KiriRouter:
                         answered_by = chunk["model"]
                     for choice in chunk.get("choices") or []:
                         delta = choice.get("delta") or {}
+                        if choice.get("finish_reason"):
+                            self.last_finish_reason = str(choice["finish_reason"])
                         for frag in delta.get("tool_calls") or []:
                             index = frag.get("index", 0)
                             slot = raw_calls.setdefault(

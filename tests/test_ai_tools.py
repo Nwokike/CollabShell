@@ -314,3 +314,87 @@ def test_out_of_credits_stops_before_the_call():
 @pytest.mark.parametrize("tier", [AUTO, CONFIRM])
 def test_tier_constants_are_distinct(tier):
     assert tier in (AUTO, CONFIRM) and AUTO != CONFIRM
+
+
+# ── Empty replies ──────────────────────────────────────────────────────
+
+
+class _ScriptedRouter(FakeRouter):
+    """Replays fixed (text, calls, finish) per model call."""
+
+    def __init__(self, script):
+        super().__init__([])
+        self.script = list(script)
+        self.last_finish_reason = ""
+        self.seen = []
+
+    async def stream_chat(self, messages, model, on_delta, on_reasoning, tools=None):
+        self.calls += 1
+        self.seen.append(messages)
+        if not self.script:
+            return "fake-model", []
+        text, calls, finish = self.script.pop(0)
+        self.last_finish_reason = finish
+        if text:
+            on_delta(text)
+        return "thinker", calls
+
+    def advice_for_rate_limit(self, model_id):
+        return "busy"
+
+
+def test_an_empty_reply_is_retried_once_then_reported():
+    s = _session([])
+    s.router = _ScriptedRouter([("", [], "length"), ("", [], "length")])
+    s._toolbox = FakeBox()
+    s.enabled = True
+    asyncio.run(s.send("something hard"))
+    assert s.router.calls == 2, "one retry, then give up"
+    assert "empty reply" in s.error
+    assert "Nothing was charged" in s.error
+    # Two calls, nothing delivered: both refunded.
+    assert asyncio.run(s.ledger.remaining()) == DAILY_CREDITS
+    assert s.steps_used == 2
+
+
+def test_the_retry_can_succeed():
+    s = _session([])
+    s.router = _ScriptedRouter([("", [], "length"), ("here you go", [], "stop")])
+    s._toolbox = FakeBox()
+    s.enabled = True
+    asyncio.run(s.send("something hard"))
+    assert s.router.calls == 2
+    assert s.error == ""
+    assert "here you go" in s.messages[-1]["content"]
+    # It cost 4 credits because two real calls happened.
+    assert asyncio.run(s.ledger.remaining()) == DAILY_CREDITS - 4
+
+
+def test_a_normal_empty_finish_is_not_retried():
+    s = _session([])
+    s.router = _ScriptedRouter([("", [], "stop")])
+    s._toolbox = FakeBox()
+    s.enabled = True
+    asyncio.run(s.send("hi"))
+    assert s.router.calls == 1, "only a length-truncation is worth a retry"
+    assert "empty reply" in s.error
+    assert asyncio.run(s.ledger.remaining()) == DAILY_CREDITS
+
+
+def test_the_retry_asks_for_a_shorter_answer():
+    s = _session([])
+    s.router = _ScriptedRouter([("", [], "length"), ("ok", [], "stop")])
+    s._toolbox = FakeBox()
+    s.enabled = True
+    asyncio.run(s.send("hi"))
+    sent = s.router.seen[1]
+    assert any(
+        m.get("role") == "user" and "Answer again" in str(m.get("content"))
+        for m in sent
+    )
+
+
+def test_a_produced_answer_is_never_refunded():
+    s = _session([("a real answer", [])])
+    asyncio.run(s.send("hi"))
+    assert asyncio.run(s.ledger.remaining()) == DAILY_CREDITS - 2

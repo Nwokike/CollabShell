@@ -143,6 +143,10 @@ class AiSession:
         self._produced = False
         self._refund_pending = False
         self._reasoning_started = 0.0
+        # Model calls charged for the current turn, and whether the
+        # empty-reply retry has already been spent.
+        self._calls_this_turn = 0
+        self._empty_retried = False
         # Which chat to reopen on the next restart.
         self._restore_active = ""
 
@@ -473,10 +477,17 @@ class AiSession:
         return int(max(time.monotonic() - self._reasoning_started, 0))
 
     async def _refund_if_unpaid(self) -> None:
-        """A call that never produced tokens costs the user nothing."""
+        """Every call in a turn that produced nothing is refunded.
+
+        A turn can make several model calls (tools, an empty-response
+        retry). If the user ends up with no answer, they should not be
+        charged for any of them — that is the promise, stated per call.
+        """
         if self._produced or self.ledger is None:
             return
-        await self.ledger.refund(COST_PER_TURN)
+        unpaid = max(self._calls_this_turn, 1)
+        for _ in range(unpaid):
+            await self.ledger.refund(COST_PER_TURN)
         self.credits_left = await self.ledger.remaining()
 
     async def _execute_tool_call(self, call: dict) -> str:
@@ -574,6 +585,8 @@ class AiSession:
             self._produced = False
             self._reasoning_started = 0.0
             self._last_push = 0.0
+            self._calls_this_turn = 1
+            self._empty_retried = False
             self.credits_left = await self.ledger.remaining() if self.ledger else 0
             self._task = asyncio.current_task()
             tool_calls_run = 0
@@ -590,6 +603,7 @@ class AiSession:
                                 "what it has done."
                             )
                             break
+                        self._calls_this_turn += 1
                         self.steps_used += 1
                         self.answer = ""
                         self.reasoning = ""
@@ -608,6 +622,29 @@ class AiSession:
                     )
                     self._flush(force=True)
                     if not calls:
+                        # A reasoning model can spend its whole budget
+                        # thinking and return no text at all. Retrying once
+                        # is the difference between a blank bubble and an
+                        # answer; it is charged like any other call and
+                        # refunded in full if it delivers nothing either.
+                        if (
+                            not self.answer.strip()
+                            and not self._empty_retried
+                            and self.router.last_finish_reason == "length"
+                        ):
+                            self._empty_retried = True
+                            self.status = "That model ran out of room — asking again."
+                            self.messages.append(
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "Your last reply used up its length "
+                                        "before any text appeared. Answer again, "
+                                        "briefly."
+                                    ),
+                                }
+                            )
+                            continue
                         break
                     self.messages.append(
                         {
@@ -659,6 +696,17 @@ class AiSession:
                 self._flush(force=True)
                 if self.answer:
                     self.messages.append({"role": "assistant", "content": self.answer})
+                else:
+                    # Two calls, nothing to show. Say so plainly and give
+                    # the credits back — a silent blank is the worst
+                    # possible outcome and the most expensive one.
+                    self.error = (
+                        f"{self.answered_by or self.selected_model} returned an "
+                        "empty reply. Nothing was charged — try another model, "
+                        "or ask again."
+                    )
+                    self.status = ""
+                    await self._refund_if_unpaid()
                 self._trim_history()
                 await self._persist()
             finally:
