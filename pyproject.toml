@@ -13,11 +13,12 @@ dependencies = [
     "flet-terminal>=0.3.9",
     "google-colab-cli>=0.7.2",
     # Android builds package with Python 3.14 and resolve these fresh inside
-    # the APK (uv.lock does not apply there). Versions below are the newest
-    # whose Android wheels exist for 3.14 — pydantic-core 2.46.5, rpds-py
-    # 2026.6.3, cryptography 50.0.1 and pyarrow 25.0.1 ship none; the pinned
-    # versions do (flet's mobile index carries the Android builds). pyarrow
-    # arrives via jupyter-mimetypes, which leaves it unpinned upstream.
+    # the APK (uv.lock does not apply there). These versions exist as Android
+    # wheels only on flet's mobile index, where they are published as PEP 440
+    # post-releases — hence the explicit .postN pins. The latest releases on
+    # PyPI (pydantic-core 2.46.5, pyarrow 25.0.1, rpds-py 2026.6.3,
+    # cryptography 50.0.1) ship no Android wheels at all. pyarrow arrives via
+    # jupyter-mimetypes, which leaves it unpinned upstream.
     "pydantic==2.13.4",
     "rpds-py==2026.5.1",
     "cryptography==48.0.0",
@@ -43,9 +44,11 @@ bundle_id = "ng.kiri.collabshell"
 
 # Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq 27.2.0's
 # android x86_64 wheel ships 4 KB-aligned libs (libzmq + libc++_shared), so
-# x86_64 is dropped. armeabi-v7a is kept: 32-bit ABIs are exempt from the
-# 16 KB check, and it preserves phone/tablet/TV device reach.
-target_arch = ["arm64-v8a", "armeabi-v7a"]
+# x86_64 is dropped. armeabi-v7a is also dropped: google-colab-cli pulls
+# jupyter-mimetypes → pyarrow, and flet's mobile index carries no
+# armeabi-v7a pyarrow wheel for any version, so a 32-bit APK cannot resolve
+# its dependency tree. Play requires 64-bit for updates regardless.
+target_arch = ["arm64-v8a"]
 
 # Native wheels in the dependency tree (pydantic-core, pyzmq, cryptography,
 # rpds) are extracted next to the app instead of read from the zipped

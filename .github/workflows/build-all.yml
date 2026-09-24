@@ -90,6 +90,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/wheels
           pip install wheel
           uv export --no-dev --format requirements-txt | pip wheel -r /dev/stdin --no-deps -w ${{ github.workspace }}/wheels 2>/dev/null || true
+      - name: Repackage mobile wheels to base versions
+        run: python scripts/repackage_android_wheels.py "${{ github.workspace }}/wheels"
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -151,6 +153,8 @@ jobs:
           mkdir -p ${{ github.workspace }}/wheels
           pip install wheel
           uv export --no-dev --format requirements-txt | pip wheel -r /dev/stdin --no-deps -w ${{ github.workspace }}/wheels 2>/dev/null || true
+      - name: Repackage mobile wheels to base versions
+        run: python scripts/repackage_android_wheels.py "${{ github.workspace }}/wheels"
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
