@@ -151,6 +151,74 @@ def AiPanelContent():
                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
             )
         )
+    # Step timeline — the user watches every action the Assistant takes, the
+    # way DDGS shows each search as its own collapsible group.
+    for row in ai.timeline:
+        icon, tint = {
+            "running": (ft.Icons.PENDING_ROUNDED, ft.Colors.ON_SURFACE_VARIANT),
+            "done": (ft.Icons.CHECK_CIRCLE_ROUNDED, AppColors.SUCCESS),
+            "denied": (ft.Icons.BLOCK_ROUNDED, AppColors.WARNING),
+            "error": (ft.Icons.ERROR_OUTLINE_ROUNDED, AppColors.ERROR),
+        }.get(
+            row.get("status"), (ft.Icons.CIRCLE_OUTLINED, ft.Colors.ON_SURFACE_VARIANT)
+        )
+        turn.append(
+            ft.Row(
+                [
+                    ft.Icon(icon, size=tokens.ICON_XS, color=tint),
+                    ft.Text(
+                        row.get("label", ""),
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        expand=True,
+                    ),
+                ],
+                spacing=tokens.SPACE_SM,
+            )
+        )
+    # Approval card — every confirm-tier action stops here until the user
+    # taps Allow or Deny. The reply visibly waits instead of guessing.
+    if ai.approval:
+        turn.append(
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "The Assistant wants to:",
+                            size=tokens.FONT_XS,
+                            weight=ft.FontWeight.W_500,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        ft.Text(
+                            ai.approval.get("label", ""),
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        ft.Row(
+                            [
+                                ft.FilledButton(
+                                    "Allow",
+                                    icon=ft.Icons.CHECK_ROUNDED,
+                                    on_click=lambda e: ai.resolve_approval(True),
+                                ),
+                                ft.TextButton(
+                                    "Deny",
+                                    on_click=lambda e: ai.resolve_approval(False),
+                                ),
+                            ],
+                            spacing=tokens.SPACE_SM,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_XS,
+                    tight=True,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.10, AppColors.WARNING),
+                border_radius=tokens.RADIUS_MD,
+                padding=ft.Padding(
+                    tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM
+                ),
+            )
+        )
     if ai.streaming and not ai.answer and not ai.reasoning:
         turn.append(
             ft.Row(

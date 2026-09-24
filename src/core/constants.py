@@ -29,6 +29,7 @@ STORAGE_EXEC_ENV = "colab_exec_env"
 
 # ── AI assistant ─────────────────────────────────────────────────────────────
 STORAGE_AI_ENABLED = "colab_ai_enabled"
+STORAGE_AI_TOOLS_ENABLED = "colab_ai_tools_enabled"
 STORAGE_AI_MODEL = "colab_ai_model"
 STORAGE_AI_MESSAGES = "colab_ai_messages"
 STORAGE_AI_USED = "colab_ai_credits_used"

@@ -111,12 +111,20 @@ class KiriRouter:
         model: str = DEFAULT_MODEL,
         on_delta: Callable[[str], None] | None = None,
         on_reasoning: Callable[[str], None] | None = None,
-    ) -> str:
-        """Stream one reply. Returns the name of the model that answered —
-        the real one when the router reports it, else whatever was asked.
-        Raises RouterBusy on 429 so the caller can refund and say so."""
-        payload = {"model": model, "messages": messages, "stream": True}
+        tools: list[dict] | None = None,
+    ) -> tuple[str, list[dict]]:
+        """Stream one reply. Returns (model that answered, tool calls).
+
+        Tool calls arrive as OpenAI `delta.tool_calls` fragments
+        (index/name/arguments streamed across chunks) and are reassembled
+        here. Raises RouterBusy on 429 so the caller can refund and say so.
+        """
+        payload: dict = {"model": model, "messages": messages, "stream": True}
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         answered_by = model
+        raw_calls: dict[int, dict] = {}
         try:
             async with self._get_client().stream(
                 "POST", f"{self.base_url}/v1/chat/completions", json=payload
@@ -141,6 +149,24 @@ class KiriRouter:
                         answered_by = chunk["model"]
                     for choice in chunk.get("choices") or []:
                         delta = choice.get("delta") or {}
+                        for frag in delta.get("tool_calls") or []:
+                            index = frag.get("index", 0)
+                            slot = raw_calls.setdefault(
+                                index,
+                                {
+                                    "id": "",
+                                    "type": "function",
+                                    "name": "",
+                                    "arguments": "",
+                                },
+                            )
+                            if frag.get("id"):
+                                slot["id"] = frag["id"]
+                            fn = frag.get("function") or {}
+                            if fn.get("name"):
+                                slot["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                slot["arguments"] += fn["arguments"]
                         text = delta.get("content") or ""
                         # Kiri Router streams reasoning through untouched,
                         # but the dialect differs per upstream: most send
@@ -166,4 +192,4 @@ class KiriRouter:
             raise
         except httpx.HTTPError as e:
             raise RouterUnavailable("Lost the connection to Kiri Router.") from e
-        return answered_by
+        return answered_by, list(raw_calls.values())

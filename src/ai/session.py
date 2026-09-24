@@ -18,11 +18,16 @@ import flet as ft
 from ai.credits import COST_PER_TURN, CreditsLedger
 from ai.router import DEFAULT_MODEL, AiModel, KiriRouter, RouterBusy, RouterUnavailable
 from ai.system_prompt import build_system_prompt
+from ai.tools import CONFIRM, TIERS, TOOL_SCHEMAS, ToolBox, label_for
 from core import constants
 
 logger = logging.getLogger("ai.session")
 
 MAX_HISTORY = 40
+# Guards mirror DDGS's agent loop: a runaway task cannot drain the day.
+MAX_STEPS = 6
+MAX_TOOL_CALLS = 10
+APPROVAL_TIMEOUT_SECONDS = 300
 # Flet re-renders on every observable write; batching tokens keeps a fast
 # model from flooding the Dart bridge with one update per token.
 THROTTLE_SECONDS = 0.08
@@ -49,11 +54,17 @@ class AiSession:
         self.error: str = ""
         self.draft: str = ""  # lives here so minimizing keeps typed text
         self.steps_used: int = 0  # model calls this conversation, for the receipt
+        self.timeline: list[dict] = []  # agent step rows
+        self.approval: dict | None = None  # pending confirm-tier tool call
+        self.tools_enabled: bool = True
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None
         self._task: asyncio.Task | None = None
         self._send_lock = asyncio.Lock()
+        self._toolbox: ToolBox | None = None
+        self._approval_event: asyncio.Event | None = None
+        self._approval_granted = False
         self._pending = ""
         self._pending_reasoning = ""
         self._last_push = 0.0
@@ -68,6 +79,10 @@ class AiSession:
         self.ledger = CreditsLedger(storage)
         self._load_settings()
 
+    def attach_colab(self, colab_service) -> None:
+        """Give the Assistant a toolbox once the Colab service exists."""
+        self._toolbox = ToolBox(colab_service)
+
     def _load_settings(self) -> None:
         if self._storage is None:
             return
@@ -76,6 +91,9 @@ class AiSession:
             enabled = await self._storage.get(constants.STORAGE_AI_ENABLED)
             if enabled is not None:
                 self.enabled = enabled == "true"
+            tools_on = await self._storage.get(constants.STORAGE_AI_TOOLS_ENABLED)
+            if tools_on is not None:
+                self.tools_enabled = tools_on == "true"
             model = await self._storage.get(constants.STORAGE_AI_MODEL)
             if model:
                 self.selected_model = model
@@ -144,6 +162,22 @@ class AiSession:
                 constants.STORAGE_AI_ENABLED, "true" if enabled else "false"
             )
 
+    async def set_tools_enabled(self, enabled: bool) -> None:
+        self.tools_enabled = enabled
+        if self._storage is not None:
+            await self._storage.set(
+                constants.STORAGE_AI_TOOLS_ENABLED, "true" if enabled else "false"
+            )
+
+    def resolve_approval(self, allow: bool) -> None:
+        """The user tapped Allow or Deny on a confirm-tier tool call."""
+        # Event.set() carries no payload — the answer rides on its own flag,
+        # otherwise Deny would read as truthy and the action would run anyway.
+        self._approval_granted = allow
+        if self._approval_event is not None:
+            self._approval_event.set()
+        self.approval = None
+
     async def clear_history(self) -> None:
         self.messages.clear()
         self.answer = ""
@@ -161,9 +195,15 @@ class AiSession:
 
     # ── Chat loop ──────────────────────────────────────────────────────
 
+    def _tool_schemas(self) -> list[dict] | None:
+        if not (self.tools_enabled and self._toolbox is not None):
+            return None
+        return TOOL_SCHEMAS
+
     def _context_messages(self) -> list[dict]:
+        prompt = build_system_prompt(tools_available=bool(self._tool_schemas()))
         return [
-            {"role": "system", "content": build_system_prompt()},
+            {"role": "system", "content": prompt},
             *self.messages[-MAX_HISTORY:],
         ]
 
@@ -206,6 +246,56 @@ class AiSession:
         await self.ledger.refund(COST_PER_TURN)
         self.credits_left = await self.ledger.remaining()
 
+    async def _execute_tool_call(self, call: dict) -> str:
+        """Run one tool, asking the user first when it changes state."""
+        name = call.get("name") or ""
+        try:
+            args = json.loads(call.get("arguments") or "{}")
+        except (TypeError, ValueError):
+            args = {}
+        if not isinstance(args, dict):
+            args = {}
+        row = {"label": label_for(name, args), "status": "running", "preview": ""}
+        self.timeline.append(row)
+        # Flet copies an appended dict into an ObservableDict, so the local
+        # handle is stale: later status writes must go through the stored row
+        # or the panel keeps showing "running" forever.
+        row = self.timeline[-1]
+
+        if TIERS.get(name, CONFIRM) == CONFIRM:
+            detail = str(args.get("code") or args)[:220]
+            self.approval = {"label": row["label"], "detail": detail}
+            self._approval_granted = False
+            self._approval_event = asyncio.Event()
+            try:
+                await asyncio.wait_for(
+                    self._approval_event.wait(), APPROVAL_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                self._approval_granted = False
+            finally:
+                self.approval = None
+                self._approval_event = None
+            if not self._approval_granted:
+                row["status"] = "denied"
+                return (
+                    "The user declined this action. Do not retry it — "
+                    "ask what they would like instead."
+                )
+
+        if self._toolbox is None:
+            row["status"] = "error"
+            return "No Colab service is connected right now."
+        result = await self._toolbox.run(name, args)
+        row["preview"] = result.text[:140]
+        lowered = result.text.lower()
+        row["status"] = (
+            "error"
+            if "failed" in lowered[:24] or "timed out" in lowered[:24]
+            else "done"
+        )
+        return result.text
+
     async def send(self, text: str) -> None:
         text = (text or "").strip()
         if not text or not self.enabled:
@@ -228,8 +318,9 @@ class AiSession:
                 return
 
             self.messages.append({"role": "user", "content": text})
-            self.steps_used += 1
             self._trim_history()
+            self.steps_used += 1
+            self.timeline.clear()
             self.streaming = True
             self.answer = ""
             self.reasoning = ""
@@ -244,13 +335,61 @@ class AiSession:
             self._last_push = 0.0
             self.credits_left = await self.ledger.remaining() if self.ledger else 0
             self._task = asyncio.current_task()
+            tool_calls_run = 0
             try:
-                self.answered_by = await self.router.stream_chat(
-                    self._context_messages(),
-                    model=self.selected_model,
-                    on_delta=self._on_delta,
-                    on_reasoning=self._on_reasoning,
-                )
+                for step in range(MAX_STEPS):
+                    if step:
+                        # Every model call after a tool result is its own
+                        # turn and its own charge.
+                        if self.ledger is not None and not await self.ledger.spend(
+                            COST_PER_TURN
+                        ):
+                            self.status = (
+                                "Out of credits — the task stops here with "
+                                "what it has done."
+                            )
+                            break
+                        self.steps_used += 1
+                        self.answer = ""
+                        self.reasoning = ""
+                        self._pending = ""
+                        self._pending_reasoning = ""
+                        self._last_push = 0.0
+                        self.credits_left = (
+                            await self.ledger.remaining() if self.ledger else 0
+                        )
+                    self.answered_by, calls = await self.router.stream_chat(
+                        self._context_messages(),
+                        model=self.selected_model,
+                        on_delta=self._on_delta,
+                        on_reasoning=self._on_reasoning,
+                        tools=self._tool_schemas(),
+                    )
+                    self._flush(force=True)
+                    if not calls:
+                        break
+                    self.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": self.answer or "",
+                            "tool_calls": calls,
+                        }
+                    )
+                    for call in calls:
+                        if tool_calls_run >= MAX_TOOL_CALLS:
+                            self.status = "Stopped — too many tool calls in one task."
+                            return
+                        tool_calls_run += 1
+                        result = await self._execute_tool_call(call)
+                        self.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.get("id", ""),
+                                "content": result,
+                            }
+                        )
+                else:
+                    self.status = "Reached the step limit for one task."
             except RouterBusy as e:
                 self.error = str(e)
                 self.status = (
@@ -267,6 +406,7 @@ class AiSession:
                 self._flush(force=True)
                 if self.answer:
                     self.messages.append({"role": "assistant", "content": self.answer})
+                self._trim_history()
                 await self._persist()
                 raise
             except Exception:
@@ -282,6 +422,8 @@ class AiSession:
             finally:
                 self.streaming = False
                 self._task = None
+                self.approval = None
+                self._approval_event = None
                 if self.ledger is not None:
                     self.credits_left = await self.ledger.remaining()
 
@@ -290,6 +432,9 @@ class AiSession:
         if self._task is not None and self.streaming:
             if not self._produced:
                 self._refund_pending = True
+            self.approval = None
+            if self._approval_event is not None:
+                self._approval_event.set()
             self._task.cancel()
 
 

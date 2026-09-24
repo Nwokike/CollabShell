@@ -30,6 +30,9 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     async def _on_toggle(e):
         await ai.set_enabled(bool(e.control.value))
 
+    async def _on_tools_toggle(e):
+        await ai.set_tools_enabled(bool(e.control.value))
+
     async def _on_model(e):
         await ai.select_model(e.control.value)
 
@@ -59,8 +62,8 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                         ),
                                         tip_text(
                                             "Powered by Kiri Router — free models, "
-                                            "no API key. Every model call uses one "
-                                            "of your 50 daily credits."
+                                            "no API key. Every model call uses 2 of "
+                                            "your 50 daily credits."
                                         ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
@@ -69,6 +72,43 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                                 ft.Switch(
                                     value=ai.enabled,
                                     on_change=lambda e: page.run_task(_on_toggle, e),
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_LG,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        # Let the Assistant act
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.BUILD_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Let the Assistant act",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "It can list your sessions and files, "
+                                            "and run code, install packages, start "
+                                            "or stop sessions, and mount Drive. "
+                                            "Anything that changes something asks "
+                                            "you first. Each step is 2 credits."
+                                        ),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
+                                ),
+                                ft.Switch(
+                                    value=ai.tools_enabled,
+                                    on_change=lambda e: page.run_task(
+                                        _on_tools_toggle, e
+                                    ),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,

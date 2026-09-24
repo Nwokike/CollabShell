@@ -265,6 +265,8 @@ class AppController:
         page.run_task(self.ad_service.preload_interstitial)
 
         self.colab_service = ColabService()
+        # The Assistant's toolbox needs the live Colab service.
+        ai_session.attach_colab(self.colab_service)
         self.update_service = UpdateService()
 
         async def _init_cli():

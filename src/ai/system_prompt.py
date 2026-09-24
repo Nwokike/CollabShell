@@ -5,9 +5,10 @@ before touching Colab. Feeding it in means the model knows the keep-alive
 and auth-scope gotchas instead of inventing them, which is what makes
 Phase 2 tools (create session, exec, files) safe to hand it.
 
-In Phase 1 the assistant is advisory: it explains and drafts, it cannot
-touch the app. The prompt says so plainly so it never promises an action
-it cannot take.
+In Phase 1 the assistant was advisory: it explained and drafted but
+could not touch the app. With tools enabled it may act, but every
+state-changing call still stops for the user's approval, so the prompt
+spells that out instead of letting the model guess.
 """
 
 from __future__ import annotations
@@ -18,15 +19,23 @@ from functools import lru_cache
 logger = logging.getLogger("ai.system_prompt")
 
 BASE = (
-    "You are the assistant inside Collab Shell, a Google Colab client that "
+    "You are the Assistant inside Collab Shell, a Google Colab client that "
     "runs on phones and desktops. The user is usually on a phone: answer "
     "short, plain, and concrete — no preamble, no headers unless asked. "
     "The user can see your reply, your code, and the app's own screens; "
     "write code they can paste into a cell, and say when something needs "
-    "a session, a file, or an approval they have not given yet.\n\n"
-    "This version is advisory. You cannot run code, manage sessions, move "
-    "files, or change settings yet. If asked, say what the user should do "
-    "in the app instead. Tools arrive in a later version."
+    "a session, a file, or an approval they have not given yet."
+)
+
+TOOLS_BASE = (
+    "\n\nYou can act on the user's Colab account with tools: list their "
+    "sessions, list files on a VM, start or stop a session, run code, "
+    "install packages, mount Drive, and authenticate GCP. Actions that "
+    "change something always ask the user first — say what you want to do "
+    "in plain words, call the tool, and if the user declines, adapt or ask "
+    "instead of retrying. After a tool returns, use the real result; never "
+    "invent session names, file listings, or outputs. If a tool fails, "
+    "explain why once, then try a different approach or ask the user."
 )
 
 
@@ -42,8 +51,12 @@ def _colab_skill() -> str:
         return ""
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(tools_available: bool = False) -> str:
     skill = _colab_skill().strip()
-    if not skill:
-        return BASE
-    return f"{BASE}\n\nBackground on Google Colab sessions (reference only, from the colab-cli skill):\n{skill}"
+    parts = [BASE + (TOOLS_BASE if tools_available else "")]
+    if skill:
+        parts.append(
+            "Background on Google Colab sessions (reference only, from the "
+            f"colab-cli skill):\n{skill}"
+        )
+    return "\n\n".join(parts)
