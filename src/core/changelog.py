@@ -3,6 +3,22 @@ date — works fully offline. One line per release; keep the entry for the
 current APP_VERSION in sync when bumping (guarded by tests)."""
 
 CHANGELOG: dict[str, str] = {
+    "2.3.0": (
+        "- AI assistant: ask anything from the header icon, the session FAB,\n"
+        "  or Ctrl+Shift+K — it streams replies from Kiri Router with a\n"
+        "  collapsible thinking block, and keeps going in the notebook or\n"
+        "  terminal when you minimize the panel\n"
+        "- 50 free AI credits a day, one per model call; failed calls are\n"
+        "  refunded\n"
+        "- Model picker shows only the models Kiri is serving right now,\n"
+        "  with each one's rate limit before you pick it\n"
+        "- Ads: interstitials reload after every show, and a failed ad no\n"
+        "  longer blocks downloads or log exports\n"
+        "- High-RAM default stays off; the tip now says free Colab\n"
+        "  accounts cannot use it\n"
+        "- Android 2.3.0: ARM64 only — Colab's dependency tree cannot\n"
+        "  resolve 32-bit wheels any more"
+    ),
     "2.2.0": (
         "- Upgraded to Flet 1.0: snappier copy/open buttons (client-side\n"
         "  actions), a biometric check before clearing your Google\n"
