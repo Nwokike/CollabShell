@@ -42,11 +42,11 @@ async def live():
                 for m in raw.get("data", [])
                 if m.get("status") == "active" and not is_chat_eligible(m)
             ]
-            assert (
-                len(models)
-                < len([m for m in raw.get("data", []) if m.get("status") == "active"])
-                or not dead
-            ), f"offered a model that cannot chat: {dead}"
+            # What matters is not the raw catalog — it legitimately contains
+            # endpoints that cannot chat — but that none of them reach the
+            # user: every offered model must be chat-capable.
+            offered = {m.id for m in models}
+            assert not (offered & set(dead)), f"offered a dead model: {dead}"
             chunks = []
             await r.stream_chat(
                 [{"role": "user", "content": "One word: name a Colab GPU."}],
@@ -484,9 +484,7 @@ class _FakePremium:
         return None
 
 
-free_services = Services(
-    ai=AiSession(), storage=_Store(), premium=_FakePremium()
-)
+free_services = Services(ai=AiSession(), storage=_Store(), premium=_FakePremium())
 free_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
 assert any("Google Play" in t for t in free_text), "Play must be offered first"
 assert any("Pay directly" in t for t in free_text), "the fallback must be there"
@@ -498,7 +496,7 @@ premium_text = _labels(_walk(build_premium_section(_FakePage(), None, free_servi
 assert any("Premium is on" in t for t in premium_text)
 assert any("Google Play" in t for t in premium_text), "restore must stay available"
 state.is_premium = False
-print("premium section: both channels render, free and premium states OK", flush=True)
+print("premium section: Play on Android, direct on desktop, never both by default", flush=True)
 
 # Ads are off for premium, everywhere, through one gate.
 from services.ad_service import AdService

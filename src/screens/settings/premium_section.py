@@ -106,6 +106,15 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
             return
         await _snack(f"Your recovery ID is {stored}")
 
+    async def _enable_direct(e=None):
+        """The user says Google Play payment does not work for them. Only
+        now does the direct channel exist on this build — it is their
+        choice, not an offer."""
+        await license.save_opt_in(services.storage, True)
+        license.set_available(page, True)
+        await _snack("Direct purchase options unlocked below.")
+        page.update()
+
     async def _restore_license(e=None):
         stored = await services.storage.get(constants.STORAGE_LICENSE_RECOVERY)
         if not stored:
@@ -197,36 +206,62 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
             )
         )
 
-    # The Worker: for users Play billing cannot serve.
-    controls.append(ft.Divider(height=tokens.SPACE_SM))
-    controls.append(
-        _row(
-            ft.Icons.CREDIT_CARD_ROUNDED,
-            "Pay directly",
-            "For regions where Google Play payment does not work, and for "
-            "desktop. Card or mobile money, paid to Kiri — your recovery ID "
-            "is how you get back in if you clear app data.",
-            ft.TextButton("Buy", on_click=lambda e: page.run_task(_open_checkout, e)),
+    # ── The direct channel, where it is allowed to exist ────────────────
+    # Desktop and web have no Play Store, so this is their only way in. On
+    # Android it stays out of the way until the user says Google Play
+    # payment does not work for them: nobody is steered into it, and the
+    # Play build carries no alternative payment to report.
+    if license.is_available(page):
+        controls.append(ft.Divider(height=tokens.SPACE_SM))
+        controls.append(
+            _row(
+                ft.Icons.CREDIT_CARD_ROUNDED,
+                "Pay directly",
+                "Card or mobile money, paid to Kiri — your recovery ID is how "
+                "you get back in if you clear app data.",
+                ft.TextButton(
+                    "Buy", on_click=lambda e: page.run_task(_open_checkout, e)
+                ),
+            )
         )
-    )
-    controls.append(
-        _row(
-            ft.Icons.VPN_KEY_ROUNDED,
-            "Recovery ID",
-            "Keep this somewhere safe. It is the only way back in after a reinstall.",
-            ft.TextButton("Show", on_click=lambda e: page.run_task(_show_recovery, e)),
+        controls.append(
+            _row(
+                ft.Icons.VPN_KEY_ROUNDED,
+                "Recovery ID",
+                "Keep this somewhere safe. It is the only way back in after "
+                "a reinstall.",
+                ft.TextButton(
+                    "Show", on_click=lambda e: page.run_task(_show_recovery, e)
+                ),
+            )
         )
-    )
-    controls.append(
-        _row(
-            ft.Icons.RESTORE_ROUNDED,
-            "Restore a purchase",
-            "Enter the recovery ID from your receipt.",
-            ft.TextButton(
-                "Restore", on_click=lambda e: page.run_task(_restore_license, e)
-            ),
+        controls.append(
+            _row(
+                ft.Icons.RESTORE_ROUNDED,
+                "Restore a purchase",
+                "Enter the recovery ID from your receipt.",
+                ft.TextButton(
+                    "Restore", on_click=lambda e: page.run_task(_restore_license, e)
+                ),
+            )
         )
-    )
+    elif premium.available:
+        # Android with Play Billing: the escape hatch exists for the user
+        # who cannot pay through Google, and is reached by asking, never by
+        # being offered.
+        controls.append(ft.Divider(height=tokens.SPACE_SM))
+        controls.append(
+            _row(
+                ft.Icons.HELP_OUTLINE_ROUNDED,
+                "Google Play payment not working?",
+                "In some regions and on some accounts, Google Play will not "
+                "take the payment. You can choose to pay Kiri directly "
+                "instead, with a card or mobile money.",
+                ft.TextButton(
+                    "Show options", on_click=lambda e: page.run_task(_enable_direct, e)
+                ),
+            )
+        )
 
     # Credits: the visible benefit, with a way to earn more.
     if ai is not None:

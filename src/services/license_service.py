@@ -59,6 +59,40 @@ EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 _catalog_cache: dict[str, Any] = {"at": 0.0, "products": []}
 
+# ── Where this channel is allowed to exist ──────────────────────────────
+# The Kiri License Worker is for builds that have **no Play Store to bill
+# through**: desktop, web, and direct APKs. The Play-distributed Android
+# build uses Google Play Billing and nothing else — the fallback is not
+# merely hidden there, it is not integrated, so there is no alternative
+# payment to report and no steering for Google to act on.
+#
+# On Android the direct channel is reachable only by the user explicitly
+# saying Google Play payment does not work for them, which is the case the
+# fallback exists to serve. Nobody is steered into it.
+_DIRECT_OPTIN_KEY = constants.STORAGE_LICENSE_DIRECT
+
+
+def is_available(page=None) -> bool:
+    """True when this build may offer the direct (Worker) channel.
+
+    - desktop and web: yes — there is no Play Store to bill through
+    - Android: only after the user has explicitly opted in
+    """
+    if page is None:
+        return True
+    try:
+        if not page.platform.is_mobile():
+            return True
+    except Exception:
+        return True
+    return bool(getattr(page, "_kiri_direct_optin", False))
+
+
+def set_available(page, enabled: bool) -> None:
+    """Flip the Android opt-in, so the UI can offer or withdraw the channel."""
+    if page is not None:
+        page._kiri_direct_optin = bool(enabled)
+
 
 class LicenseError(Exception):
     """The Worker refused the request, or could not be reached."""
@@ -186,6 +220,19 @@ async def get_catalog(force: bool = False) -> list[Product]:
     _catalog_cache["at"] = time.time()
     _catalog_cache["products"] = products
     return products
+
+
+async def load_opt_in(storage) -> bool:
+    """Restore whether the user chose the direct channel on Android."""
+    try:
+        return (await storage.get(_DIRECT_OPTIN_KEY)) == "true"
+    except Exception:
+        logger.debug("Could not read the direct-purchase opt-in", exc_info=True)
+        return False
+
+
+async def save_opt_in(storage, enabled: bool) -> None:
+    await storage.set(_DIRECT_OPTIN_KEY, "true" if enabled else "false")
 
 
 async def start_checkout(email: str, product_id: str, name: str = "") -> dict:

@@ -199,3 +199,99 @@ def test_a_forged_token_is_never_cached_as_entitlement():
 
     asyncio.run(run())
     assert state.is_premium is False
+
+
+# ── Where the direct channel may exist ─────────────────────────────────
+# The Play-distributed build uses Google Play Billing and nothing else. The
+# Worker is for builds with no Play Store to bill through, and on Android
+# only after the user says Play payment does not work for them.
+
+
+class AndroidPage(FakePage):
+    class _Platform:
+        @staticmethod
+        def is_mobile():
+            return True
+
+    platform = _Platform()
+
+
+def test_desktop_and_web_always_have_the_direct_channel():
+    # No Play Store exists there, so this is their only way to buy.
+    assert license.is_available(FakePage()) is True
+
+
+def test_android_starts_without_the_direct_channel():
+    assert license.is_available(AndroidPage()) is False
+
+
+def test_android_gets_it_only_after_the_user_asks():
+    page = AndroidPage()
+    license.set_available(page, True)
+    assert license.is_available(page) is True
+
+
+def test_the_opt_in_persists_across_restarts():
+    storage = FakeStorage()
+    asyncio.run(license.save_opt_in(storage, True))
+    assert asyncio.run(license.load_opt_in(storage)) is True
+    assert asyncio.run(license.load_opt_in(FakeStorage())) is False
+
+
+def test_a_play_build_never_shows_the_fallback_rows():
+    """The policy, asserted on the built UI rather than on intent."""
+    from state.service_ctx import Services
+
+    class _Store:
+        async def get(self, k, default=None):
+            return None
+
+        async def set(self, k, v):
+            return None
+
+    class _PlayPremium:
+        available = True  # a Play build: Billing is attached
+
+        async def buy(self):
+            return True
+
+        async def restore_purchases(self):
+            return None
+
+    services = Services(ai=None, storage=_Store(), premium=_PlayPremium())
+    page = AndroidPage()
+    license.set_available(page, False)
+    labels = _section_labels(page, services)
+    assert any("Google Play" in t for t in labels), "Play is the primary channel"
+    assert not any("Pay directly" in t for t in labels)
+    assert not any("Recovery ID" in t for t in labels)
+    # ...and the way in exists only as the user asking for help.
+    assert any("Google Play payment not working" in t for t in labels)
+
+    # Once they ask, the channel appears.
+    license.set_available(page, True)
+    after = _section_labels(page, services)
+    assert any("Pay directly" in t for t in after)
+    assert any("Recovery ID" in t for t in after)
+
+
+def _section_labels(page, services) -> set:
+    import flet as ft
+
+    from screens.settings.premium_section import build_premium_section
+
+    labels: set = set()
+
+    def walk(control):
+        if isinstance(control, ft.Text):
+            labels.add(control.value or "")
+        for attr in ("controls", "content", "leading", "trailing"):
+            child = getattr(control, attr, None)
+            if isinstance(child, (list, tuple)):
+                for c in child:
+                    walk(c)
+            elif isinstance(child, ft.BaseControl):
+                walk(child)
+
+    walk(build_premium_section(page, None, services))
+    return labels

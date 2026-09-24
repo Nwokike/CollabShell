@@ -50,6 +50,10 @@ STORAGE_PREMIUM_SOURCE = "collab_premium_source"
 STORAGE_PREMIUM_PRODUCT = "collab_premium_product"
 # The Kiri recovery ID — the user's way back in after clearing app data.
 STORAGE_LICENSE_RECOVERY = "kiri_recovery_id"
+# Android opt-in for the direct channel. The Play-distributed build uses
+# Google Play Billing; the direct channel is here only for the user who
+# tells us Play payment does not work for them.
+STORAGE_LICENSE_DIRECT = "kiri_license_direct_optin"
 STORAGE_LICENSE_TOKEN = "kiri_license_token"
 
 # ── Hardware options (from colab_cli.client.Accelerator) ──────────────────────

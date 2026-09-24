@@ -317,6 +317,13 @@ class AppController:
         # user). Entitlement is resolved BEFORE ad consent, so a paying user
         # is never asked about ads they will not see, and before ads preload.
         self.premium_service = PremiumService(page, self.storage)
+        # The direct (Worker) channel is for builds with no Play Store, and
+        # on Android only after the user says Google Play payment does not
+        # work for them. Restoring that choice is a one-key read.
+        from services.license_service import load_opt_in, set_available
+
+        if await load_opt_in(self.storage):
+            set_available(page, True)
         await self.premium_service.load_local()
         await self._load_license_offline()
         # Store reconciliation is a network round-trip: it runs after the
