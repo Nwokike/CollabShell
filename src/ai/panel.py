@@ -225,6 +225,27 @@ def AiPanelContent():
                             size=tokens.FONT_XS,
                             color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
+                        # The exact thing being approved — the code that
+                        # will run, the source that will replace the cell,
+                        # the command that will be typed. A label alone
+                        # ("Running code on work") is not consent.
+                        ft.Container(
+                            content=ft.Text(
+                                str(ai.approval.get("detail", ""))[:400],
+                                size=tokens.FONT_XS,
+                                color=ft.Colors.ON_SURFACE,
+                                selectable=True,
+                                style=ft.TextStyle(font_family="RobotoMono"),
+                            ),
+                            bgcolor=AppColors.TERMINAL_BG,
+                            border_radius=tokens.RADIUS_SM,
+                            padding=ft.Padding(
+                                tokens.SPACE_SM,
+                                tokens.SPACE_SM,
+                                tokens.SPACE_SM,
+                                tokens.SPACE_SM,
+                            ),
+                        ),
                         ft.Row(
                             [
                                 ft.FilledButton(

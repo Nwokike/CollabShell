@@ -705,6 +705,14 @@ class AppController:
                             "Session stop did not finish in time", exc_info=True
                         )
             finally:
+                # Close the AI router's HTTP client — without this the
+                # httpx pool outlives the app on long-running sessions.
+                try:
+                    from ai.session import ai_session
+
+                    await ai_session.router.close()
+                except Exception:
+                    logger.debug("AI router close failed", exc_info=True)
                 if self.storage:
                     try:
                         await self.storage.flush()

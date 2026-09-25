@@ -7,6 +7,37 @@ from collections.abc import Callable
 
 logger = logging.getLogger("colab_execution")
 
+_FUTURE_MARKER = "from __future__ import"
+
+
+def _insert_after_future_imports(prelude: str, code: str) -> str:
+    """Put `prelude` after any `from __future__ import ...` lines.
+
+    Python requires future imports to be the first statement in the file
+    (a module docstring may precede them), so an env prelude prepended
+    blindly turns valid notebook code into a SyntaxError.
+    """
+    lines = code.splitlines(keepends=True)
+    if not lines:
+        return prelude + code
+    insert_at = 0
+    stripped = lines[0].lstrip()
+    if stripped.startswith(('"""', "'''")):
+        # A module docstring is legal before future imports; skip it.
+        quote = stripped[:3]
+        if quote in lines[0][stripped.index(quote) + 3 :]:
+            insert_at = 1
+        else:
+            for index, line in enumerate(lines[1:], start=1):
+                if quote in line:
+                    insert_at = index + 1
+                    break
+    while insert_at < len(lines) and lines[insert_at].lstrip().startswith(
+        _FUTURE_MARKER
+    ):
+        insert_at += 1
+    return "".join(lines[:insert_at]) + prelude + "".join(lines[insert_at:])
+
 
 def _build_env_prelude() -> str:
     """Build `import os; os.environ[...] = ...` from the exec-env setting.
@@ -308,7 +339,10 @@ async def exec_code_impl(
         exec_code = code
         env_prelude = _build_env_prelude()
         if env_prelude:
-            exec_code = env_prelude + code
+            # Future imports must lead the file. Prepending `import os`
+            # ahead of `from __future__ import annotations` is a syntax
+            # error, and the user's own cell would fail with it.
+            exec_code = _insert_after_future_imports(env_prelude, code)
 
         def _execute_main():
             return runtime.execute_code(

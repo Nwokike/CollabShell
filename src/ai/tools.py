@@ -372,9 +372,13 @@ class ToolBox:
             timeout=120,
             auth_method="oauth2",
         )
-        text = "\n".join(
-            o.get("text", "") for o in (outputs or []) if isinstance(o, dict)
-        ).strip()
+        # The shared parser understands every output shape the notebook
+        # renders. Reading only the top-level `text` made the model answer
+        # "Ran with no output" for code whose result was right there in
+        # the cell (execute_result / display_data carry no top-level text).
+        from components.notebook_cell.actions import outputs_to_text
+
+        text = outputs_to_text(outputs or []).strip()
         return ToolResult(text or "Ran with no output.")
 
     async def _tool_install_packages(self, args: dict) -> ToolResult:

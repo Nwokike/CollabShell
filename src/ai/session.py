@@ -220,6 +220,11 @@ class AiSession:
         raw = None
         if self._storage is not None:
             raw = await self._storage.get(constants.STORAGE_AI_CHATS)
+            # The active chat id was written on every save but never read
+            # back, so the app always reopened the newest chat.
+            self._restore_active = (
+                await self._storage.get(constants.STORAGE_AI_ACTIVE_CHAT) or ""
+            )
         chats: list[dict] = []
         if raw:
             try:
