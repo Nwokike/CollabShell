@@ -42,6 +42,10 @@ SPECS = [
     ("pydantic_core", "2.46.4", "2.46.4-1"),
     ("pyarrow", "24.0.0", "24.0.0-2"),
     ("cryptography", "48.0.0", "48.0.0-10"),
+    # The PyPI pyzmq 27.2.0 x86_64 wheel is 4 KB-aligned; the forge's 27.1.0
+    # build is the one the emulator job may use. Shipping arm64 APKs pin
+    # 27.2.0 and never read this.
+    ("pyzmq", "27.1.0", "27.1.0-1"),
 ]
 
 # Relabeled from PyPI, not the mobile index: (dist, published, relabeled).

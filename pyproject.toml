@@ -45,15 +45,17 @@ startup_message = "Initializing Collab Shell..."
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"
 
-# Google Play requires 16 KB ELF page alignment on 64-bit ABIs. pyzmq 27.2.0's
-# android x86_64 wheel is 4 KB-aligned, so the emulator arch needs the forge's
-# 27.1.0-1 build (see scripts/repackage_android_wheels.py); the CI alignment
-# check decides. armeabi-v7a stays dropped: google-colab-cli pulls
-# jupyter-mimetypes → pyarrow, and flet's mobile index carries no
-# armeabi-v7a pyarrow wheel for ANY version (verified against the full index),
-# so a 32-bit APK cannot resolve its tree. The v2.1.2 32-bit APK had zero
-# downloads.
-target_arch = ["arm64-v8a", "x86_64"]
+# Shipping APKs stay arm64-only. Google Play requires 16 KB ELF page alignment
+# on 64-bit ABIs, and x86_64's 4 KB-aligned pyzmq wheel would fail that check —
+# so the emulator arch is built in its own non-blocking CI job (it may
+# depend on the forge's 16 KB pyzmq 27.1.0 build; that job is allowed to fail
+# without touching a release).
+#
+# armeabi-v7a stays dropped: google-colab-cli pulls jupyter-mimetypes →
+# pyarrow, and flet's mobile index carries no armeabi-v7a pyarrow wheel for ANY
+# version (verified against the full index), so a 32-bit APK cannot resolve
+# its tree. The v2.1.2 32-bit APK had zero downloads.
+target_arch = ["arm64-v8a"]
 
 # Android adaptive icons composite the launcher artwork (our transparent
 # icon.png) over a background layer. Flet's default is white — the white
