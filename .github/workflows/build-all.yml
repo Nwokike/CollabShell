@@ -135,7 +135,12 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: |
+          # Channel marker (KTV Player's exact mechanism): the AAB that
+          # ships to Play is the "play" build — free tier with ads, no
+          # purchase UI of any kind (core/build_channel.py).
+          echo 'CHANNEL = "play"' > src/core/build_channel.py
+          uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - name: Verify 16 KB page alignment (Google Play requirement)
         run: python scripts/check_elf_alignment.py build/aab/*.aab
       - name: Upload directly to GitHub Release
