@@ -34,9 +34,9 @@ logger = logging.getLogger("ai.credits")
 
 DAILY_CREDITS = 50
 PREMIUM_DAILY_CREDITS = 200
-# What a completed rewarded ad is worth. Small on purpose: it buys a
-# handful of good questions, not a day of unlimited use.
-AD_CREDIT_REWARD = 10
+# What a completed rewarded ad is worth — SpanInsight's number, adopted
+# exactly (add_credits(2)), with the same 30-second cooldown in the UI.
+AD_CREDIT_REWARD = 2
 COST_PER_TURN = 2
 _WINDOW_SECONDS = 24 * 60 * 60
 

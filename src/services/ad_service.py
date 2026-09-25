@@ -42,6 +42,9 @@ class AdService:
         self.interstitial = None
         self._on_close: Callable | None = None
         self._active_rewarded_ad = None
+        # Single-flight for rewarded ads: while True, new requests are
+        # refused instead of stacking another full-screen ad.
+        self._rewarded_showing = False
         self._can_request_ads: bool = True
         self._consent_manager = None
         # The gap DDGS/Sherlock enforce between interstitials. Without it a
@@ -216,15 +219,33 @@ class AdService:
         finally:
             await self.preload_interstitial(on_close=self._on_close)
 
-    async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
-        """Show a rewarded ad. A premium user is not asked to watch one —
-        the action simply runs."""
+    async def show_rewarded_interstitial(
+        self, on_close: Callable, grant_on_fail: bool = True
+    ) -> bool:
+        """Show a rewarded ad, running `on_close` when it completes.
+
+        `grant_on_fail` decides what a failed/no-fill ad is worth:
+
+        - True (gated actions like downloads): the action runs anyway —
+          no fill is a network outcome, not a user outcome, and the same
+          action runs free on desktop.
+        - False (credit rewards): nothing is granted. Paying credits for
+          an ad that never played would hand out free credits on every
+          network hiccup, and the ad never even opened for the user.
+
+        A single-flight guard sits over the whole flow: ten fast taps
+        cannot stack ten ads (the bug the owner hit on the phone).
+        """
+        if self._rewarded_showing:
+            return False
         if self._premium() or not _HAS_ADS or not self._is_mobile():
+            # No ad platform: gated actions still run. (The credit UI
+            # hides itself off mobile, so this branch serves actions only.)
             if inspect.iscoroutinefunction(on_close):
                 await on_close()
             else:
                 on_close()
-            return True
+            return grant_on_fail
 
         try:
             # Some mediation adapters fire on_error *and* on_close, or a
@@ -247,18 +268,22 @@ class AdService:
 
             async def _close(e):
                 self._active_rewarded_ad = None
+                self._rewarded_showing = False
                 await _run_action()
 
             async def _failed(e):
-                # No fill is a network outcome, not a user outcome:
-                # downloads and exports must still run, exactly as they
-                # do on desktop where no ad exists.
                 logger.warning(
                     "Rewarded interstitial failed: %s", getattr(e, "data", e)
                 )
                 self._active_rewarded_ad = None
+                self._rewarded_showing = False
+                if not grant_on_fail:
+                    return  # a credit reward is not paid for an ad that never played
+                # Gated action: no fill is a network outcome, not a user
+                # outcome — downloads and exports still run.
                 await _run_action()
 
+            self._rewarded_showing = True
             self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
@@ -268,8 +293,10 @@ class AdService:
             return True
         except Exception as err:
             logger.error("Failed to trigger rewarded interstitial: %s", err)
-            if inspect.iscoroutinefunction(on_close):
-                await on_close()
-            else:
-                on_close()
+            self._rewarded_showing = False
+            if grant_on_fail:
+                if inspect.iscoroutinefunction(on_close):
+                    await on_close()
+                else:
+                    on_close()
             return False

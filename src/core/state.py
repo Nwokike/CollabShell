@@ -57,6 +57,8 @@ class AppState:
     # True when premium rests on a locally verified signed token that the
     # server has not confirmed this session.
     premium_offline: bool = False
+    # Rewarded-ad cooldown (monotonic timestamp): next ad allowed after it.
+    ad_cooldown_end: float = 0.0
     onboarding_done: bool = False
 
     # ── Settings (every CLI flag exposed) ─────────────────────────────────────

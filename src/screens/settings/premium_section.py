@@ -14,6 +14,7 @@ there are two.
 from __future__ import annotations
 
 import logging
+import time
 
 import flet as ft
 
@@ -144,25 +145,41 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
         page.update()
 
     # ── Earn credits by watching an ad ──────────────────────────────────
+    # SpanInsight's rule, adopted exactly: 2 credits per completed ad,
+    # one ad at a time, 30 seconds between ads. The cooldown is stamped
+    # BEFORE the ad opens, so no burst of taps can open a burst of ads —
+    # the failure the owner hit on the phone.
+    AD_COOLDOWN_SECONDS = 30.0
 
-    async def _watch_ad(e=None):
-        if ai is None:
+    async def _watch_ad(e=None, button: ft.TextButton | None = None):
+        now = time.monotonic()
+        if now < state.ad_cooldown_end:
+            remaining = int(state.ad_cooldown_end - now) + 1
+            await _snack(f"Next ad in {remaining}s.")
             return
         ad = services.ad_service
-        if ad is None:
+        if ad is None or ai is None or ai.ledger is None:
             return
-        done = {"value": False}
+        state.ad_cooldown_end = now + AD_COOLDOWN_SECONDS
+        if button is not None:
+            button.disabled = True
+            page.update()
 
         async def _grant():
-            if done["value"]:
-                return
-            done["value"] = True
             await ai.ledger.add_bonus(AD_CREDIT_REWARD)
             ai.credits_left = await ai.ledger.remaining()
             await _snack(f"+{AD_CREDIT_REWARD} credits. Thanks for watching.")
-            page.update()
 
-        await ad.show_rewarded_interstitial(_grant)
+        try:
+            started = await ad.show_rewarded_interstitial(
+                _grant, grant_on_fail=False
+            )
+            if not started:
+                await _snack("No ad available right now — try again later.")
+        finally:
+            if button is not None:
+                button.disabled = False
+            page.update()
 
     # ── Build the rows ──────────────────────────────────────────────────
     # The Play AAB is a free-only build (CHANNEL = "play"): it sells
@@ -306,6 +323,26 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
     # Credits: the visible benefit, with a way to earn more.
     if ai is not None:
         controls.append(ft.Divider(height=tokens.SPACE_SM))
+
+        def _ad_button():
+            # The reward only exists where ads exist: a desktop button
+            # would grant credits with nothing watched (and no ad SDK).
+            try:
+                mobile = page.platform.is_mobile()
+            except Exception:
+                mobile = False
+            if not mobile or services.ad_service is None or state.is_premium:
+                return (
+                    _status_chip("Premium", AppColors.WARNING)
+                    if state.is_premium
+                    else None
+                )
+            return ft.TextButton(
+                f"+{AD_CREDIT_REWARD}",
+                icon=ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED,
+                on_click=lambda e: page.run_task(_watch_ad, e, e.control),
+            )
+
         controls.append(
             _row(
                 ft.Icons.CONFIRMATION_NUMBER_ROUNDED,
@@ -313,13 +350,7 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
                 f"{DAILY_CREDITS} a day free, {PREMIUM_DAILY_CREDITS} with "
                 f"Premium. Each model call uses 2; failed calls are refunded. "
                 f"Credits from ads never expire.",
-                ft.TextButton(
-                    f"+{AD_CREDIT_REWARD}",
-                    icon=ft.Icons.PLAY_CIRCLE_OUTLINE_ROUNDED,
-                    on_click=lambda e: page.run_task(_watch_ad, e),
-                )
-                if not state.is_premium
-                else _status_chip("Premium", AppColors.WARNING),
+                _ad_button(),
             )
         )
 
