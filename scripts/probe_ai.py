@@ -475,6 +475,7 @@ class _FakePremium:
     """A Play-capable build, so the probe sees the whole section."""
 
     available = True
+    has_products = False  # dormant until a merchant account exists
     price = "$4.99"
 
     async def buy(self):
@@ -486,17 +487,17 @@ class _FakePremium:
 
 free_services = Services(ai=AiSession(), storage=_Store(), premium=_FakePremium())
 free_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
-assert any("Google Play" in t for t in free_text), "Play must be offered first"
-assert any("Pay directly" in t for t in free_text), "the fallback must be there"
+assert any("Pay directly" in t for t in free_text), "desktop needs Kiri"
 assert any("credits" in t.lower() for t in free_text)
+# Play Billing is dormant until a merchant account exists: no dead buttons.
+assert not any("Buy with Google Play" in t for t in free_text)
 
 state.is_premium = True
 state.premium_source = "play"
 premium_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
 assert any("Premium is on" in t for t in premium_text)
-assert any("Google Play" in t for t in premium_text), "restore must stay available"
 state.is_premium = False
-print("premium section: Play on Android, direct on desktop, never both by default", flush=True)
+print("premium section: Kiri on desktop, dormant Play rows, credits always", flush=True)
 
 # Ads are off for premium, everywhere, through one gate.
 from services.ad_service import AdService
