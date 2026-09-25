@@ -190,6 +190,28 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
     play_build = CHANNEL == "play"
     controls: list[ft.Control] = []
 
+    if not play_build and state.premium_status in ("expired", "revoked"):
+        headline, detail = (
+            (
+                "Premium expired",
+                "Your paid period ended. Renew to switch Premium back on.",
+            )
+            if state.premium_status == "expired"
+            else (
+                "Premium refunded",
+                "A refund turned Premium off. Buy again any time.",
+            )
+        )
+        controls.append(
+            _row(
+                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                headline,
+                detail,
+                _status_chip(state.premium_status, AppColors.ERROR),
+            )
+        )
+        controls.append(ft.Divider(height=tokens.SPACE_SM))
+
     if not play_build:
         if state.is_premium:
             source = (
@@ -201,14 +223,30 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
                 else f"Premium is on, through {source}. Not confirmed by the "
                 "server this session — you stay signed in either way."
             )
-            controls.append(
-                _row(
-                    ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                    "Premium is on",
-                    note,
-                    _status_chip("Active", AppColors.SUCCESS),
+            if state.premium_status == "grace":
+                # A recurring payment failed; the Worker grants a grace
+                # window before expiry. Say so instead of showing "Active".
+                note = (
+                    "Payment overdue — finish your payment to keep Premium. "
+                    "You still have full access for now."
                 )
-            )
+                controls.append(
+                    _row(
+                        ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                        "Payment overdue",
+                        note,
+                        _status_chip("Grace", AppColors.WARNING),
+                    )
+                )
+            else:
+                controls.append(
+                    _row(
+                        ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                        "Premium is on",
+                        note,
+                        _status_chip("Active", AppColors.SUCCESS),
+                    )
+                )
         else:
             controls.append(
                 _row(

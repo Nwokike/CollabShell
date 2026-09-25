@@ -388,3 +388,48 @@ def _section_labels(page, services) -> set:
 
     walk(build_premium_section(page, None, services))
     return labels
+
+
+# ── Renewal guard ──────────────────────────────────────────────────────
+
+
+def _grant(status: str, paid_through=None):
+    return asyncio.run(
+        license.apply_entitlement(
+            license.Entitlement(
+                status=status, product="monthly", paid_through=paid_through
+            )
+        )
+    )
+
+
+def test_grace_grants_but_is_named_honestly():
+    assert _grant("grace") is True
+    assert state.is_premium is True
+    assert state.premium_status == "grace"
+
+
+def test_active_records_the_status_and_expiry():
+    assert _grant("active", paid_through=1750000000) is True
+    assert state.premium_status == "active"
+    assert state.premium_paid_through == 1750000000
+
+
+def test_expiry_records_the_status_so_the_card_can_say_so():
+    _grant("active")
+    assert _grant("expired") is False
+    assert state.is_premium is False
+    assert state.premium_status == "expired"
+
+
+def test_refund_records_the_status():
+    _grant("active")
+    assert _grant("revoked") is False
+    assert state.premium_status == "revoked"
+
+
+def test_an_unknown_check_leaves_the_recorded_status_alone():
+    _grant("active")
+    assert _grant("unknown") is False
+    assert state.is_premium is True
+    assert state.premium_status == "active"

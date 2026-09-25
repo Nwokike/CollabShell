@@ -55,6 +55,7 @@ STORAGE_LICENSE_RECOVERY = "kiri_recovery_id"
 # tells us Play payment does not work for them.
 STORAGE_LICENSE_DIRECT = "kiri_license_direct_optin"
 STORAGE_LICENSE_TOKEN = "kiri_license_token"
+STORAGE_LICENSE_PAID_THROUGH = "kiri_license_paid_through"
 
 # ── Hardware options (from colab_cli.client.Accelerator) ──────────────────────
 # Free tier: CPU (always), T4 GPU (limited), TPU v5e1/v6e1 (limited)

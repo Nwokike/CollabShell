@@ -311,6 +311,10 @@ async def store_entitlement(storage, entitlement: Entitlement) -> None:
         await storage.set(constants.STORAGE_LICENSE_RECOVERY, entitlement.recovery_id)
     if entitlement.token:
         await storage.set(constants.STORAGE_LICENSE_TOKEN, entitlement.token)
+    if entitlement.paid_through is not None:
+        await storage.set(
+            constants.STORAGE_LICENSE_PAID_THROUGH, str(entitlement.paid_through)
+        )
 
 
 async def cached_entitlement(storage) -> Entitlement | None:
@@ -332,7 +336,9 @@ async def apply_entitlement(entitlement: Entitlement) -> bool:
     """Move app state from an entitlement. Returns True when it grants.
 
     Only a definitive server ruling may clear an existing grant; anything
-    else leaves the user exactly where they were.
+    else leaves the user exactly where they were. The status itself is
+    always recorded so the renewal card can say "Payment overdue" rather
+    than flattening everything into a boolean.
     """
     from core.state import state
 
@@ -341,12 +347,24 @@ async def apply_entitlement(entitlement: Entitlement) -> bool:
         state.premium_source = "kiri"
         state.premium_product = entitlement.product
         state.premium_offline = entitlement.offline
+        state.premium_status = entitlement.status
+        state.premium_paid_through = (
+            float(entitlement.paid_through)
+            if entitlement.paid_through is not None
+            else None
+        )
         return True
     if entitlement.is_definitive:
         state.is_premium = False
         state.premium_source = ""
         state.premium_product = ""
         state.premium_offline = False
+        state.premium_status = entitlement.status
+        state.premium_paid_through = (
+            float(entitlement.paid_through)
+            if entitlement.paid_through is not None
+            else None
+        )
     return False
 
 

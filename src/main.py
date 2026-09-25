@@ -763,6 +763,16 @@ class AppController:
             except Exception as exc:
                 logger.warning("[lifecycle] connectivity probe failed: %s", exc)
 
+            # Premium re-check on every resume (DDGS behavior): a lapsed
+            # subscription or a refund is caught the moment the user comes
+            # back, and a network failure here changes nothing — only an
+            # authoritative ruling downgrades.
+            if state.is_online:
+                try:
+                    await self._reconcile_premium()
+                except Exception:
+                    logger.warning("Premium re-check on resume failed", exc_info=True)
+
             if state.is_online and state.is_authenticated and state.active_sessions:
                 # Re-sync assignments first: it re-mints the short-lived
                 # runtime-proxy tokens in the local store, so the terminal

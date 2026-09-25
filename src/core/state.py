@@ -57,6 +57,13 @@ class AppState:
     # True when premium rests on a locally verified signed token that the
     # server has not confirmed this session.
     premium_offline: bool = False
+    # The authoritative entitlement status, when a server (or token) ruled:
+    # active | grace | expired | revoked | "" when unknown. Drives the
+    # renewal copy — "Payment overdue", "Premium expired", "Premium
+    # refunded" — instead of flattening everything into a boolean.
+    premium_status: str = ""
+    # When the paid period ends (epoch seconds), for the renewal card.
+    premium_paid_through: float | None = None
     # Rewarded-ad cooldown (monotonic timestamp): next ad allowed after it.
     ad_cooldown_end: float = 0.0
     onboarding_done: bool = False
