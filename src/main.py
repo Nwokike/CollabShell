@@ -150,6 +150,33 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
+def _log_kernel_client() -> None:
+    """Print which jupyter-kernel-client got packaged, and whether it has
+    the websocket symbols Drive-OAuth interception needs.
+
+    The Android packager resolves dependencies itself (it ignores uv.lock
+    and the uv override), so this line is the only way to tell from a
+    device log whether Drive mount has the machinery it requires.
+    """
+    try:
+        import jupyter_kernel_client as jkc
+
+        version = getattr(jkc, "__version__", "unknown")
+    except Exception as exc:  # pragma: no cover - import always succeeds here
+        logger.warning("jupyter-kernel-client not importable: %s", exc)
+        return
+    try:
+        from jupyter_kernel_client.utils import (  # noqa: F401
+            deserialize_msg_from_ws_default,
+        )
+        from jupyter_kernel_client.wsclient import JupyterSubprotocol  # noqa: F401
+
+        drive = "Drive-OAuth ws symbols: present"
+    except Exception as exc:
+        drive = f"Drive-OAuth ws symbols: MISSING ({exc})"
+    logger.info("[startup] jupyter-kernel-client %s — %s", version, drive)
+
+
 class AppController:
     """Initializes backend services, handles lifecycle events, and mounts the AppShell."""
 
@@ -312,6 +339,7 @@ class AppController:
         self.storage = StorageService(page)
         self.ad_service = AdService(page)
         state.ad_service = self.ad_service
+        _log_kernel_client()
 
         # The Assistant shares the storage service for its credit ledger,
         # settings, and chat history.
