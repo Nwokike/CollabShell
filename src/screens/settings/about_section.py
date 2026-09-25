@@ -8,7 +8,6 @@ import flet as ft
 
 from core import constants, tokens
 from core.styles import glass_card, section_header
-from core.theme import AppColors
 from core.urls import get_url_launcher
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ def _open_version_dialog(page: ft.Page, state):
 
 
 def build_about_section(page: ft.Page, state, services) -> ft.Column:
-    """App metadata, version info, terms links, and CollabShell Pro card."""
+    """App metadata, version info, and terms links."""
     cli_version = _get_cli_version()
 
     async def _launch_privacy(e=None):
@@ -138,71 +137,6 @@ def build_about_section(page: ft.Page, state, services) -> ft.Column:
                     tokens.SPACE_XS,
                     tokens.SPACE_LG,
                     tokens.SPACE_XS,
-                ),
-            ),
-            # Pro tease card
-            ft.Container(
-                content=ft.Row(
-                    controls=[
-                        ft.Icon(
-                            ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                            size=tokens.ICON_LG,
-                            color=ft.Colors.with_opacity(0.5, ft.Colors.PRIMARY),
-                        ),
-                        ft.Column(
-                            controls=[
-                                ft.Text(
-                                    "CollabShell Pro",
-                                    size=tokens.FONT_MD,
-                                    weight=ft.FontWeight.W_600,
-                                    color=ft.Colors.with_opacity(
-                                        0.6, ft.Colors.ON_SURFACE
-                                    ),
-                                ),
-                                ft.Text(
-                                    "Zero ads • Unlimited sessions • Priority support",
-                                    size=tokens.FONT_XS,
-                                    color=ft.Colors.with_opacity(
-                                        0.4, ft.Colors.ON_SURFACE
-                                    ),
-                                ),
-                            ],
-                            spacing=tokens.SPACE_XXS,
-                            expand=True,
-                        ),
-                        ft.Container(
-                            content=ft.Text(
-                                "SOON",
-                                size=tokens.FONT_XXS,
-                                weight=ft.FontWeight.W_700,
-                                color=AppColors.BADGE_TPU,
-                            ),
-                            padding=ft.Padding(
-                                tokens.SPACE_SM,
-                                tokens.SPACE_XXS,
-                                tokens.SPACE_SM,
-                                tokens.SPACE_XXS,
-                            ),
-                            border_radius=tokens.RADIUS_SM,
-                            bgcolor=ft.Colors.with_opacity(0.12, AppColors.BADGE_TPU),
-                        ),
-                    ],
-                    spacing=tokens.SPACE_MD,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                padding=ft.Padding(
-                    tokens.SPACE_LG, tokens.SPACE_MD, tokens.SPACE_LG, tokens.SPACE_MD
-                ),
-                margin=ft.Margin(
-                    tokens.SPACE_LG,
-                    tokens.SPACE_XS,
-                    tokens.SPACE_LG,
-                    tokens.SPACE_XS,
-                ),
-                border_radius=tokens.RADIUS_MD,
-                bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.ON_SURFACE),
-                border=ft.Border.all(
-                    1, ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
                 ),
             ),
         ],
