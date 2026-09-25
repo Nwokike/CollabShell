@@ -12,26 +12,17 @@ dependencies = [
     "flet-desktop>=1.0.1; sys_platform == 'win32'",
     "flet-terminal>=0.3.9",
     "google-colab-cli>=0.7.2",
-    # Android builds package with Python 3.14 and resolve these fresh inside
-    # the APK (uv.lock does not apply there). These versions exist as Android
-    # wheels only on flet's mobile index, where they are published as PEP 440
-    # post-releases — hence the explicit .postN pins. The latest releases on
-    # PyPI (pydantic-core 2.46.5, pyarrow 25.0.1, rpds-py 2026.6.3,
-    # cryptography 50.0.1) ship no Android wheels at all. pyarrow arrives via
-    # jupyter-mimetypes, which leaves it unpinned upstream.
-    "pydantic==2.13.4",
-    "rpds-py==2026.5.1",
-    "cryptography==48.0.0",
-    "pyarrow==24.0.0",
+    # google-colab-cli 0.6.0 calls jupyter_kernel_client.KernelClient(...),
+    # which jupyter-kernel-client 1.0.0 renamed to JupyterKernelClient.
+    # Pin below 1.0 until colab_cli supports the new API.
+    "jupyter-kernel-client<1.0",
     "rich>=15.0.0",
-    "flet-local-auth>=1.0.1",
-    "flet-billing>=0.1.1",
 ]
 
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 15
+build_number = 16
 # Shared launcher-icon background (iOS flattening + Android fallback).
 icon_background = "#1E1E2E"
 
