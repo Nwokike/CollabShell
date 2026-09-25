@@ -96,8 +96,20 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
     # ── Buy through the Kiri Worker (the fallback) ──────────────────────
 
     async def _open_checkout(e=None):
-        dlg = _checkout_dialog(page, services)
-        page.show_dialog(dlg)
+        """Fetch the Worker's catalog first, then show a plain dialog.
+
+        No hooks here: this runs from an event handler, where Flet has no
+        renderer — the mistake that made the old version crash the moment
+        it was tapped. Plain controls are safe anywhere.
+        """
+        if not license.is_available(page):
+            return
+        try:
+            products = await license.get_catalog()
+        except license.LicenseError as ex:
+            await _snack(str(ex), is_error=True)
+            return
+        page.show_dialog(_checkout_dialog(page, services, products))
 
     async def _show_recovery(e=None):
         stored = await services.storage.get(constants.STORAGE_LICENSE_RECOVERY)
@@ -300,8 +312,12 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
     )
 
 
-def _checkout_dialog(page, services) -> ft.Control:
-    """Email + tier chooser for the direct (Worker) channel."""
+def _checkout_dialog(page, services, products) -> ft.Control:
+    """Email + tier chooser for the direct (Worker) channel.
+
+    `products` was fetched before this dialog was built — building UI in
+    an event handler is fine as long as no Flet hooks are used.
+    """
     email_field = ft.TextField(
         label="Email for your receipt",
         hint_text="you@example.com",
@@ -310,8 +326,7 @@ def _checkout_dialog(page, services) -> ft.Control:
         dense=True,
     )
     error_text = ft.Text("", size=tokens.FONT_XS, color=AppColors.ERROR)
-    tier = {"id": "lifetime"}
-    tier_buttons: dict[str, ft.Button] = {}
+    tier = {"id": ""}  # pre-selected below from the catalog
 
     def _select(product_id: str, e=None):
         tier["id"] = product_id
@@ -351,29 +366,31 @@ def _checkout_dialog(page, services) -> ft.Control:
             "restore this purchase.",
         )
 
-    from services import license_service as _license
-
-    async def _prices():
-        try:
-            return await _license.get_catalog()
-        except _license.LicenseError:
-            return []
-
-    async def _build_tiers(container: ft.Column):
-        products = await _prices()
-        container.controls.clear()
-        for product in products:
-            interval = f"/{product.interval}" if product.interval else ""
-            button = ft.TextButton(
-                f"{product.label}{interval}",
-                on_click=lambda e, pid=product.id: _select(pid, e),
+    tier_buttons: dict[str, ft.Button] = {}
+    tier_rows: list[ft.Control] = []
+    for product in products:
+        interval = f"/{product.interval}" if product.interval else ""
+        button = ft.TextButton(
+            f"{product.label}{interval}",
+            on_click=lambda e, pid=product.id: _select(pid, e),
+        )
+        tier_buttons[product.id] = button
+        tier_rows.append(button)
+    if not tier_rows:
+        tier_rows.append(
+            ft.Text(
+                "Prices could not be loaded — try again shortly.",
+                size=tokens.FONT_XS,
+                color=AppColors.ERROR,
             )
-            tier_buttons[product.id] = button
-            container.controls.append(button)
-        page.update()
-
-    tier_box = ft.Column(controls=[ft.Text("Loading prices…", size=tokens.FONT_XS)])
-    ft.on_mounted(lambda: page.run_task(_build_tiers, tier_box))
+        )
+    # Pre-select the first tier so Continue always has a valid choice.
+    if tier_buttons:
+        first = next(iter(tier_buttons))
+        tier["id"] = first
+        tier_buttons[first].style = ft.ButtonStyle(
+            bgcolor=ft.Colors.with_opacity(0.16, ft.Colors.PRIMARY)
+        )
 
     return ft.AlertDialog(
         title=ft.Text("Pay directly"),
@@ -386,7 +403,7 @@ def _checkout_dialog(page, services) -> ft.Control:
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 email_field,
-                tier_box,
+                ft.Column(tier_rows, spacing=tokens.SPACE_XXS, tight=True),
                 error_text,
             ],
             spacing=tokens.SPACE_SM,

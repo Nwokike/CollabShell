@@ -3,8 +3,14 @@ keyboard rises from the bottom edge and the sheet keeps its own inset
 padding so the input stays visible.
 
 The sheet is disposable. The conversation lives in `ai.session`, so
-minimizing (pop) keeps the reply streaming in the notebook or terminal
+minimizing keeps the reply streaming in the notebook or terminal
 underneath — that visibility is the whole point.
+
+Mounting rule (learned the hard way): a `@ft.component` may only be
+constructed during another component's render. Event handlers have no
+renderer, so `open_ai_panel` never builds the panel — it flips
+`ai.sheet_open`, and `AiSheetHost` (rendered once inside AppShell)
+constructs the sheet and portals it with Flet's `use_dialog` hook.
 """
 
 from __future__ import annotations
@@ -18,10 +24,6 @@ from ai.session import AiSession
 from core import tokens
 from core.theme import AppColors
 from state import ServiceCtx
-
-# The open sheet, so a second shortcut/FAB tap focuses the existing one
-# instead of stacking sheets that pop_dialog would bury under.
-_open_sheet: ft.BottomSheet | None = None
 
 # How long to wait between model-list attempts while Kiri is cold. Three
 # tries covers a busy free tier waking up without leaving the user staring
@@ -362,11 +364,11 @@ def AiPanelContent():
                         on_click=_open_chats,
                     ),
                     ft.IconButton(
-                        # Minimize: pop the sheet, the reply keeps streaming.
+                        # Minimize: hide the sheet, the reply keeps streaming.
                         ft.Icons.VISIBILITY_OFF_OUTLINED,
                         tooltip="Minimize — the reply keeps going",
                         icon_size=tokens.ICON_SM,
-                        on_click=lambda e: page.pop_dialog(),
+                        on_click=lambda e: setattr(ai, "sheet_open", False),
                     ),
                 ],
                 spacing=tokens.SPACE_XS,
@@ -435,28 +437,54 @@ def _model_label(model) -> str:
 
 
 def open_ai_panel(page, ai) -> None:
-    """Show the AI sheet. Safe to call from any screen or shortcut.
-
-    Takes the session, not the services object: the panel itself reads
-    `ServiceCtx` for everything else, and the only job of this argument
-    is the "is the Assistant even available" check.
+    """Show the AI sheet. Safe to call from any screen or shortcut — and
+    from an event handler, which is exactly where the old version crashed:
+    constructing the panel there has no renderer to render it in. This
+    only flips a flag; AiSheetHost does the constructing during a render.
     """
-    global _open_sheet
     if ai is None:
         return
-    if _open_sheet is not None and _open_sheet.open:
-        return  # already showing — never stack sheets
-    height = (page.height or 700) * 0.85
-    _open_sheet = ft.BottomSheet(
-        content=ft.Container(
-            content=AiPanelContent(),
-            height=height,
-        ),
-        show_drag_handle=True,
-        # The body is an expanding ListView: without scrollable=True the
-        # sheet ignores the height and stops around mid-screen.
-        scrollable=True,
-        # Keyboard-aware: the composer rises with the keyboard.
-        maintain_bottom_view_insets_padding=True,
-    )
-    page.show_dialog(_open_sheet)
+    ai.sheet_open = True
+
+
+@ft.component
+def AiSheetHost() -> ft.Control:
+    """Owns the Assistant sheet, mounted once inside AppShell's tree.
+
+    Everything about this exists because of one Flet 1.0 rule: a component
+    function can only run inside a render. The old code built the panel
+    inside `show_dialog` calls from button taps — no renderer there — so
+    every entry point crashed on a real device. Here the sheet is built
+    during THIS component's render (renderer active) and portalled to the
+    dialog overlay with `use_dialog`, the same pattern KTV Player uses.
+    """
+    services = ft.use_context(ServiceCtx)
+    ai: AiSession | None = services.ai
+    page = ft.context.page
+
+    if ai is not None and ai.sheet_open:
+        height = (page.height or 700) * 0.85
+
+        def _dismissed(e=None):
+            # The user dragged the sheet away or pressed back: keep the
+            # flag true to what is on screen or the next render reopens it.
+            ai.sheet_open = False
+
+        sheet = ft.BottomSheet(
+            content=ft.Container(
+                content=AiPanelContent(),
+                height=height,
+            ),
+            show_drag_handle=True,
+            on_dismiss=_dismissed,
+            # The body is an expanding ListView: without scrollable=True the
+            # sheet ignores the height and stops around mid-screen.
+            scrollable=True,
+            # Keyboard-aware: the composer rises with the keyboard.
+            maintain_bottom_view_insets_padding=True,
+        )
+        ft.use_dialog(sheet)
+    else:
+        ft.use_dialog(None)
+
+    return ft.Container(height=0, visible=False)

@@ -130,6 +130,10 @@ class AiSession:
         self.cell_focus: str = ""  # "cell 3" — the cell the user pointed at
         self.chats: list[dict] = []  # stored conversations, newest first
         self.active_chat_id: str = ""
+        # Whether the Assistant sheet is on screen. The sheet is mounted by
+        # AiSheetHost through Flet's use_dialog hook; an event handler must
+        # never construct the panel itself (there is no renderer context).
+        self.sheet_open: bool = False
 
         # ── Internals ────────────────────────────────────────────────────
         self._storage = None

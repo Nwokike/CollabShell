@@ -15,7 +15,7 @@ from flet import Control
 
 # Imported at module level so the header icon and the global Ctrl+Shift+K
 # binding resolve without a per-call import.
-from ai.panel import open_ai_panel
+from ai.panel import AiSheetHost, open_ai_panel
 from components.offline_flow import OfflineFlow
 from components.shortcuts_help import build_help_button, open_shortcuts_help
 from core import constants, tokens
@@ -488,6 +488,10 @@ def AppShell() -> Control:
             controls=[
                 header_bar,
                 ft.Container(content=screen, expand=True),
+                # The Assistant sheet's owner. Must be inside this render
+                # tree: constructing its panel from an event handler has no
+                # renderer (the crash that broke the Assistant on Android).
+                AiSheetHost(key=ft.ValueKey("ai_sheet_host")),
             ],
             spacing=0,
             expand=True,
