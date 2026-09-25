@@ -3,7 +3,7 @@
 APP_NAME = "Colab Shell"
 APP_FULL_NAME = "Colab Shell: Notebook & TTY"
 APP_VERSION = "3.0.0"
-APP_BUILD_NUMBER = 16
+APP_BUILD_NUMBER = 13
 UPDATE_CONFIG_URL = (
     "https://raw.githubusercontent.com/Nwokike/CollabShell/main/version.json"
 )
@@ -53,7 +53,6 @@ STORAGE_LICENSE_RECOVERY = "kiri_recovery_id"
 # Android opt-in for the direct channel. The Play-distributed build uses
 # Google Play Billing; the direct channel is here only for the user who
 # tells us Play payment does not work for them.
-STORAGE_LICENSE_DIRECT = "kiri_license_direct_optin"
 STORAGE_LICENSE_TOKEN = "kiri_license_token"
 STORAGE_LICENSE_PAID_THROUGH = "kiri_license_paid_through"
 

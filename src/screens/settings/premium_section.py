@@ -1,14 +1,11 @@
-"""Premium settings — both payment channels, one honest screen.
+"""Premium settings — one backend: the Kiri License Worker.
 
-CollabShell is on Google Play, so **Play Billing is the primary way to buy**
-and gets the top of the screen. The Kiri License Worker is the **fallback
-for users Google billing cannot serve** — regions where Play payment is not
-offered, and desktop builds that have no Play Store at all.
-
-Neither channel hides the other, and a user who bought through one is never
-asked to buy again through the other. The copy says which channel is for
-whom, because "two paywalls" is only confusing when nobody explains why
-there are two.
+KTV Player's model, adopted wholesale. Google Play Billing is not part of
+this build: the Play Console in use has no Google Payments merchant
+profile, so there is nothing to sell through it. The Play AAB is stamped
+CHANNEL = "play" at build time and this whole screen reduces to the free
+tier — no purchase rows of any kind. Direct APKs, desktop and web sell
+through license.kiri.ng with no Google permission involved.
 """
 
 from __future__ import annotations
@@ -75,26 +72,7 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
 
         show_notification(page, message, is_error=is_error)
 
-    # ── Buy through Play (the default channel) ──────────────────────────
-
-    async def _buy_play(e=None):
-        started = await premium.buy()
-        if not started:
-            await _snack(
-                "Google Play could not start the purchase. If you are in a "
-                "region where Play payment does not work, use the direct "
-                "purchase below.",
-                is_error=True,
-            )
-            return
-        # The result arrives through the purchase stream; the UI updates
-        # when state.is_premium flips.
-
-    async def _restore_play(e=None):
-        await premium.restore_purchases()
-        await _snack("Checking Google Play for a previous purchase…")
-
-    # ── Buy through the Kiri Worker (the fallback) ──────────────────────
+    # ── Buy through the Kiri Worker (the only channel) ───────────────────
 
     async def _open_checkout(e=None):
         """Fetch the Worker's catalog first, then show a plain dialog.
@@ -119,29 +97,39 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
             return
         await _snack(f"Your recovery ID is {stored}")
 
-    async def _enable_direct(e=None):
-        """The user says Google Play payment does not work for them. Only
-        now does the direct channel exist on this build — it is their
-        choice, not an offer."""
-        await license.save_opt_in(services.storage, True)
-        license.set_available(page, True)
-        await _snack("Direct purchase options unlocked below.")
-        page.update()
-
     async def _restore_license(e=None):
+        """Redeem the saved recovery ID through the service (which stores
+        and applies the entitlement, then re-renders the section)."""
         stored = await services.storage.get(constants.STORAGE_LICENSE_RECOVERY)
         if not stored:
             await _snack("No recovery ID saved on this device.", is_error=True)
             return
         try:
-            entitlement = await license.restore(stored)
+            entitlement = await premium.kiri_restore(str(stored))
         except license.LicenseError as ex:
             await _snack(str(ex), is_error=True)
             return
-        if await license.apply_entitlement(entitlement):
+        if entitlement.grants_access:
             await _snack("Premium restored.")
         else:
             await _snack(f"That license is {entitlement.status}.", is_error=True)
+        page.update()
+
+    async def _check_status(e=None):
+        """Manual re-check, like KTV's Settings action."""
+        try:
+            entitlement = await premium.kiri_check_status()
+        except license.LicenseError as ex:
+            await _snack(str(ex), is_error=True)
+            return
+        if entitlement is None:
+            await _snack("No saved purchase to check.")
+            return
+        await _snack(
+            "Premium is active." if entitlement.grants_access
+            else f"That license is {entitlement.status}.",
+            is_error=not entitlement.grants_access,
+        )
         page.update()
 
     # ── Earn credits by watching an ad ──────────────────────────────────
@@ -214,9 +202,7 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
 
     if not play_build:
         if state.is_premium:
-            source = (
-                "Google Play" if state.premium_source == "play" else "Kiri license"
-            )
+            source = "Kiri license"
             note = (
                 f"Premium is on, through {source}."
                 if not state.premium_offline
@@ -254,56 +240,16 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
                     "Go Premium",
                     f"No ads, and {PREMIUM_DAILY_CREDITS} AI credits a day "
                     f"instead of {DAILY_CREDITS}.",
-                    # The trailing action depends on what this build can
-                    # actually offer; the rows below carry the details.
                     ft.TextButton(
-                        "See options", on_click=lambda e: page.run_task(_open_checkout, e)
-                    )
-                    if license.is_available(page)
-                    else (
-                        ft.TextButton(
-                            "Buy", on_click=lambda e: page.run_task(_buy_play, e)
-                        )
-                        if premium.has_products
-                        else None
+                        "See options",
+                        on_click=lambda e: page.run_task(_open_checkout, e),
                     ),
                 )
             )
 
-        # Play Billing stays dormant until the store actually lists the
-        # products — no Google Payments merchant profile exists yet, so
-        # today these rows render nowhere instead of showing buttons that
-        # can only fail. The day products exist, they appear on their own.
-        if premium.available and premium.has_products:
-            controls.append(
-                _row(
-                    ft.Icons.SHOPPING_CART_ROUNDED,
-                    "Buy with Google Play",
-                    "Your purchase is tied to your Play account and restores "
-                    "on any device you sign into.",
-                    ft.TextButton(
-                        "Buy", on_click=lambda e: page.run_task(_buy_play, e)
-                    ),
-                )
-            )
-            controls.append(ft.Divider(height=tokens.SPACE_SM))
-            controls.append(
-                _row(
-                    ft.Icons.RESTORE_ROUNDED,
-                    "Restore from Google Play",
-                    "Already paid? This re-checks your Play account.",
-                    ft.TextButton(
-                        "Restore",
-                        on_click=lambda e: page.run_task(_restore_play, e),
-                    ),
-                )
-            )
-
-        # ── The direct channel, where it is allowed to exist ────────────
-        # Desktop and web have no Play Store, so this is their only way in.
-        # On a direct Android APK it stays out of the way until the user
-        # says Google Play payment does not work for them. The Play AAB
-        # never reaches this branch.
+        # ── The Kiri License Worker — the only purchase channel ─────────
+        # Reached on direct APKs, desktop and web alike. The Play AAB
+        # never enters this branch at all.
         if license.is_available(page):
             controls.append(ft.Divider(height=tokens.SPACE_SM))
             controls.append(
@@ -332,32 +278,25 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
                 _row(
                     ft.Icons.RESTORE_ROUNDED,
                     "Restore a purchase",
-                    "Enter the recovery ID from your receipt.",
-                    ft.TextButton(
-                        "Restore",
-                        on_click=lambda e: page.run_task(_restore_license, e),
+                    "Enter the recovery ID from your receipt, or re-check "
+                    "the one saved on this device.",
+                    ft.Row(
+                        controls=[
+                            ft.TextButton(
+                                "Restore",
+                                on_click=lambda e: page.run_task(
+                                    _restore_license, e
+                                ),
+                            ),
+                            ft.TextButton(
+                                "Check status",
+                                on_click=lambda e: page.run_task(_check_status, e),
+                            ),
+                        ],
+                        spacing=tokens.SPACE_SM,
                     ),
                 )
             )
-        elif premium.available and not state.is_premium:
-            # Direct Android with Play Billing attached: the escape hatch
-            # exists for the user who cannot pay through Google, reached by
-            # asking — never offered up front.
-            controls.append(ft.Divider(height=tokens.SPACE_SM))
-            controls.append(
-                _row(
-                    ft.Icons.HELP_OUTLINE_ROUNDED,
-                    "Google Play payment not working?",
-                    "In some regions and on some accounts, Google Play will "
-                    "not take the payment. You can choose to pay Kiri "
-                    "directly instead, with a card or mobile money.",
-                    ft.TextButton(
-                        "Show options",
-                        on_click=lambda e: page.run_task(_enable_direct, e),
-                    ),
-                )
-            )
-
     # Credits: the visible benefit, with a way to earn more.
     if ai is not None:
         controls.append(ft.Divider(height=tokens.SPACE_SM))

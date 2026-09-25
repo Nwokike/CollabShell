@@ -60,48 +60,38 @@ EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _catalog_cache: dict[str, Any] = {"at": 0.0, "products": []}
 
 # ── Where this channel is allowed to exist ──────────────────────────────
-# The Kiri License Worker is for builds that have **no Play Store to bill
-# through**: desktop, web, and direct APKs. The Play-distributed AAB is
-# stamped CHANNEL = "play" at build time and carries no premium purchase UI
-# at all — Google requires a Google Payments merchant profile to sell
-# in-app, which no account available to us has yet. Nothing is decided at
-# runtime; the artifact itself carries the policy.
+# KTV Player's model, adopted wholesale: one backend (this Worker), and a
+# build-time channel decides whether premium exists at all. The Play AAB
+# is stamped CHANNEL = "play" — free-only, no purchase surface, no Worker
+# traffic. Every other build (direct APK, desktop, web) sells through
+# license.kiri.ng with no Google permission involved.
 #
-# On a direct Android APK the channel is reachable only after the user
-# explicitly says Google Play payment does not work for them — the case the
-# fallback exists to serve. Nobody is steered into it.
-_DIRECT_OPTIN_KEY = constants.STORAGE_LICENSE_DIRECT
+# No runtime opt-in and no platform branch: the artifact carries the
+# policy, exactly like KTV's core/channel.py.
 
 
 def is_available(page=None) -> bool:
-    """True when this build may offer the direct (Worker) channel.
+    """True when this build offers the direct (Worker) channel.
 
-    - desktop and web: yes — there is no Play Store to bill through
-    - the Play AAB (CHANNEL == "play"): never — it is a free-only build
-    - a direct Android APK: only after the user has explicitly opted in
+    `page` is accepted and ignored: the build-time channel marker decides,
+    never the platform and never a runtime toggle.
     """
     from core.build_channel import CHANNEL
 
-    if CHANNEL == "play":
-        return False
-    if page is None:
-        return True
-    try:
-        if not page.platform.is_mobile():
-            return True
-    except Exception:
-        return True
-    return bool(getattr(page, "_kiri_direct_optin", False))
-
-
-def set_available(page, enabled: bool) -> None:
-    """Flip the Android opt-in, so the UI can offer or withdraw the channel."""
-    if page is not None:
-        page._kiri_direct_optin = bool(enabled)
+    return CHANNEL != "play"
 
 
 class LicenseError(Exception):
-    """The Worker refused the request, or could not be reached."""
+    """The Worker refused the request, or could not be reached.
+
+    `code` is the Worker's own error code when it sent one — the
+    difference between "the network died" (keep the current verdict) and
+    "this recovery ID has no purchase" (definitively drop premium).
+    """
+
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -175,7 +165,7 @@ async def _get(path: str) -> dict:
     except Exception as exc:
         raise LicenseError("Could not reach the license server.") from exc
     if response.status_code >= 400:
-        raise LicenseError(_error_message(response))
+        raise LicenseError(_error_message(response), _error_code(response))
     return response.json()
 
 
@@ -190,16 +180,20 @@ async def _post(path: str, payload: dict) -> dict:
     except Exception as exc:
         raise LicenseError("Could not reach the license server.") from exc
     if response.status_code >= 400:
-        raise LicenseError(_error_message(response))
+        raise LicenseError(_error_message(response), _error_code(response))
     return response.json()
+
+
+def _error_code(response) -> str:
+    try:
+        return str((response.json() or {}).get("error", "") or "")
+    except Exception:
+        return ""
 
 
 def _error_message(response) -> str:
     """Turn the Worker's error codes into something a person can act on."""
-    try:
-        code = (response.json() or {}).get("error", "")
-    except Exception:
-        code = ""
+    code = _error_code(response)
     messages = {
         "invalid_recovery_id": "That recovery ID does not look right.",
         "license_not_found": "No purchase was found for that recovery ID.",
@@ -226,19 +220,6 @@ async def get_catalog(force: bool = False) -> list[Product]:
     _catalog_cache["at"] = time.time()
     _catalog_cache["products"] = products
     return products
-
-
-async def load_opt_in(storage) -> bool:
-    """Restore whether the user chose the direct channel on Android."""
-    try:
-        return (await storage.get(_DIRECT_OPTIN_KEY)) == "true"
-    except Exception:
-        logger.debug("Could not read the direct-purchase opt-in", exc_info=True)
-        return False
-
-
-async def save_opt_in(storage, enabled: bool) -> None:
-    await storage.set(_DIRECT_OPTIN_KEY, "true" if enabled else "false")
 
 
 async def start_checkout(email: str, product_id: str, name: str = "") -> dict:

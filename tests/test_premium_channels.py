@@ -64,58 +64,58 @@ def clean_state():
     state.premium_product = ""
 
 
-# ── The Play cache ─────────────────────────────────────────────────────
+# ── What grants Premium at all ──────────────────────────────────────────
+# KTV Player's model: one backend (the Kiri Worker) and a signed token.
+# A bare flag in storage is not proof of anything, and the Play-channel
+# build clears Premium instead of trusting even a token.
 
 
-def test_a_play_purchase_survives_a_restart_instantly():
+def test_a_bare_flag_never_grants():
     service = _service(
-        {
-            constants.STORAGE_PREMIUM: "true",
-            constants.STORAGE_PREMIUM_SOURCE: "play",
-            constants.STORAGE_PREMIUM_PRODUCT: "premium_unlock",
-        }
-    )
-    asyncio.run(service.load_local())
-    assert state.is_premium is True
-    assert state.premium_source == "play"
-
-
-def test_a_kiri_license_is_never_granted_by_the_play_flag():
-    """The rule the audit caught: `premium=true` is a Play cache, not a
-    Kiri proof. A Kiri entitlement is only ever granted by a token."""
-    service = _service(
-        {
-            constants.STORAGE_PREMIUM: "true",
-            constants.STORAGE_PREMIUM_SOURCE: "kiri",
-            constants.STORAGE_PREMIUM_PRODUCT: "lifetime",
-        }
+        {constants.STORAGE_PREMIUM: "true", constants.STORAGE_PREMIUM_SOURCE: "play"}
     )
     asyncio.run(service.load_local())
     assert state.is_premium is False
-    assert state.premium_source == ""
 
 
 def test_a_flag_with_no_source_grants_nothing():
-    """A bare `premium=true` with no channel is not evidence of anything."""
+    asyncio.run(_service({constants.STORAGE_PREMIUM: "true"}).load_local())
+    assert state.is_premium is False
+
+
+def test_no_stored_token_means_free():
+    asyncio.run(_service().load_local())
+    assert state.is_premium is False
+
+
+def test_the_play_build_clears_premium_instead_of_trusting_it(monkeypatch):
+    """A token left over from a direct install must never unlock the Play
+    build — that rule is why load_local clears rather than reads."""
+    from core import build_channel
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "play")
     service = _service({constants.STORAGE_PREMIUM: "true"})
     asyncio.run(service.load_local())
     assert state.is_premium is False
-
-
-def test_no_stored_flag_means_free():
-    service = _service()
-    asyncio.run(service.load_local())
-    assert state.is_premium is False
-
-
-def test_desktop_builds_attach_no_billing_service():
-    """`in_app_purchase` has no desktop platform; attaching it there would
-    stall every call for the full timeout."""
-    service = _service()
+    assert service.backend == "none"
     assert service.available is False
-    assert service.billing is None
-    # ...and buying is a clean False, not an exception.
-    assert asyncio.run(service.buy()) is False
+
+
+def test_the_service_is_the_ktv_surface_not_billing():
+    """Play Billing is not part of this build: no buy/restore_purchases, and
+    the four Worker methods are the entire public surface."""
+    service = _service()
+    assert service.backend == "kiri"
+    assert service.available is True
+    for method in (
+        "kiri_catalog",
+        "kiri_checkout",
+        "kiri_restore",
+        "kiri_check_status",
+    ):
+        assert callable(getattr(service, method)), method
+    for method in ("buy", "restore_purchases", "query_products"):
+        assert not hasattr(service, method), method
 
 
 # ── The Kiri token ─────────────────────────────────────────────────────
@@ -202,10 +202,9 @@ def test_a_forged_token_is_never_cached_as_entitlement():
     assert state.is_premium is False
 
 
-# ── Where the direct channel may exist ─────────────────────────────────
-# The Play-distributed build uses Google Play Billing and nothing else. The
-# Worker is for builds with no Play Store to bill through, and on Android
-# only after the user says Play payment does not work for them.
+# ── Where the channel may exist — the build-time marker decides ────────
+# No platform branch, no runtime opt-in: the artifact carries the policy,
+# exactly like KTV's core/channel.py.
 
 
 class AndroidPage(FakePage):
@@ -217,37 +216,7 @@ class AndroidPage(FakePage):
     platform = _Platform()
 
 
-def test_desktop_and_web_always_have_the_direct_channel():
-    # No Play Store exists there, so this is their only way to buy.
-    assert license.is_available(FakePage()) is True
-
-
-def test_android_starts_without_the_direct_channel():
-    assert license.is_available(AndroidPage()) is False
-
-
-def test_android_gets_it_only_after_the_user_asks():
-    page = AndroidPage()
-    license.set_available(page, True)
-    assert license.is_available(page) is True
-
-
-def test_the_opt_in_persists_across_restarts():
-    storage = FakeStorage()
-    asyncio.run(license.save_opt_in(storage, True))
-    assert asyncio.run(license.load_opt_in(storage)) is True
-    assert asyncio.run(license.load_opt_in(FakeStorage())) is False
-
-
-def test_a_play_build_never_shows_any_purchase_ui(monkeypatch):
-    """The policy, asserted on the built UI rather than on intent.
-
-    The Play AAB is stamped CHANNEL = "play" at build time: it is a
-    free-only build. No Play rows, no Kiri rows, no escape hatch.
-    """
-    from core import build_channel
-    from state.service_ctx import Services
-
+def _store():
     class _Store:
         async def get(self, k, default=None):
             return None
@@ -255,120 +224,11 @@ def test_a_play_build_never_shows_any_purchase_ui(monkeypatch):
         async def set(self, k, v):
             return None
 
-    class _PlayPremium:
-        available = True
-        has_products = True  # even with products, the play build sells nothing
-
-        async def buy(self):
-            return True
-
-        async def restore_purchases(self):
-            return None
-
-    monkeypatch.setattr(build_channel, "CHANNEL", "play")
-    services = Services(ai=AiSession(), storage=_Store(), premium=_PlayPremium())
-    page = AndroidPage()
-    license.set_available(page, True)  # even opted in, the channel is gone
-    labels = _section_labels(page, services)
-    assert not any("Go Premium" in t for t in labels)
-    assert not any("Pay directly" in t for t in labels)
-    assert not any("Recovery ID" in t for t in labels)
-    assert not any("Google Play payment not working" in t for t in labels)
-    assert not any("Buy with Google Play" in t for t in labels)
-    # What the build does offer is the free tier: credits and ads.
-    assert any("credits" in t.lower() for t in labels)
-
-
-def test_a_play_build_without_products_shows_no_play_rows(monkeypatch):
-    """Dormant Play Billing: with no product in the store, no dead button."""
-    from core import build_channel
-    from state.service_ctx import Services
-
-    class _Store:
-        async def get(self, k, default=None):
-            return None
-
-        async def set(self, k, v):
-            return None
-
-    class _DirectPremium:
-        available = True
-        has_products = False  # no Google Payments merchant profile yet
-
-        async def buy(self):
-            return True
-
-        async def restore_purchases(self):
-            return None
-
-    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
-    services = Services(ai=None, storage=_Store(), premium=_DirectPremium())
-    labels = _section_labels(AndroidPage(), services)
-    assert not any("Buy with Google Play" in t for t in labels)
-    assert not any("Restore from Google Play" in t for t in labels)
-
-
-def test_a_direct_apk_keeps_the_kiri_escape_hatch(monkeypatch):
-    """Direct APKs may opt in; the Play build is the one locked down."""
-    from core import build_channel
-    from state.service_ctx import Services
-
-    class _Store:
-        async def get(self, k, default=None):
-            return None
-
-        async def set(self, k, v):
-            return None
-
-    class _DirectPremium:
-        available = True
-        has_products = False
-
-        async def buy(self):
-            return True
-
-        async def restore_purchases(self):
-            return None
-
-    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
-    services = Services(ai=None, storage=_Store(), premium=_DirectPremium())
-    page = AndroidPage()
-    license.set_available(page, False)
-    labels = _section_labels(page, services)
-    assert any("Google Play payment not working" in t for t in labels)
-    assert not any("Pay directly" in t for t in labels)
-
-    license.set_available(page, True)
-    after = _section_labels(page, services)
-    assert any("Pay directly" in t for t in after)
-    assert any("Recovery ID" in t for t in after)
-
-
-def test_desktop_always_has_the_kiri_channel(monkeypatch):
-    """No Play Store exists on desktop — the Worker is the only way in."""
-    from core import build_channel
-    from state.service_ctx import Services
-
-    class _Store:
-        async def get(self, k, default=None):
-            return None
-
-        async def set(self, k, v):
-            return None
-
-    class _DesktopPremium:
-        available = False  # flet-billing does not attach on desktop
-        has_products = False
-
-    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
-    labels = _section_labels(
-        FakePage(), Services(ai=None, storage=_Store(), premium=_DesktopPremium())
-    )
-    assert any("Pay directly" in t for t in labels)
-    assert any("Recovery ID" in t for t in labels)
+    return _Store()
 
 
 def _section_labels(page, services) -> set:
+    """Every visible string on the built Premium section."""
     import flet as ft
 
     from screens.settings.premium_section import build_premium_section
@@ -378,16 +238,97 @@ def _section_labels(page, services) -> set:
     def walk(control):
         if isinstance(control, ft.Text):
             labels.add(control.value or "")
+        # Buttons carry their label as a plain string `content`.
+        content = getattr(control, "content", None)
+        if isinstance(content, str):
+            labels.add(content)
+        if isinstance(control, ft.ListTile):
+            for slot in (control.title, control.subtitle):
+                if isinstance(slot, str):
+                    labels.add(slot)
+                elif isinstance(slot, ft.Text):
+                    labels.add(slot.value or "")
         for attr in ("controls", "content", "leading", "trailing"):
             child = getattr(control, attr, None)
             if isinstance(child, (list, tuple)):
-                for c in child:
-                    walk(c)
+                for item in child:
+                    walk(item)
             elif isinstance(child, ft.BaseControl):
                 walk(child)
 
     walk(build_premium_section(page, None, services))
     return labels
+
+
+def test_the_marker_decides_not_the_platform(monkeypatch):
+    from core import build_channel
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
+    assert license.is_available() is True
+    assert license.is_available(AndroidPage()) is True, "a direct APK sells Kiri"
+    assert license.is_available(FakePage()) is True
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "play")
+    assert license.is_available() is False
+    assert license.is_available(AndroidPage()) is False
+    assert license.is_available(FakePage()) is False
+
+
+def test_the_play_build_never_shows_any_purchase_ui(monkeypatch):
+    """The Play AAB is free-only: no purchase row exists in any state."""
+    from core import build_channel
+    from state.service_ctx import Services
+
+    class _PlayPremium:
+        available = False
+        backend = "none"
+
+        async def kiri_catalog(self):
+            return []
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "play")
+    services = Services(ai=AiSession(), storage=_store(), premium=_PlayPremium())
+    labels = _section_labels(AndroidPage(), services)
+    for forbidden in (
+        "Go Premium",
+        "Pay directly",
+        "Recovery ID",
+        "Restore a purchase",
+        "Check status",
+        "Buy with Google Play",
+        "Google Play payment not working?",
+    ):
+        assert not any(forbidden in t for t in labels), forbidden
+    # What the build does offer is the free tier: credits and ads.
+    assert any("credits" in t.lower() for t in labels)
+
+
+def test_a_direct_apk_shows_the_kiri_channel(monkeypatch):
+    """Direct APKs sell through Kiri outright — no opt-in, no escape hatch."""
+    from core import build_channel
+    from state.service_ctx import Services
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
+    services = Services(ai=AiSession(), storage=_store(), premium=_service())
+    labels = _section_labels(AndroidPage(), services)
+    assert any("Pay directly" in t for t in labels)
+    assert any("Recovery ID" in t for t in labels)
+    assert any("Restore a purchase" in t for t in labels)
+    assert any("Check status" in t for t in labels)
+    # The one thing that must never return: external-payment rows about Google.
+    assert not any("Google Play payment not working" in t for t in labels)
+    assert not any("Buy with Google Play" in t for t in labels)
+
+
+def test_desktop_shows_the_same_channel(monkeypatch):
+    from core import build_channel
+    from state.service_ctx import Services
+
+    monkeypatch.setattr(build_channel, "CHANNEL", "direct")
+    services = Services(ai=AiSession(), storage=_store(), premium=_service())
+    labels = _section_labels(FakePage(), services)
+    assert any("Pay directly" in t for t in labels)
+    assert not any("Buy with Google Play" in t for t in labels)
 
 
 # ── Renewal guard ──────────────────────────────────────────────────────

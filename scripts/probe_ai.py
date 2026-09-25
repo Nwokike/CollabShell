@@ -472,17 +472,13 @@ class _Store:
 
 
 class _FakePremium:
-    """A Play-capable build, so the probe sees the whole section."""
+    """The direct channel: KTV's single-backend service."""
 
     available = True
-    has_products = False  # dormant until a merchant account exists
-    price = "$4.99"
+    backend = "kiri"
 
-    async def buy(self):
-        return True
-
-    async def restore_purchases(self):
-        return None
+    async def kiri_catalog(self):
+        return []
 
 
 free_services = Services(ai=AiSession(), storage=_Store(), premium=_FakePremium())
@@ -497,7 +493,7 @@ state.premium_source = "play"
 premium_text = _labels(_walk(build_premium_section(_FakePage(), None, free_services)))
 assert any("Premium is on" in t for t in premium_text)
 state.is_premium = False
-print("premium section: Kiri on desktop, dormant Play rows, credits always", flush=True)
+print("premium section: KTV single-backend, no Play rows, credits always", flush=True)
 
 # Ads are off for premium, everywhere, through one gate.
 from services.ad_service import AdService

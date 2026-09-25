@@ -100,16 +100,6 @@ from core.storage_patch import _memory_log_handler
 from core.theme import AppTheme
 from services.ad_service import AdService
 from services.colab import ColabService
-from services.license_service import (
-    LicenseError,
-    apply_entitlement,
-    cached_entitlement,
-    check_status,
-    store_entitlement,
-)
-from services.license_service import (
-    is_available as license_available,
-)
 from services.premium_service import PremiumService
 from services.storage_service import StorageService
 from services.update_service import UpdateService
@@ -192,47 +182,25 @@ class AppController:
     # ── Premium ──────────────────────────────────────────────────────────────
 
     async def _load_license_offline(self) -> None:
-        """Grant premium from a locally verified signed token.
+        """Verify the cached signed token with no network.
 
-        Runs on the boot path with no network: a user who paid through the
-        fallback channel has their access immediately, online or not.
+        Delegates to PremiumService (KTV Player's model): the token is the
+        only proof, a Play-channel build clears it instead of trusting it,
+        and a bare flag in storage grants nothing.
         """
-        if not license_available(self.page):
-            return  # the Play build sells nothing and contacts no Worker
-        try:
-            entitlement = await cached_entitlement(self.storage)
-        except Exception:
-            logger.debug("Offline license check failed", exc_info=True)
+        if self.premium_service is None:
             return
-        if entitlement is not None and entitlement.grants_access:
-            await apply_entitlement(entitlement)
-            logger.info("Premium restored offline from a signed token")
+        await self.premium_service.load_local()
 
     async def _reconcile_premium(self) -> None:
-        """Confirm entitlement with the server after the first frame.
+        """Confirm the entitlement with the Worker after the first frame.
 
-        Play is reconciled through the store; the Worker through /status.
-        Neither failure ever removes access — only an authoritative ruling
-        from the channel that granted it does.
+        A network failure keeps the current verdict; only an authoritative
+        expired/revoked ruling clears it.
         """
-        if self.premium_service is not None:
-            try:
-                await self.premium_service.reconcile()
-            except Exception:
-                logger.warning("Play reconcile failed", exc_info=True)
-        if not license_available(self.page):
-            return  # the Play build sells nothing and contacts no Worker
-        recovery_id = await self.storage.get(constants.STORAGE_LICENSE_RECOVERY)
-        if not recovery_id or state.premium_source == "play":
+        if self.premium_service is None:
             return
-        try:
-            entitlement = await check_status(recovery_id)
-        except LicenseError as e:
-            # Not definitive: keep whatever the token proved.
-            logger.info("License status check inconclusive: %s", e)
-            return
-        await store_entitlement(self.storage, entitlement)
-        await apply_entitlement(entitlement)
+        await self.premium_service.reconcile()
 
     async def check_for_updates(self, notify_if_latest: bool = False) -> None:
         """Check version.json on main for a newer build or announcement.
@@ -347,22 +315,14 @@ class AppController:
 
         ai_session.attach_storage(self.storage)
 
-        # Premium has two channels: Play Billing (the default) and the Kiri
-        # License Worker (the fallback where Google billing cannot serve the
-        # user). Entitlement is resolved BEFORE ad consent, so a paying user
-        # is never asked about ads they will not see, and before ads preload.
+        # Premium: one backend (the Kiri Worker), gated by the build-time
+        # channel marker — KTV Player's model. Entitlement resolves BEFORE
+        # ad consent, so a paying user is never asked about ads they will
+        # not see, and before ads preload.
         self.premium_service = PremiumService(page, self.storage)
-        # The direct (Worker) channel is for builds with no Play Store, and
-        # on Android only after the user says Google Play payment does not
-        # work for them. Restoring that choice is a one-key read.
-        from services.license_service import load_opt_in, set_available
-
-        if await load_opt_in(self.storage):
-            set_available(page, True)
-        await self.premium_service.load_local()
         await self._load_license_offline()
-        # Store reconciliation is a network round-trip: it runs after the
-        # first frame, never on the boot path.
+        # The status refresh is a network round-trip: after the first
+        # frame, never on the boot path.
         page.run_task(self._reconcile_premium)
         page.run_task(self.ad_service.gather_consent)
         page.run_task(self.ad_service.preload_interstitial)
