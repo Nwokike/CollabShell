@@ -107,6 +107,9 @@ from services.license_service import (
     check_status,
     store_entitlement,
 )
+from services.license_service import (
+    is_available as license_available,
+)
 from services.premium_service import PremiumService
 from services.storage_service import StorageService
 from services.update_service import UpdateService
@@ -167,6 +170,8 @@ class AppController:
         Runs on the boot path with no network: a user who paid through the
         fallback channel has their access immediately, online or not.
         """
+        if not license_available(self.page):
+            return  # the Play build sells nothing and contacts no Worker
         try:
             entitlement = await cached_entitlement(self.storage)
         except Exception:
@@ -188,6 +193,8 @@ class AppController:
                 await self.premium_service.reconcile()
             except Exception:
                 logger.warning("Play reconcile failed", exc_info=True)
+        if not license_available(self.page):
+            return  # the Play build sells nothing and contacts no Worker
         recovery_id = await self.storage.get(constants.STORAGE_LICENSE_RECOVERY)
         if not recovery_id or state.premium_source == "play":
             return

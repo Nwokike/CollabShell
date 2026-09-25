@@ -159,6 +159,20 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: echo "$KEYSTORE_BASE64" | base64 --decode > kiri_keystore.jks
+      - name: Stamp the Play channel (free-only build)
+        # The AAB uploaded to Google Play carries CHANNEL = "play": it
+        # sells nothing and shows no premium purchase UI. Direct APK,
+        # desktop and web builds keep CHANNEL = "direct" and offer the
+        # Kiri License Worker. One line, decided before the build — the
+        # policy is baked into the artifact.
+        run: |
+          python - <<'PYEOF'
+          from pathlib import Path
+          p = Path("src/core/build_channel.py")
+          p.write_text(p.read_text(encoding="utf-8").replace(
+              'CHANNEL = "direct"', 'CHANNEL = "play"'), encoding="utf-8")
+          print(p.read_text(encoding="utf-8"))
+          PYEOF
       - name: Build AAB
         env:
           PIP_FIND_LINKS: ${{ github.workspace }}/wheels

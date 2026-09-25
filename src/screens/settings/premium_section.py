@@ -165,115 +165,143 @@ def build_premium_section(page: ft.Page, app_state, services) -> ft.Column:
         await ad.show_rewarded_interstitial(_grant)
 
     # ── Build the rows ──────────────────────────────────────────────────
+    # The Play AAB is a free-only build (CHANNEL = "play"): it sells
+    # nothing and shows nothing to buy — its monetization is ads. Every
+    # other build offers premium.
+    from core.build_channel import CHANNEL
 
+    play_build = CHANNEL == "play"
     controls: list[ft.Control] = []
 
-    if state.is_premium:
-        source = "Google Play" if state.premium_source == "play" else "Kiri license"
-        note = (
-            f"Premium is on, through {source}."
-            if not state.premium_offline
-            else f"Premium is on, through {source}. Not confirmed by the "
-            "server this session — you stay signed in either way."
-        )
-        controls.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                "Premium is on",
-                note,
-                _status_chip("Active", AppColors.SUCCESS),
+    if not play_build:
+        if state.is_premium:
+            source = (
+                "Google Play" if state.premium_source == "play" else "Kiri license"
             )
-        )
-    else:
-        controls.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_OUTLINED,
-                "Go Premium",
-                f"No ads, {PREMIUM_DAILY_CREDITS} AI credits a day instead of "
-                f"{DAILY_CREDITS}, and unlimited chat history.",
-                ft.TextButton("See options", on_click=lambda e: _open_checkout(e)),
+            note = (
+                f"Premium is on, through {source}."
+                if not state.premium_offline
+                else f"Premium is on, through {source}. Not confirmed by the "
+                "server this session — you stay signed in either way."
             )
-        )
+            controls.append(
+                _row(
+                    ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                    "Premium is on",
+                    note,
+                    _status_chip("Active", AppColors.SUCCESS),
+                )
+            )
+        else:
+            controls.append(
+                _row(
+                    ft.Icons.WORKSPACE_PREMIUM_OUTLINED,
+                    "Go Premium",
+                    f"No ads, and {PREMIUM_DAILY_CREDITS} AI credits a day "
+                    f"instead of {DAILY_CREDITS}.",
+                    # The trailing action depends on what this build can
+                    # actually offer; the rows below carry the details.
+                    ft.TextButton(
+                        "See options", on_click=lambda e: page.run_task(_open_checkout, e)
+                    )
+                    if license.is_available(page)
+                    else (
+                        ft.TextButton(
+                            "Buy", on_click=lambda e: page.run_task(_buy_play, e)
+                        )
+                        if premium.has_products
+                        else None
+                    ),
+                )
+            )
 
-    # Google Play is where most people should buy.
-    if premium.available:
-        controls.append(
-            _row(
-                ft.Icons.SHOPPING_CART_ROUNDED,
-                "Buy with Google Play",
-                "The normal way to buy. Your purchase is tied to your Play "
-                "account and restores on any device you sign into.",
-                ft.TextButton("Buy", on_click=lambda e: page.run_task(_buy_play, e)),
+        # Play Billing stays dormant until the store actually lists the
+        # products — no Google Payments merchant profile exists yet, so
+        # today these rows render nowhere instead of showing buttons that
+        # can only fail. The day products exist, they appear on their own.
+        if premium.available and premium.has_products:
+            controls.append(
+                _row(
+                    ft.Icons.SHOPPING_CART_ROUNDED,
+                    "Buy with Google Play",
+                    "Your purchase is tied to your Play account and restores "
+                    "on any device you sign into.",
+                    ft.TextButton(
+                        "Buy", on_click=lambda e: page.run_task(_buy_play, e)
+                    ),
+                )
             )
-        )
-        controls.append(ft.Divider(height=tokens.SPACE_SM))
-        controls.append(
-            _row(
-                ft.Icons.RESTORE_ROUNDED,
-                "Restore from Google Play",
-                "Already paid? This re-checks your Play account.",
-                ft.TextButton(
-                    "Restore", on_click=lambda e: page.run_task(_restore_play, e)
-                ),
+            controls.append(ft.Divider(height=tokens.SPACE_SM))
+            controls.append(
+                _row(
+                    ft.Icons.RESTORE_ROUNDED,
+                    "Restore from Google Play",
+                    "Already paid? This re-checks your Play account.",
+                    ft.TextButton(
+                        "Restore",
+                        on_click=lambda e: page.run_task(_restore_play, e),
+                    ),
+                )
             )
-        )
 
-    # ── The direct channel, where it is allowed to exist ────────────────
-    # Desktop and web have no Play Store, so this is their only way in. On
-    # Android it stays out of the way until the user says Google Play
-    # payment does not work for them: nobody is steered into it, and the
-    # Play build carries no alternative payment to report.
-    if license.is_available(page):
-        controls.append(ft.Divider(height=tokens.SPACE_SM))
-        controls.append(
-            _row(
-                ft.Icons.CREDIT_CARD_ROUNDED,
-                "Pay directly",
-                "Card or mobile money, paid to Kiri — your recovery ID is how "
-                "you get back in if you clear app data.",
-                ft.TextButton(
-                    "Buy", on_click=lambda e: page.run_task(_open_checkout, e)
-                ),
+        # ── The direct channel, where it is allowed to exist ────────────
+        # Desktop and web have no Play Store, so this is their only way in.
+        # On a direct Android APK it stays out of the way until the user
+        # says Google Play payment does not work for them. The Play AAB
+        # never reaches this branch.
+        if license.is_available(page):
+            controls.append(ft.Divider(height=tokens.SPACE_SM))
+            controls.append(
+                _row(
+                    ft.Icons.CREDIT_CARD_ROUNDED,
+                    "Pay directly",
+                    "Card or mobile money, paid to Kiri — your recovery ID "
+                    "is how you get back in if you clear app data.",
+                    ft.TextButton(
+                        "Buy", on_click=lambda e: page.run_task(_open_checkout, e)
+                    ),
+                )
             )
-        )
-        controls.append(
-            _row(
-                ft.Icons.VPN_KEY_ROUNDED,
-                "Recovery ID",
-                "Keep this somewhere safe. It is the only way back in after "
-                "a reinstall.",
-                ft.TextButton(
-                    "Show", on_click=lambda e: page.run_task(_show_recovery, e)
-                ),
+            controls.append(
+                _row(
+                    ft.Icons.VPN_KEY_ROUNDED,
+                    "Recovery ID",
+                    "Keep this somewhere safe. It is the only way back in "
+                    "after a reinstall.",
+                    ft.TextButton(
+                        "Show", on_click=lambda e: page.run_task(_show_recovery, e)
+                    ),
+                )
             )
-        )
-        controls.append(
-            _row(
-                ft.Icons.RESTORE_ROUNDED,
-                "Restore a purchase",
-                "Enter the recovery ID from your receipt.",
-                ft.TextButton(
-                    "Restore", on_click=lambda e: page.run_task(_restore_license, e)
-                ),
+            controls.append(
+                _row(
+                    ft.Icons.RESTORE_ROUNDED,
+                    "Restore a purchase",
+                    "Enter the recovery ID from your receipt.",
+                    ft.TextButton(
+                        "Restore",
+                        on_click=lambda e: page.run_task(_restore_license, e),
+                    ),
+                )
             )
-        )
-    elif premium.available:
-        # Android with Play Billing: the escape hatch exists for the user
-        # who cannot pay through Google, and is reached by asking, never by
-        # being offered.
-        controls.append(ft.Divider(height=tokens.SPACE_SM))
-        controls.append(
-            _row(
-                ft.Icons.HELP_OUTLINE_ROUNDED,
-                "Google Play payment not working?",
-                "In some regions and on some accounts, Google Play will not "
-                "take the payment. You can choose to pay Kiri directly "
-                "instead, with a card or mobile money.",
-                ft.TextButton(
-                    "Show options", on_click=lambda e: page.run_task(_enable_direct, e)
-                ),
+        elif premium.available and not state.is_premium:
+            # Direct Android with Play Billing attached: the escape hatch
+            # exists for the user who cannot pay through Google, reached by
+            # asking — never offered up front.
+            controls.append(ft.Divider(height=tokens.SPACE_SM))
+            controls.append(
+                _row(
+                    ft.Icons.HELP_OUTLINE_ROUNDED,
+                    "Google Play payment not working?",
+                    "In some regions and on some accounts, Google Play will "
+                    "not take the payment. You can choose to pay Kiri "
+                    "directly instead, with a card or mobile money.",
+                    ft.TextButton(
+                        "Show options",
+                        on_click=lambda e: page.run_task(_enable_direct, e),
+                    ),
+                )
             )
-        )
 
     # Credits: the visible benefit, with a way to earn more.
     if ai is not None:

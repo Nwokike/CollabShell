@@ -61,13 +61,14 @@ _catalog_cache: dict[str, Any] = {"at": 0.0, "products": []}
 
 # ── Where this channel is allowed to exist ──────────────────────────────
 # The Kiri License Worker is for builds that have **no Play Store to bill
-# through**: desktop, web, and direct APKs. The Play-distributed Android
-# build uses Google Play Billing and nothing else — the fallback is not
-# merely hidden there, it is not integrated, so there is no alternative
-# payment to report and no steering for Google to act on.
+# through**: desktop, web, and direct APKs. The Play-distributed AAB is
+# stamped CHANNEL = "play" at build time and carries no premium purchase UI
+# at all — Google requires a Google Payments merchant profile to sell
+# in-app, which no account available to us has yet. Nothing is decided at
+# runtime; the artifact itself carries the policy.
 #
-# On Android the direct channel is reachable only by the user explicitly
-# saying Google Play payment does not work for them, which is the case the
+# On a direct Android APK the channel is reachable only after the user
+# explicitly says Google Play payment does not work for them — the case the
 # fallback exists to serve. Nobody is steered into it.
 _DIRECT_OPTIN_KEY = constants.STORAGE_LICENSE_DIRECT
 
@@ -76,8 +77,13 @@ def is_available(page=None) -> bool:
     """True when this build may offer the direct (Worker) channel.
 
     - desktop and web: yes — there is no Play Store to bill through
-    - Android: only after the user has explicitly opted in
+    - the Play AAB (CHANNEL == "play"): never — it is a free-only build
+    - a direct Android APK: only after the user has explicitly opted in
     """
+    from core.build_channel import CHANNEL
+
+    if CHANNEL == "play":
+        return False
     if page is None:
         return True
     try:

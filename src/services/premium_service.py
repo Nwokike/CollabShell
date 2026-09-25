@@ -47,6 +47,11 @@ class PremiumService:
         self.storage = storage
         self.billing = None
         self.price: str | None = None
+        # True once the store actually reports our product. Until a Google
+        # Payments merchant profile exists on the publishing account, no
+        # product exists and the Play buy rows stay out of the UI instead
+        # of showing a button that can only fail.
+        self.has_products: bool = False
         self._listeners: list[Callable[[], None]] = []
         if self._supported():
             try:
@@ -189,8 +194,12 @@ class PremiumService:
             logger.info(
                 "Premium product '%s' is not in this store yet", PREMIUM_PRODUCT_ID
             )
+            self.has_products = False
+            self.price = None
+            self._notify()
             return False
         self.price = product.price
+        self.has_products = True
         self._notify()
         return True
 
