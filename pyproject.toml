@@ -1,6 +1,6 @@
 [project]
 name = "collabshell"
-version = "2.3.0"
+version = "3.0.0"
 description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -31,7 +31,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Colab Shell"
-build_number = 14
+build_number = 15
 # Shared launcher-icon background (iOS flattening + Android fallback).
 icon_background = "#1E1E2E"
 
