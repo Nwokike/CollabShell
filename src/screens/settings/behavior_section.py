@@ -9,17 +9,13 @@ from core.styles import glass_card, section_header, tip_text
 
 
 def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
-    async def _on_keep_alive_change(e):
-        state.keep_alive_enabled = e.control.value
-        await services.storage.set(
-            constants.STORAGE_KEEP_ALIVE, str(e.control.value).lower()
-        )
-
-    async def _on_keep_alive_disconnect_change(e):
-        state.keep_alive_on_disconnect = e.control.value
+    async def _on_auto_stop_change(e):
+        # Inverted copy: the switch shows "auto-stop", the flag stores
+        # "keep alive on disconnect" (default True = sessions survive).
+        state.keep_alive_on_disconnect = not e.control.value
         await services.storage.set(
             constants.STORAGE_KEEP_ALIVE_ON_DISCONNECT,
-            str(e.control.value).lower(),
+            str(state.keep_alive_on_disconnect).lower(),
         )
 
     async def _on_drive_path_change(e):
@@ -39,45 +35,23 @@ def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Keep-Alive",
-                                            size=tokens.FONT_MD,
-                                            weight=ft.FontWeight.W_500,
-                                        ),
-                                        tip_text(constants.TIP_KEEP_ALIVE),
-                                    ],
-                                    spacing=tokens.SPACE_XXS,
-                                    expand=True,
-                                ),
-                                ft.Switch(
-                                    value=state.keep_alive_enabled,
-                                    on_change=lambda e: page.run_task(
-                                        _on_keep_alive_change, e
-                                    ),
-                                ),
-                            ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        ft.Row(
-                            controls=[
-                                ft.Column(
-                                    controls=[
-                                        ft.Text(
-                                            "Keep Alive on Disconnect",
+                                            "Auto-stop sessions on exit",
                                             size=tokens.FONT_MD,
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         tip_text(
-                                            "Keep sessions running when the app closes"
+                                            "Stop all sessions when the app closes "
+                                            "or disconnects. Off by default — "
+                                            "sessions survive."
                                         ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
                                     expand=True,
                                 ),
                                 ft.Switch(
-                                    value=state.keep_alive_on_disconnect,
+                                    value=not state.keep_alive_on_disconnect,
                                     on_change=lambda e: page.run_task(
-                                        _on_keep_alive_disconnect_change, e
+                                        _on_auto_stop_change, e
                                     ),
                                 ),
                             ],
@@ -88,7 +62,9 @@ def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
                             value=state.drive_mount_path,
                             label="Drive Mount Path",
                             prefix_icon=ft.Icons.ADD_TO_DRIVE_ROUNDED,
-                            border_radius=tokens.RADIUS_MD,
+                            border=ft.OutlineInputBorder(
+                                border_radius=tokens.RADIUS_MD
+                            ),
                             text_size=tokens.FONT_SM,
                             on_blur=lambda e: page.run_task(_on_drive_path_change, e),
                         ),

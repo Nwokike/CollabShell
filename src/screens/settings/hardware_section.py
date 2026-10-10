@@ -19,6 +19,13 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
         state.default_tpu = e.control.value or ""
         await services.storage.set(constants.STORAGE_DEFAULT_TPU, state.default_tpu)
 
+    async def _on_high_mem_default(e):
+        state.default_high_mem = bool(e.control.value)
+        await services.storage.set(
+            constants.STORAGE_DEFAULT_HIGH_MEM,
+            "true" if state.default_high_mem else "false",
+        )
+
     return ft.Column(
         controls=[
             section_header("HARDWARE DEFAULTS"),
@@ -58,7 +65,9 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
                                         ft.dropdown.Option("H100", "H100 · Pro+"),
                                     ],
                                     width=tokens.INPUT_WIDTH_LG,
-                                    border_radius=tokens.RADIUS_MD,
+                                    border=ft.OutlineInputBorder(
+                                        border_radius=tokens.RADIUS_MD
+                                    ),
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
                                         _on_gpu_default, e
@@ -96,13 +105,49 @@ def build_hardware_section(page: ft.Page, state, services) -> ft.Column:
                                     options=[
                                         ft.dropdown.Option("", "None"),
                                         ft.dropdown.Option("v5e1", "v5e1 · Free"),
-                                        ft.dropdown.Option("v6e1", "v6e1 · Free"),
+                                        ft.dropdown.Option("v6e1", "v6e1 · Pro"),
                                     ],
                                     width=tokens.INPUT_WIDTH_LG,
-                                    border_radius=tokens.RADIUS_MD,
+                                    border=ft.OutlineInputBorder(
+                                        border_radius=tokens.RADIUS_MD
+                                    ),
                                     text_size=tokens.FONT_SM,
                                     on_select=lambda e: page.run_task(
                                         _on_tpu_default, e
+                                    ),
+                                ),
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=tokens.SPACE_LG,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        # Default High-RAM shape row
+                        ft.Row(
+                            controls=[
+                                ft.Icon(
+                                    ft.Icons.MEMORY_ROUNDED,
+                                    size=tokens.ICON_LG,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "High-RAM  ·  Pro/Pro+ only",
+                                            size=tokens.FONT_MD,
+                                            weight=ft.FontWeight.W_500,
+                                        ),
+                                        tip_text(
+                                            "Pre-select High-RAM shape for new sessions. "
+                                            "Requires Colab Pro or Pro+ entitlement."
+                                        ),
+                                    ],
+                                    spacing=tokens.SPACE_XXS,
+                                    expand=True,
+                                ),
+                                ft.Switch(
+                                    value=bool(state.default_high_mem),
+                                    on_change=lambda e: page.run_task(
+                                        _on_high_mem_default, e
                                     ),
                                 ),
                             ],

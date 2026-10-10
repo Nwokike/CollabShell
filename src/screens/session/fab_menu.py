@@ -35,6 +35,7 @@ def build_session_fab(
     on_export_ipynb=None,
     on_import_ipynb=None,
     on_clear_all=None,
+    on_rename_notebook=None,
     # Shared session actions
     on_manage_files=None,
     on_mount_drive=None,
@@ -56,6 +57,11 @@ def build_session_fab(
     on_term_zoom_reset=None,
     on_term_toggle_blink=None,
     on_term_toggle_search=None,
+    # AI (only shown when the relevant handler is passed)
+    on_ai_explain=None,
+    on_ai_explain_cell=None,
+    on_ai_suggest_hardware=None,
+    on_open_assistant=None,
 ) -> ft.FloatingActionButton | None:
     """Constructs the floating action button with contextual popup menu items."""
     if not has_session:
@@ -130,10 +136,13 @@ def build_session_fab(
         menu_items.append(
             _item("Import .ipynb / .py", ft.Icons.UPLOAD_FILE_ROUNDED, on_import_ipynb)
         )
+        menu_items.append(
+            _item("Rename Notebook", ft.Icons.EDIT_ROUNDED, on_rename_notebook)
+        )
         if has_cells:
             menu_items.extend(
                 [
-                    _item("Export .ipynb", ft.Icons.DOWNLOAD_ROUNDED, on_export_ipynb),
+                    _item("Export Notebook…", ft.Icons.DOWNLOAD_ROUNDED, on_export_ipynb),
                     _item(
                         "Clear All Outputs",
                         ft.Icons.DELETE_SWEEP_ROUNDED,
@@ -159,6 +168,39 @@ def build_session_fab(
             _item("Stop Session", ft.Icons.STOP_CIRCLE_ROUNDED, on_stop),
         ]
     )
+
+    # The AI group only exists when the caller passes a handler, so an
+    # AI-off session shows a menu with no dead entries in it.
+    ai: list[ft.PopupMenuItem] = []
+    if mode == "terminal" and on_ai_explain:
+        ai.append(
+            _item(
+                "Explain Terminal with AI",
+                ft.Icons.AUTO_AWESOME_OUTLINED,
+                on_ai_explain,
+            )
+        )
+    elif mode != "terminal":
+        if on_ai_explain_cell:
+            ai.append(
+                _item(
+                    "Ask AI about this cell",
+                    ft.Icons.AUTO_AWESOME_OUTLINED,
+                    on_ai_explain_cell,
+                )
+            )
+        if on_ai_suggest_hardware:
+            ai.append(
+                _item(
+                    "Suggest runtime shape for this notebook",
+                    ft.Icons.MEMORY_ROUNDED,
+                    on_ai_suggest_hardware,
+                )
+            )
+    ai.append(_item("Open Assistant", ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED, on_open_assistant))
+    if any(ai):
+        menu_items.append(ft.PopupMenuItem())
+        menu_items.extend(ai)
 
     return ft.FloatingActionButton(
         content=ft.PopupMenuButton(

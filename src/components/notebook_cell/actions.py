@@ -8,7 +8,9 @@ from core.theme import AppColors
 logger = logging.getLogger("colab")
 
 
-def make_actions_row(on_move_up=None, on_move_down=None, on_delete=None, on_copy=None):
+def make_actions_row(
+    on_move_up=None, on_move_down=None, on_delete=None, on_copy=None, on_ask_ai=None
+):
     controls = []
     if on_copy:
         controls.append(
@@ -17,6 +19,17 @@ def make_actions_row(on_move_up=None, on_move_down=None, on_delete=None, on_copy
                 icon_size=tokens.ICON_SM,
                 tooltip="Copy Code",
                 on_click=lambda e: on_copy() if on_copy else None,
+            )
+        )
+    if on_ask_ai:
+        # Sparkle rather than a word: the row is already four buttons wide and
+        # the menu that opens names all three actions in full.
+        controls.append(
+            ft.IconButton(
+                ft.Icons.AUTO_AWESOME_OUTLINED,
+                icon_size=tokens.ICON_SM,
+                tooltip="Ask AI about this cell",
+                on_click=lambda e: on_ask_ai() if on_ask_ai else None,
             )
         )
     controls.extend(
@@ -43,6 +56,80 @@ def make_actions_row(on_move_up=None, on_move_down=None, on_delete=None, on_copy
         ]
     )
     return ft.Row(controls=controls, spacing=0)
+
+
+# The three in-cell actions, in the order they are offered. Each entry is the
+# action key (what the service dispatches on), its label, its icon, and a line
+# of help so the menu explains itself without a tour.
+AI_CELL_ACTIONS = (
+    ("explain", "Explain this cell", ft.Icons.MENU_BOOK_OUTLINED,
+     "What it does and why, in plain language"),
+    ("fix", "Fix the error", ft.Icons.BUG_REPORT_OUTLINED,
+     "Diagnose the output and write the corrected code"),
+    ("suggest", "Suggest next cell", ft.Icons.LIGHTBULB_OUTLINE_ROUNDED,
+     "The most useful thing to run next"),
+)
+
+
+def ai_menu(page: ft.Page, cell_id: str, on_pick) -> None:
+    """Show the in-cell AI menu.
+
+    `on_pick(action_key)` is awaited by the caller, so it is fire-and-forget
+    from here — the menu's job ends at handing off the action.
+    """
+    rows = []
+    for action, label, icon, help_text in AI_CELL_ACTIONS:
+        rows.append(
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(icon, size=tokens.ICON_SM),
+                        ft.Column(
+                            [
+                                ft.Text(label, size=tokens.FONT_SM,
+                                        weight=ft.FontWeight.W_600),
+                                ft.Text(
+                                    help_text,
+                                    size=tokens.FONT_XS,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=0,
+                            expand=True,
+                            tight=True,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.Padding.symmetric(
+                    horizontal=tokens.SPACE_SM, vertical=tokens.SPACE_XS
+                ),
+                border_radius=tokens.RADIUS_MD,
+                ink=True,
+                # Bound now: without this every row would close over the last
+                # action and all three would Suggest.
+                on_click=lambda e, a=action: (page.pop_dialog(), on_pick(a)),
+            )
+        )
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                    ft.Text("Ask AI about this cell"),
+                ],
+                spacing=tokens.SPACE_SM,
+            ),
+            content=ft.Container(
+                content=ft.Column(rows, spacing=tokens.SPACE_NONE, tight=True),
+                width=340,
+            ),
+            actions=[ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog())],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+    )
 
 
 def _snack(page: ft.Page, message: str, is_error: bool = False):

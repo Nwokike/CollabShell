@@ -46,6 +46,12 @@ class ControllerMethods:
     )
     # Open the version dialog (changelog when up to date, update UI otherwise)
     open_version_dialog: Callable[[], None] = field(default=_noop)
+    # Open the app-wide assistant chat (mini FAB entry point)
+    open_assistant: Callable[[], None] = field(default=_noop)
+    # Show the assistant's conversation list to switch or delete chats
+    open_assistant_history: Callable[[list], None] = field(default=_noop)
+    # Bring an assistant-written cell into view (step→cell tap-through)
+    reveal_cell: Callable[[str, str], None] = field(default=_noop)
 
 
 ControllerMethodsCtx = ft.create_context(ControllerMethods())

@@ -107,6 +107,7 @@ SHORTCUT_DOCS: dict[str, tuple[str, list[tuple[str, str]]]] = {
     "global": (
         "General",
         [
+            ("Ctrl+K", "Open the command palette"),
             ("F1", "Show this shortcuts help"),
             (
                 "Ctrl+1 .. 5",
@@ -121,12 +122,13 @@ SHORTCUT_DOCS: dict[str, tuple[str, list[tuple[str, str]]]] = {
             ("Ctrl+Enter", "Run cell in place"),
             ("Alt+Enter", "Run cell and insert a new one below"),
             ("Ctrl+Shift+Enter", "Run all cells"),
-            ("Ctrl+S", "Export notebook as .ipynb (download)"),
+            ("Ctrl+S", "Export notebook (choose .ipynb or .py)"),
             ("Ctrl+Shift+A", "Insert code cell above"),
             ("Ctrl+Shift+B", "Insert code cell below"),
             ("Alt+Up / Alt+Down", "Move cell up / down"),
             ("Ctrl+Shift+D", "Delete cell"),
             ("Ctrl+Shift+M", "Toggle cell type (code / markdown)"),
+            ("Ctrl+I", "Ask AI about this cell (Assistants only)"),
             ("Escape", "Leave the editor (render markdown)"),
         ],
     ),

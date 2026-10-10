@@ -84,6 +84,22 @@ def OnboardingScreen() -> ft.Control:
                 set_auth_status(f"✅ Signed in as {state.auth_email}")
                 set_auth_status_color(AppColors.SUCCESS)
                 set_is_loading_auth(False)
+                # Fire-and-forget usage prefetch (warms the shared cache for
+                # the Home chip; never blocks sign-in flow).
+                try:
+                    from services.usage_cache import get_usage_cached
+
+                    async def _prefetch_after_signin():
+                        try:
+                            await get_usage_cached(
+                                services, state.auth_method
+                            )
+                        except Exception as ex:
+                            logger.debug("Usage prefetch failed: %s", ex)
+
+                    page.run_task(_prefetch_after_signin)
+                except Exception as ex:
+                    logger.debug("Usage prefetch scheduling failed: %s", ex)
             else:
                 err = result.get("error", "Invalid authorization code")
                 set_auth_status(f"❌ {err}")

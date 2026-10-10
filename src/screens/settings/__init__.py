@@ -9,12 +9,14 @@ from core.styles import build_banner_ad
 from screens.settings.about_section import build_about_section
 from screens.settings.account_section import build_account_section
 from screens.settings.advanced_section import build_advanced_section
+from screens.settings.ai_section import build_ai_section
 from screens.settings.behavior_section import build_behavior_section
 from screens.settings.data_section import build_data_section
 from screens.settings.execution_section import build_execution_section
 from screens.settings.hardware_section import build_hardware_section
 from screens.settings.logs_section import build_logs_section
 from screens.settings.preferences_section import build_preferences_section
+from screens.settings.premium_section import build_premium_section
 from state import AppStateCtx, ServiceCtx
 
 
@@ -30,6 +32,8 @@ def SettingsScreen() -> ft.Control:
             build_preferences_section(page, state, services),
             build_account_section(page, state, services),
             build_banner_ad(page),
+            build_ai_section(page, state, services),
+            build_premium_section(page, state, services),
             build_hardware_section(page, state, services),
             build_execution_section(page, state, services),
             build_behavior_section(page, state, services),

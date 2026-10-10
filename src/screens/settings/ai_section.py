@@ -1,0 +1,260 @@
+"""Assistant settings section — mode, model, router, credits, premium.
+
+Built with the same section_header/glass_card idiom as every other settings
+section. Every row reads the live services through context so the numbers
+cannot disagree with what the assistant actually charges.
+"""
+
+from __future__ import annotations
+
+import logging
+
+import flet as ft
+
+from core import constants, tokens
+from core.styles import glass_card, section_header, tip_text
+from services import ai_credits
+
+logger = logging.getLogger("AssistantSettings")
+
+
+def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
+    return ft.Row(
+        controls=[
+            ft.Icon(
+                ft.Icons.AUTO_AWESOME_ROUNDED,
+                size=tokens.ICON_LG,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            ft.Column(
+                controls=[
+                    ft.Text(
+                        title,
+                        size=tokens.FONT_MD,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                    tip_text(subtitle),
+                ],
+                spacing=tokens.SPACE_XXS,
+                expand=True,
+            ),
+            *( [trailing] if trailing is not None else [] ),
+        ],
+        spacing=tokens.SPACE_LG,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+
+def build_ai_section(page: ft.Page, state, services) -> ft.Column:
+    """The ASSISTANT settings block."""
+    credits = getattr(services, "credits", None)
+    premium = getattr(services, "premium", None)
+    premium_available = premium is not None and getattr(premium, "available", False)
+
+    async def _credits_copy_async() -> str:
+        if credits is None:
+            return "Assistant credits are unavailable in this build."
+        try:
+            is_premium = bool(getattr(state, "is_premium", False))
+            balance = await credits.get_balance(is_premium=is_premium)
+            if balance <= 0:
+                # Same wording the assistant gate shows, so the two agree.
+                return ai_credits.out_of_credits_notice(balance, is_premium)
+            cap = credits.daily_cap(is_premium=is_premium)
+            return f"{balance} of {cap} credits left today · resets at 00:00 UTC"
+        except Exception:
+            return "Credits update as you use the assistant."
+
+    credits_text = ft.Text(
+        "Loading credits…",
+        size=tokens.FONT_SM,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        selectable=True,
+    )
+
+    async def _load_credits():
+        credits_text.value = await _credits_copy_async()
+        try:
+            page.update()
+        except Exception as ex:
+            logger.warning("Credits render failed: %s", ex)
+
+    # Kick off the first read; later refreshes are driven by the wallet dialog.
+    page.run_task(_load_credits)
+
+    def _refresh_credits():
+        credits_text.value = "Loading credits…"
+        page.run_task(_load_credits)
+
+    # Expose the refresher so the wallet dialog can call it after a top-up.
+    state.refresh_credits = _refresh_credits
+
+    mode_switch = ft.Switch(
+        value=bool(getattr(state, "ai_mode", False)),
+        on_change=lambda e: _save_mode(e.control.value),
+    )
+
+    help_switch = ft.Switch(
+        value=bool(getattr(state, "ai_help", True)),
+        on_change=lambda e: _save_help(e.control.value),
+    )
+
+    async def _save_mode(value: bool):
+        state.ai_mode = bool(value)
+
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(
+                constants.STORAGE_AI_MODE, "true" if value else "false"
+            )
+        page.update()
+
+    async def _save_help(value: bool):
+        state.ai_help = bool(value)
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(
+                constants.STORAGE_AI_HELP, "true" if value else "false"
+            )
+        page.update()
+
+    router_field = ft.TextField(
+        value=constants.AI_DEFAULT_ROUTER_URL,
+        label="Router URL",
+        hint_text="http://127.0.0.1:8082/v1",
+        text_size=tokens.FONT_SM,
+        border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
+        expand=True,
+    )
+
+    async def _save_router(ev=None):
+        url = (router_field.value or "").strip()
+        if not url:
+            return
+        state.ai_router_url = url
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(constants.STORAGE_AI_ROUTER_URL, url)
+        try:
+            from services.ai_service import configure_provider
+
+            configure_provider(url)
+        except Exception as ex:
+            logger.warning("Provider reconfiguration failed: %s", ex)
+        page.update()
+
+    router_field.on_submit = lambda ev: page.run_task(_save_router)
+
+    def _pick_model(pg, st, svcs):
+        from components.model_picker import show_model_picker
+
+        show_model_picker(pg, st, svcs)
+
+    # Generated from the catalog so the row cannot drift from what the router
+    # actually offers right now.
+    model_label = ft.Text(
+        "Auto" if (getattr(state, "ai_model", "auto") or "auto").lower() == "auto"
+        else getattr(state, "ai_model", "auto"),
+        size=tokens.FONT_SM,
+        weight=ft.FontWeight.W_600,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        selectable=True,
+    )
+
+    model_row = _row(
+        "Assistant model",
+        _model_subtitle(state),
+        trailing=ft.Row(
+            controls=[
+                model_label,
+                ft.OutlinedButton(
+                    "Change",
+                    on_click=lambda e: _pick_model(page, state, services),
+                ),
+            ],
+            spacing=tokens.SPACE_SM,
+            tight=True,
+        ),
+    )
+
+    premium_row = _row(
+        "Assistant premium",
+        _premium_subtitle(state),
+        trailing=ft.FilledButton(
+            "Upgrade",
+            on_click=lambda e: _show_premium(page, state, services),
+        )
+        if premium_available
+        else ft.Text(
+            "Unavailable",
+            size=tokens.FONT_SM,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        ),
+    )
+
+    return ft.Column(
+        controls=[
+            section_header("ASSISTANT"),
+            glass_card(
+                ft.Column(
+                    controls=[
+                        _row(
+                            "Assistant mode",
+                            constants.TIP_AI_MODE,
+                            trailing=mode_switch,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        _row(
+                            "Include app guide in prompts",
+                            "Teach the assistant how this app works so it "
+                            "does not run code that fails here.",
+                            trailing=help_switch,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        _row("Router URL", "OpenAI-compatible endpoint",
+                             trailing=None),
+                        ft.Container(
+                            content=router_field,
+                            padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        model_row,
+                        ft.Divider(height=tokens.SPACE_SM),
+                        _row("Credits", ai_credits.credits_are_for_copy()),
+                        ft.Container(
+                            content=credits_text,
+                            padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        premium_row,
+                    ],
+                    spacing=tokens.SPACE_SM,
+                ),
+                margin=ft.Margin(
+                    tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
+                ),
+            ),
+        ],
+        spacing=0,
+    )
+
+
+def _premium_subtitle(state) -> str:
+    if bool(getattr(state, "is_premium", False)):
+        return "Premium is active — 500 credits a day."
+    return "Raise the daily allowance from 50 to 500 credits."
+
+
+def _model_subtitle(state) -> str:
+    """Subtitle for the model row, generated from state so it cannot drift."""
+    model = getattr(state, "ai_model", "auto") or "auto"
+    if model == "auto":
+        return "Rotates across the models your router has awake."
+    return model
+
+
+def _show_premium(page: ft.Page, state, services):
+    """Open the wallet dialog (balance, top-up, and the premium upsell)."""
+    from components.wallet_dialog import show_wallet_dialog
+
+    show_wallet_dialog(page, state, services)

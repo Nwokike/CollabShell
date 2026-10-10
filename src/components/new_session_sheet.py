@@ -20,6 +20,7 @@ def show_new_session_sheet(
     mode=None,
     ignore_warning=False,
     on_session_created=None,
+    storage=None,
 ):
     def _close_limit_dialog(e=None):
         limit_dialog.open = False
@@ -59,6 +60,7 @@ def show_new_session_sheet(
     gpu_ref = ft.Ref[ft.Dropdown]()
     tpu_ref = ft.Ref[ft.Dropdown]()
     hardware_type_ref = ft.Ref[ft.SegmentedButton]()
+    high_mem_ref = ft.Ref[ft.Switch]()
 
     async def _on_create(e):
         name = name_ref.current.value.strip() if name_ref.current else ""
@@ -79,22 +81,59 @@ def show_new_session_sheet(
             if (tpu_ref.current and selected_hw == "TPU")
             else None
         )
+        high_mem = bool(high_mem_ref.current and high_mem_ref.current.value)
 
-        paid_gpus = {"L4", "G4", "A100", "H100"}
-        if gpu in paid_gpus:
+        from core.constants import PAID_TIER_GPU
+
+        paid_gpus = set(PAID_TIER_GPU)
+        # v6e1 is a Pro TPU (v5e1 is the only free TPU) — confirmed live:
+        # v6e1 returns 400 on free accounts while v5e1 succeeds.
+        paid_tpus = {"v6e1"}
+        needs_confirm = gpu in paid_gpus or (tpu or "").lower() in paid_tpus or high_mem
+        if needs_confirm:
 
             def _close_confirm(data):
                 confirm_dialog.data = data
                 confirm_dialog.open = False
                 page.update()
 
+            confirm_lines = []
+            if gpu in paid_gpus:
+                confirm_lines.append(
+                    f"{gpu} requires Colab Pro or Pay As You Go and may incur charges."
+                )
+            if (tpu or "").lower() in paid_tpus:
+                confirm_lines.append(
+                    f"{tpu} requires Colab Pro and may fail on free accounts."
+                )
+            if high_mem:
+                confirm_lines.append(
+                    "High-RAM shape requires Colab Pro or Pro+ entitlement "
+                    "and may fail on free accounts."
+                )
+            # Cached balance line (shared 24h cache with Home + Settings).
+            # Never blocks the dialog: omitted when unavailable.
+            try:
+                from types import SimpleNamespace as _NS
+
+                from services.usage_cache import get_usage_cached
+
+                usage = await get_usage_cached(
+                    _NS(colab=colab_service, storage=storage),
+                    state.auth_method,
+                )
+                if usage is not None:
+                    confirm_lines.append(
+                        f"Current balance: {float(usage.get('balance', 0.0)):.2f} "
+                        "compute units."
+                    )
+            except Exception:
+                pass
             confirm_dialog = ft.AlertDialog(
                 modal=True,
                 on_dismiss=lambda e: _close_confirm("cancel"),
                 title=ft.Text("Paid Runtime Warning"),
-                content=ft.Text(
-                    f"{gpu} requires Colab Pro or Pay As You Go and may incur charges. Continue?"
-                ),
+                content=ft.Text("\n\n".join(confirm_lines) + "\n\nContinue?"),
                 actions=[
                     ft.TextButton(
                         "Cancel",
@@ -150,14 +189,18 @@ def show_new_session_sheet(
 
         try:
             logger.info(
-                "Attempting to create session: %s (GPU=%s, TPU=%s)", name, gpu, tpu
+                "Attempting to create session: %s (GPU=%s, TPU=%s, high_mem=%s)",
+                name,
+                gpu,
+                tpu,
+                high_mem,
             )
             result = await colab_service.new_session(
                 name=name or None,
                 gpu=gpu if gpu else None,
                 tpu=tpu if tpu else None,
                 auth_method=state.auth_method,
-                keep_alive=state.keep_alive_enabled,
+                high_mem=high_mem,
             )
             logger.info("Session created successfully: %s", result)
             loading_dialog.open = False
@@ -190,7 +233,22 @@ def show_new_session_sheet(
             loading_dialog.open = False
             page.update()
             if snack_func:
-                snack_func(f"❌ {ex}")
+                msg = str(ex)
+                if "Allocation refused (precondition failed)" in msg:
+                    if high_mem:
+                        msg += (
+                            " If you requested High RAM, retry as Standard RAM — "
+                            "High RAM requires Colab Pro/Pro+."
+                        )
+                    snack_func(f"❌ {msg}")
+                elif (
+                    "High-RAM is not available" in msg
+                    or "rejected" in msg
+                    and "quota or entitlement" in msg
+                ):
+                    snack_func(f"❌ {msg}")
+                else:
+                    snack_func(f"❌ {ex}")
         state.is_provisioning = False
         page.update()
 
@@ -200,6 +258,8 @@ def show_new_session_sheet(
         gpu_ref=gpu_ref,
         tpu_ref=tpu_ref,
         hardware_type_ref=hardware_type_ref,
+        high_mem_ref=high_mem_ref,
+        high_mem_default=bool(getattr(state, "default_high_mem", False)),
     )
 
     hw_dialog = ft.AlertDialog(

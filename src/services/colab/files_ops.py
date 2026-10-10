@@ -57,11 +57,13 @@ async def ls_impl(
         if norm_path == "." or norm_path == "/":
             norm_path = ""
 
+        from services.colab.session_ops import load_session_fresh
+
         provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
         st = State()
         st.auth_provider = provider
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -114,11 +116,13 @@ async def upload_impl(
 
         norm_remote = posixpath.normpath(remote_path)
 
+        from services.colab.session_ops import load_session_fresh
+
         provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
         st = State()
         st.auth_provider = provider
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -159,11 +163,13 @@ async def download_impl(
 
         norm_remote = posixpath.normpath(remote_path)
 
+        from services.colab.session_ops import load_session_fresh
+
         provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
         st = State()
         st.auth_provider = provider
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -292,11 +298,13 @@ async def rm_impl(
 
         norm_path = posixpath.normpath(path)
 
+        from services.colab.session_ops import load_session_fresh
+
         provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
         st = State()
         st.auth_provider = provider
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 

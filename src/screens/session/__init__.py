@@ -9,7 +9,7 @@ import flet as ft
 from components.shortcuts_help import build_help_button
 from core import tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
-from core.styles import hardware_badge, status_dot
+from core.styles import hardware_badge, shape_chip, status_dot
 from screens.files.modal import show_manage_files_modal
 from screens.session.fab_menu import build_session_fab
 from screens.session.layout import build_tab_switcher
@@ -131,6 +131,18 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     cells_version, set_cells_version = ft.use_state(0)
     nb_actions_ref = ft.use_ref(dict)
     term_actions_ref = ft.use_ref(dict)
+    # Per-session env override store: plain memory-only dict shared between
+    # the header env icon (opens the dialog) and the notebook view (reads it
+    # at exec time). Rebuilt only when the session screen rebuilds; the dialog
+    # mutates it in place so both sides always see the same object.
+    session_env_override: dict = {}
+
+    def _open_env_dialog(e=None):
+        from components.env_dialog import show_env_override_dialog
+
+        show_env_override_dialog(
+            page, state, session_env_override, on_save=lambda _env: None
+        )
 
     def _sync_fab():
         if not page or not page.views:
@@ -152,6 +164,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_export_ipynb=lambda e: _call(nb_actions, "export_ipynb"),
             on_import_ipynb=lambda e: _call(nb_actions, "import_ipynb"),
             on_clear_all=lambda e: _call(nb_actions, "clear_all"),
+            on_rename_notebook=lambda e: _call(nb_actions, "rename_notebook"),
             # Shared
             on_manage_files=lambda e: show_manage_files_modal(
                 page,
@@ -202,6 +215,21 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_term_zoom_reset=lambda e=None: _call(term_actions, "zoom_reset"),
             on_term_toggle_blink=lambda e=None: _call(term_actions, "toggle_blink"),
             on_term_toggle_search=lambda e=None: _call(term_actions, "toggle_search"),
+            # AI. Each panel registers its own handler, and each is only
+            # offered while ai_mode is on — a menu entry that just opens a
+            # "turn it on" notice is worse than no entry.
+            on_ai_explain=(
+                lambda e: _call(term_actions, "explain") if state.ai_mode else None
+            ),
+            on_ai_explain_cell=(
+                lambda e: _call(nb_actions, "ask_ai_active") if state.ai_mode else None
+            ),
+            on_ai_suggest_hardware=(
+                lambda e: _call(nb_actions, "suggest_hardware")
+                if state.ai_mode
+                else None
+            ),
+            on_open_assistant=lambda e: controller.open_assistant(),
         )
         try:
             page.views[0].floating_action_button = fab
@@ -278,8 +306,15 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     )
     _accel = (_session or {}).get("accelerator", "NONE")
     _variant = (_session or {}).get("variant", "DEFAULT")
+    _shape = (_session or {}).get("machine_shape", "STANDARD")
     _is_running = (_session or {}).get("running") is not None
     _status_text = (_session or {}).get("status", "IDLE")
+    # Env indicator reflects persisted defaults (the override dialog pre-fills
+    # from these). Per-session memory-only overrides live in the notebook view
+    # and are shown there; the header stays truthful about stored config.
+    _env_count = len(getattr(state, "default_env", {}) or {}) + len(
+        session_env_override
+    )
 
     # ── Content area ──────────────────────────────────────────────────────────
     content = ft.Stack(
@@ -295,6 +330,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     register_bindings=lambda bindings: (
                         session_kb_ref.current.__setitem__("nb_bindings", bindings)
                     ),
+                    session_env_override=session_env_override,
                 ),
                 expand=True,
                 visible=active_tab == 0,
@@ -351,15 +387,44 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     expand=True,
                     tooltip=session_name,
                 ),
-                hardware_badge(_accel, _variant),
-                build_tab_switcher(active_tab, _switch_tab),
-                build_help_button(
-                    page,
-                    lambda: (
-                        "terminal" if session_kb_ref.current["tab"] == 1 else "notebook"
-                    ),
+                # Badge rail scrolls horizontally on narrow screens (visible
+                # scrollbar, Sherlock/LM-Router pattern) so the hardware/shape
+                # chips, tab switcher, help, and theme controls are never
+                # silently clipped the way HIDDEN-scroll did on laptops.
+                ft.Row(
+                    controls=[
+                        hardware_badge(_accel, _variant),
+                        shape_chip(_shape),
+                        *(
+                            [
+                                ft.IconButton(
+                                    icon=ft.Icons.TUNE_ROUNDED,
+                                    icon_size=tokens.ICON_SM,
+                                    tooltip=(
+                                        f"Environment variables ({_env_count} set) — "
+                                        "tap to manage"
+                                    ),
+                                    on_click=_open_env_dialog,
+                                )
+                            ]
+                            if _env_count
+                            else []
+                        ),
+                        build_tab_switcher(active_tab, _switch_tab),
+                        build_help_button(
+                            page,
+                            lambda: (
+                                "terminal"
+                                if session_kb_ref.current["tab"] == 1
+                                else "notebook"
+                            ),
+                        ),
+                        theme_btn,
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=tokens.SPACE_SM,
+                    scroll=ft.ScrollMode.AUTO,
                 ),
-                theme_btn,
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_SM,

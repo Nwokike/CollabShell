@@ -110,7 +110,7 @@ def build_page_2() -> ft.Column:
             ft.Container(height=tokens.SPACE_SM),
             ft.Container(
                 content=ft.Text(
-                    "💡 CPU sessions are always free. GPU/TPU have usage limits on the free tier.",
+                    "💡 CPU sessions are always free. GPU/TPU have usage limits on the free tier. High-RAM needs Colab Pro/Pro+. Check Settings → Account for your compute-unit balance.",
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     text_align=ft.TextAlign.CENTER,
@@ -233,7 +233,9 @@ def build_page_3(
                                 value=auth_code_val,
                                 label="Paste authorization code",
                                 prefix_icon=ft.Icons.KEY_ROUNDED,
-                                border_radius=tokens.RADIUS_MD,
+                                border=ft.OutlineInputBorder(
+                                    border_radius=tokens.RADIUS_MD
+                                ),
                                 text_size=tokens.FONT_MD,
                                 visible=show_verify,
                                 on_change=on_auth_code_change,

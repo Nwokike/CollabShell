@@ -19,6 +19,8 @@ class Services:
     storage: object = None
     ad_service: object = None
     page: object = None  # ft.Page ref for services that need it directly
+    credits: object = None  # assistant credit metering (CreditService)
+    premium: object = None  # entitlement reconciliation (PremiumService)
 
 
 ServiceCtx = ft.create_context(Services())

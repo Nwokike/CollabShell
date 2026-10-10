@@ -109,7 +109,10 @@ class ColabTerminalClient:
         def _read():
             from colab_cli.common import State
 
-            s = State().store.get(self.session_name)
+            from services.colab.session_ops import load_session_fresh
+
+            st = State()
+            s = load_session_fresh(st, self.session_name)
             if not s:
                 return None
             return (s.url, s.token)

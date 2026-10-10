@@ -1,0 +1,992 @@
+"""Assistant — the app-wide chat surface.
+
+An imperative `ChatSession` rather than a component, for one reason: streaming
+repaints at up to 5Hz and the transcript is the state. A component would
+reconcile the whole tree per token; this rebuilds one list and pushes it.
+
+Ported from DDGS's chat_screen with the parts that matter. The lifecycle is the
+important half: the session object is retained on the page, so minimizing pops
+the view without destroying the conversation or cancelling a running turn, and
+the FAB brings back the exact same transcript, scroll position and pending
+approval.
+
+Metering runs through `services.ai_credits.run_metered_turn`, so the gate, the
+per-step charge and the "delivered work is worth one step" floor rule come
+from one place.
+
+Two throttle clocks — text and thought — stay independent. Sharing one meant a
+text flush reset the thought throttle and vice versa, so thinking could
+silently starve for 500ms every time a text token landed. State mutates on
+*every* event; only the repaint is throttled.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+
+import flet as ft
+
+from core import tokens
+from core.styles import tip_text
+from core.theme import AppColors
+
+logger = logging.getLogger("assistant")
+
+_CHAT_ICON = ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED
+_THOUGHT_CAP = 8000
+
+TEXT_FLUSH_SEC = 0.2
+THOUGHT_FLUSH_SEC = 0.5
+APPROVAL_TIMEOUT_SEC = 120
+
+# Only these events refresh the credit chip: the balance can move on a stop,
+# a failure or a rate limit, not only on success.
+_TERMINAL_EVENTS = ("text_final", "error", "stopped")
+
+
+def _starter_rows():
+    """Suggestion rows for the welcome state, from the app's real tools.
+
+    Kept here so what the starters promise is always what the tools do.
+    """
+    return [
+        (ft.Icons.PLAY_ARROW_ROUNDED, "Run code on my session", "Run this and tell me what happened: print(1+1)"),
+        (ft.Icons.DESCRIPTION_ROUNDED, "Explain my notebook", "Read my active notebook and explain what it does, cell by cell"),
+        (ft.Icons.BUG_REPORT_ROUNDED, "Fix the error", "Read my active notebook, find the last error, and fix it"),
+        (ft.Icons.LIST_ALT_ROUNDED, "What's in my session?", "List the files and variables in my active session"),
+        (ft.Icons.TERMINAL_ROUNDED, "Check the terminal", "Show me the recent terminal output and flag anything concerning"),
+    ]
+
+
+def _empty_turn() -> dict:
+    return {
+        "role": "assistant",
+        "text": "",
+        "thought": "",
+        "steps_rows": [],
+        "partial": True,
+        "error": None,
+        "error_message": "",
+        "stopped": False,
+        "cost": 0,
+        "model": "",
+    }
+
+
+_CELL_REF_PREFIX = "Cells: "
+
+
+def _cell_refs(step: dict) -> list[str]:
+    """Pull the cell ids a `write_cells` step reported.
+
+    The tool reports them in a fixed "Cells: <id>, <id>" tail so the model can
+    name them too; this reads that tail back. Anything else returns [] and the
+    step row stays inert.
+    """
+    if step.get("name") != "write_cells":
+        return []
+    text = str(step.get("result") or "")
+    if _CELL_REF_PREFIX not in text:
+        return []
+    tail = text.rsplit(_CELL_REF_PREFIX, 1)[1].strip()
+    return [part.strip() for part in tail.split(",") if part.strip()]
+
+
+def _notice(message: str, color: str) -> ft.Control:
+    return ft.Container(
+        content=ft.Text(message, size=tokens.FONT_SM, color=color),
+        padding=ft.Padding.all(tokens.SPACE_SM),
+        border_radius=tokens.RADIUS_MD,
+        bgcolor=ft.Colors.with_opacity(0.12, color),
+    )
+
+
+def _turns_from_messages(messages: list[dict]) -> list[dict]:
+    """Rebuild renderable turns from a saved conversation.
+
+    Saved messages are the flat role/content pairs the agent consumes, so the
+    visual extras (step rows, cards, receipts) are not in them — an reopened
+    chat renders the conversation itself rather than inventing tool detail.
+    """
+    turns: list[dict] = []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        text = str(message.get("content") or "")
+        if role == "user":
+            turns.append({"role": "user", "text": text})
+        elif role == "assistant":
+            turn = _empty_turn()
+            turn["text"] = text
+            turn["partial"] = False
+            turns.append(turn)
+    return turns
+
+
+class ChatSession:
+    """Owns one conversation: transcript, rendering, and the agent turn."""
+
+    def __init__(self, page: ft.Page, state, services, controller=None):
+        from services import conversation_service as conversations
+
+        self.page = page
+        self.state = state
+        self.services = services
+        self.controller = controller
+        self._conversations = conversations
+
+        self.conversation_id = conversations.ensure_active()
+        saved = conversations.load_conversation(self.conversation_id) or {}
+        self._turns = _turns_from_messages(saved.get("messages") or [])
+
+        self._current: dict | None = None
+        self._busy = False
+        self._task: asyncio.Task | None = None
+        self._cancel = asyncio.Event()
+        self._last_text_flush = 0.0
+        self._last_thought_flush = 0.0
+        # Set once teardown starts; every UI touch afterwards is a no-op.
+        self._closing = False
+        self._confirm: tuple[asyncio.Event, dict] | None = None
+        self._credits_value = 0
+
+        self._build_controls()
+
+    # ── widget tree ─────────────────────────────────────────────────────────
+
+    def _build_controls(self) -> None:
+        self._list = ft.ListView(
+            controls=[],
+            spacing=tokens.SPACE_LG,
+            expand=True,
+            auto_scroll=True,
+            padding=ft.Padding.symmetric(horizontal=tokens.SPACE_MD),
+        )
+
+        self.field = ft.TextField(
+            hint_text="Ask anything",
+            expand=True,
+            dense=True,
+            multiline=True,
+            min_lines=1,
+            max_lines=5,
+            shift_enter=True,
+            fill_color=ft.Colors.with_opacity(0.06, ft.Colors.ON_SURFACE),
+            content_padding=ft.Padding.all(tokens.SPACE_MD),
+            border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_LG),
+        )
+        # Enter sends; shift_enter adds the newline.
+        self.field.on_submit = lambda e: self._send_from_field()
+
+        # One circular button, two faces: send when idle, stop when busy.
+        self.send_btn = ft.IconButton(
+            icon=ft.Icons.SEND_ROUNDED,
+            icon_color=ft.Colors.WHITE,
+            tooltip="Send",
+            style=ft.ButtonStyle(shape=ft.CircleBorder(), bgcolor=self._brand()),
+            on_click=lambda e: self._on_composer_button(),
+        )
+
+        self._credits_text = ft.Text("…", size=tokens.FONT_XS, weight=ft.FontWeight.W_600)
+
+        header = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Row(
+                        [
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK_ROUNDED,
+                                tooltip="Minimize assistant",
+                                on_click=lambda e: self.close(),
+                            ),
+                            ft.Icon(_CHAT_ICON, size=tokens.ICON_MD, color=self._brand()),
+                            ft.Text(
+                                "Assistant",
+                                size=tokens.FONT_MD,
+                                weight=ft.FontWeight.W_700,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_SM,
+                        tight=True,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Row(
+                        [
+                            ft.IconButton(
+                                icon=ft.Icons.ADD_ROUNDED,
+                                icon_size=tokens.ICON_SM,
+                                icon_color=self._brand(),
+                                tooltip="New chat",
+                                style=ft.ButtonStyle(
+                                    padding=ft.Padding(2, tokens.SPACE_SM, 2, tokens.SPACE_SM)
+                                ),
+                                on_click=lambda e: self.new_conversation(),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.HISTORY_ROUNDED,
+                                icon_size=tokens.ICON_SM,
+                                icon_color=self._brand(),
+                                tooltip="History",
+                                style=ft.ButtonStyle(
+                                    padding=ft.Padding(2, tokens.SPACE_SM, 2, tokens.SPACE_SM)
+                                ),
+                                on_click=lambda e: self._show_history(),
+                            ),
+                            ft.Container(
+                                content=self._credits_text,
+                                padding=ft.Padding.symmetric(
+                                    horizontal=tokens.SPACE_SM, vertical=tokens.SPACE_XS
+                                ),
+                                border_radius=tokens.RADIUS_PILL,
+                                tooltip="Assistant credits",
+                            ),
+                        ],
+                        spacing=tokens.SPACE_XS,
+                        tight=True,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                scroll=ft.ScrollMode.AUTO,
+            ),
+            padding=ft.Padding(tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM),
+        )
+
+        composer = ft.Container(
+            content=ft.Row(
+                [self.field, self.send_btn],
+                vertical_alignment=ft.CrossAxisAlignment.END,
+                spacing=tokens.SPACE_NANO,
+            ),
+            padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD),
+        )
+
+        self.view = ft.View(
+            route="/assistant",
+            controls=[
+                ft.SafeArea(
+                    expand=True,
+                    content=ft.Container(
+                        content=ft.Column(
+                            [header, ft.Container(self._list, expand=True), composer],
+                            spacing=0,
+                            expand=True,
+                        ),
+                        expand=True,
+                        bgcolor=ft.Colors.SURFACE,
+                    ),
+                )
+            ],
+            padding=0,
+            spacing=0,
+        )
+        self._render()
+        self._refresh_credits()
+
+    def _brand(self) -> str:
+        """The theme's brand color, read live so the header follows a theme
+        change instead of pinning one hue from the first build."""
+        try:
+            theme = ft.context.page.theme
+            primary = getattr(getattr(theme, "color_scheme", None), "primary", None)
+            if primary:
+                return primary
+        except Exception:
+            pass
+        return ft.Colors.PRIMARY
+
+    # ── lifecycle ──────────────────────────────────────────────────────────
+
+    def restore(self) -> None:
+        """Re-attach this retained session to the view stack.
+
+        Append-if-absent: the session can be re-opened from more than one
+        place (FAB, history, a step→cell tap), and stacking the same view twice
+        would mean a back press only closes a duplicate.
+        """
+        if self.view not in self.page.views:
+            self.page.views.append(self.view)
+        self.state.assistant_open = True
+        self.state.assistant_minimized = False
+        try:
+            self.page.update()
+        except Exception:
+            logger.debug("assistant restore: update failed")
+
+    def close(self) -> None:
+        """Minimize.
+
+        The session is retained, and a running turn is deliberately NOT
+        cancelled — minimizing puts the conversation away, not the work. A
+        pending approval also survives, so re-opening mid-gate lands on the same
+        card rather than a fresh one.
+        """
+        self._persist_history()
+        try:
+            if self.page.views and self.page.views[-1] is self.view:
+                self.page.views.pop()
+            self.state.assistant_open = False
+            self.state.assistant_minimized = True
+            self.page.update()
+        except Exception:
+            self.state.assistant_open = False
+            self.state.assistant_minimized = True
+
+    def shutdown(self) -> None:
+        """Tear the session down before Flet releases the page."""
+        if self._closing:
+            return
+        self._closing = True
+        self._cancel.set()
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+        try:
+            self._persist_history()
+        except Exception:
+            logger.debug("persist on shutdown failed", exc_info=True)
+
+    def new_conversation(self) -> None:
+        """Start a fresh chat. Saves the current one first."""
+        self._persist_history()
+        self.conversation_id = self._conversations.new_conversation_id()
+        self.state.active_assistant_conversation = self.conversation_id
+        self._turns = []
+        self._current = None
+        self._busy = False
+        self._cancel = asyncio.Event()
+        self._set_busy_ui(False)
+        self._render()
+
+    def _show_history(self) -> None:
+        from services import conversation_service as conversations
+
+        rows = conversations.refresh_state()
+        handler = getattr(self.controller, "open_assistant_history", None)
+        if callable(handler):
+            handler(rows)
+            return
+        logger.debug("no open_assistant_history handler; %d chats", len(rows))
+
+    def load_conversation(self, conversation_id: str) -> bool:
+        """Replace the transcript with a saved chat.
+
+        Returns False if the chat cannot be read, leaving the current one open
+        — a failed switch must not blank the view the user is looking at.
+        """
+        payload = self._conversations.load_conversation(conversation_id)
+        if payload is None:
+            return False
+        self._persist_history()
+        self.conversation_id = conversation_id
+        self.state.active_assistant_conversation = conversation_id
+        self._turns = _turns_from_messages(payload.get("messages") or [])
+        self._current = None
+        self._render()
+        return True
+
+    # ── send / run ─────────────────────────────────────────────────────────
+
+    def _send_from_field(self) -> None:
+        text = (self.field.value or "").strip()
+        if not text or self._busy:
+            return
+        self.field.value = ""
+        try:
+            self.field.update()
+        except Exception:
+            pass
+        self.send(text)
+
+    def _on_composer_button(self) -> None:
+        if self._busy:
+            self.stop()
+        else:
+            self._send_from_field()
+
+    def send(self, text: str) -> None:
+        """Queue one turn.
+
+        Refuses while busy, so a double-tap never doubles the spend, and
+        refuses blank text, so a stray tap cannot start a metered turn that
+        sends nothing to the model. Callers include the starter rows, so the
+        strip belongs here rather than only in the composer.
+        """
+        text = (text or "").strip()
+        if not text or self._busy or self._closing:
+            return
+        self._busy = True
+        self._cancel = asyncio.Event()
+        self._set_busy_ui(True)
+
+        self._turns.append({"role": "user", "text": text})
+        self._current = _empty_turn()
+        self._turns.append(self._current)
+        self._render()
+
+        self._task = asyncio.ensure_future(self._run_turn(text))
+        self._task.add_done_callback(self._on_turn_done)
+
+    async def _run_turn(self, text: str) -> None:
+        from services import ai_credits
+
+        result = await ai_credits.run_metered_turn(
+            state=self.state,
+            credits=getattr(self.services, "credits", None),
+            model=getattr(self.state, "ai_model", "auto"),
+            tools=self._build_tools(),
+            messages=self._model_history() + [{"role": "user", "content": text}],
+            system=self._system_prompt(),
+            on_token=self._on_token,
+            on_tool_start=self._on_tool_start,
+            on_tool_done=self._on_tool_done,
+            should_stop=self._cancel.is_set,
+        )
+
+        if not result.get("ok"):
+            kind = "credits" if result.get("out_of_credits") else "unavailable"
+            self._emit("error", {"kind": kind, "message": result.get("error", "")})
+            return
+
+        for step in result.get("steps", []):
+            self._emit(
+                "step_done",
+                {
+                    "label": step.get("name", ""),
+                    "id": step.get("id", ""),
+                    "result": step.get("result", ""),
+                    "error": step.get("error"),
+                    # write_cells echoes the ids it inserted so this row can
+                    # point back at the cells and hand them over to the user.
+                    "refs": _cell_refs(step),
+                },
+            )
+
+        if result.get("cancelled"):
+            self._emit("stopped", {})
+        self._emit(
+            "text_final",
+            {
+                "text": result.get("text", ""),
+                "model": result.get("model", ""),
+                "cost": result.get("cost", 0),
+            },
+        )
+
+    def _on_token(self, token: str) -> None:
+        self._emit("text_partial", {"text": token})
+
+    def _on_tool_start(self, name: str, args: dict) -> None:
+        self._emit("step_start", {"label": name, "id": name})
+
+    def _on_tool_done(self, name: str, args: dict) -> None:
+        pass
+
+    def _build_tools(self) -> list:
+        from services.ai_tools import build_tools
+
+        return build_tools(
+            getattr(self.state, "active_session_name", "") or "",
+            self.services,
+            self.state,
+            ask_confirm=self.ask_confirm,
+        )
+
+    def _system_prompt(self) -> str:
+        if not getattr(self.state, "ai_help", True):
+            return ""
+        from ai import skill_text
+
+        return skill_text()
+
+    def _model_history(self) -> list[dict]:
+        from services.conversation_service import flat_from_turns
+
+        return flat_from_turns(self._turns)[-30:]
+
+    def _on_turn_done(self, task) -> None:
+        self._busy = False
+        self._task = None
+        self._set_busy_ui(False)
+        if self._closing:
+            return
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.warning("Assistant turn crashed: %s", exc)
+            self._emit(
+                "error",
+                {"kind": "unavailable", "message": "The assistant stopped unexpectedly."},
+            )
+        self._persist_history()
+        self._render()
+
+    def stop(self) -> None:
+        """Stop now. Raises the flag, then cancels the task.
+
+        The floor rule means work already shown is still billed, so stopping
+        never finishes as a free model call.
+        """
+        self._cancel.set()
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+
+    def _set_busy_ui(self, busy: bool) -> None:
+        self.send_btn.icon = ft.Icons.STOP_ROUNDED if busy else ft.Icons.SEND_ROUNDED
+        self.send_btn.tooltip = "Stop" if busy else "Send"
+        self.send_btn.style = ft.ButtonStyle(
+            shape=ft.CircleBorder(),
+            bgcolor=ft.Colors.ERROR if busy else self._brand(),
+        )
+        try:
+            self.send_btn.update()
+        except Exception:
+            pass
+
+    # ── approval gate ──────────────────────────────────────────────────────
+
+    async def ask_confirm(self, label: str, detail: str = "") -> bool:
+        """Approve/deny gate for destructive tools. Times out to deny."""
+        event = asyncio.Event()
+        self._confirm = (event, {"label": label, "detail": detail, "decision": None})
+        self._render()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=APPROVAL_TIMEOUT_SEC)
+            decision = self._confirm[1]["decision"] if self._confirm else None
+            return decision == "allow"
+        except (TimeoutError, asyncio.CancelledError):
+            return False
+        finally:
+            self._confirm = None
+            if not self._closing:
+                self._render()
+
+    def _confirm_decision(self, decision: str) -> None:
+        # First answer wins: a second tap on a settled gate is a no-op rather
+        # than a race against the tool that already resumed.
+        if self._confirm and self._confirm[1].get("decision") is None:
+            self._confirm[1]["decision"] = decision
+            self._confirm[0].set()
+
+    def _reveal_cell(self, cell_id: str) -> None:
+        """Hand an assistant-written cell over to the user.
+
+        The controller owns how a session is reached (route, view stack), so
+        the chat only says which cell — the shell decides the rest.
+        """
+        handler = getattr(self.controller, "reveal_cell", None)
+        if not callable(handler):
+            return
+        try:
+            handler(getattr(self.state, "active_session_name", "") or "", cell_id)
+        except Exception:
+            logger.debug("reveal_cell failed", exc_info=True)
+
+    # ── emit ───────────────────────────────────────────────────────────────
+
+    def _emit(self, event: str, data: dict) -> None:
+        if self._closing:
+            return
+        now = time.monotonic()
+        force = True
+
+        if event == "text_partial" and self._current is not None:
+            self._current["text"] += str(data.get("text", ""))
+            force = False
+            if now - self._last_text_flush < TEXT_FLUSH_SEC:
+                return
+            self._last_text_flush = now
+        elif event == "thought" and self._current is not None:
+            buf = (self._current.get("thought") or "") + data.get("text", "")
+            self._current["thought"] = buf[-_THOUGHT_CAP:]
+            force = False
+            if now - self._last_thought_flush < THOUGHT_FLUSH_SEC:
+                return
+            self._last_thought_flush = now
+        elif event == "step_start" and self._current is not None:
+            self._current["steps_rows"].append(
+                {
+                    "id": data.get("id", ""),
+                    "label": data.get("label", ""),
+                    "state": "running",
+                    "outcome": "",
+                    "error": None,
+                    "refs": [],
+                }
+            )
+        elif event in ("step_done", "step_error") and self._current is not None:
+            rows = self._current["steps_rows"]
+            for row in rows:
+                if row["id"] == data.get("id"):
+                    row["state"] = "error" if event == "step_error" else "done"
+                    row["outcome"] = str(data.get("result") or "")
+                    row["error"] = data.get("error")
+                    if data.get("refs"):
+                        row["refs"] = list(data["refs"])
+                    break
+            else:
+                rows.append(
+                    {
+                        "id": data.get("id", ""),
+                        "label": data.get("label", ""),
+                        "state": "error" if event == "step_error" else "done",
+                        "outcome": str(data.get("result") or ""),
+                        "error": data.get("error"),
+                        "refs": list(data.get("refs") or []),
+                    }
+                )
+        elif event == "text_final" and self._current is not None:
+            self._current["text"] = data.get("text", "") or self._current["text"]
+            self._current["model"] = data.get("model", "")
+            self._current["cost"] = data.get("cost", 0)
+            self._current["partial"] = False
+            self._persist_history()
+        elif event == "stopped" and self._current is not None:
+            self._current["stopped"] = True
+            self._current["partial"] = False
+        elif event == "error" and self._current is not None:
+            self._current["error"] = data.get("kind", "unavailable")
+            self._current["error_message"] = str(data.get("message") or "")
+            self._current["partial"] = False
+
+        if event in _TERMINAL_EVENTS:
+            self._refresh_credits()
+        self._render(force=force)
+
+    # ── rendering ──────────────────────────────────────────────────────────
+
+    def _render(self, force: bool = True) -> None:
+        """Rebuild the transcript list wholesale, then push only that list.
+
+        Never `page.update()` here: a full-page push mid-stream costs a round
+        trip per token, and anything reconciling the app shell at the same time
+        tears the chat's own widgets.
+        """
+        if self._closing:
+            return
+        controls: list[ft.Control] = []
+        if not self._turns:
+            controls.append(self._welcome())
+        for turn in self._turns:
+            if turn.get("role") == "user":
+                controls.append(self._render_user(turn))
+            else:
+                controls.append(self._render_assistant(turn))
+        self._list.controls = controls
+        try:
+            self._list.update()
+        except Exception:
+            logger.debug("assistant render: list update failed")
+
+    def _render_user(self, turn: dict) -> ft.Control:
+        return ft.Column(
+            horizontal_alignment=ft.CrossAxisAlignment.END,
+            controls=[
+                ft.Container(
+                    content=ft.Text(
+                        turn.get("text", ""),
+                        size=tokens.FONT_SM,
+                        color=ft.Colors.WHITE,
+                        selectable=True,
+                    ),
+                    padding=ft.Padding.all(tokens.SPACE_MD),
+                    border_radius=ft.BorderRadius(
+                        tokens.RADIUS_XL, tokens.RADIUS_XL, tokens.RADIUS_XS, tokens.RADIUS_XL
+                    ),
+                    bgcolor=ft.Colors.PRIMARY,
+                    width=min(320, (self.page.width or 320) * 0.8),
+                )
+            ],
+        )
+
+    def _render_assistant(self, turn: dict) -> ft.Control:
+        kids: list[ft.Control] = []
+
+        if turn.get("thought", "").strip():
+            kids.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(
+                                ft.Icons.PSYCHOLOGY_OUTLINED,
+                                size=tokens.ICON_SM,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                            ft.Text(
+                                "Thought it through",
+                                size=tokens.FONT_XS,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_SM,
+                    )
+                )
+            )
+
+        for row in turn.get("steps_rows", []):
+            if row["state"] == "running":
+                icon = ft.ProgressRing(width=12, height=12, stroke_width=2)
+            elif row["state"] == "error":
+                icon = ft.Icon(
+                    ft.Icons.ERROR_OUTLINE_ROUNDED,
+                    size=tokens.ICON_SM,
+                    color=AppColors.ERROR,
+                )
+            else:
+                icon = ft.Icon(
+                    ft.Icons.CHECK_CIRCLE_ROUNDED,
+                    size=tokens.ICON_SM,
+                    color=AppColors.SUCCESS,
+                )
+            label = row["label"]
+            if row["state"] == "done" and row.get("outcome"):
+                label = f"{label}: {row['outcome']}"
+            elif row["state"] == "error":
+                detail = str(row.get("error") or "").strip() or "failed"
+                label = f"{label}: {detail[:90]}"
+            # A row that wrote cells is also a way to reach them: tapping the
+            # first one switches to its tab and puts the caret in the cell, so
+            # the user takes over exactly where the assistant stopped.
+            refs = [r for r in (row.get("refs") or []) if r]
+            kids.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            icon,
+                            ft.Text(
+                                label,
+                                size=tokens.FONT_SM,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                expand=True,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_SM,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding.only(left=tokens.SPACE_MD),
+                    **({"ink": True, "on_click": lambda e, r=refs[0]: self._reveal_cell(r)}
+                        if refs
+                        else {}),
+                )
+            )
+
+        if self._confirm and self._confirm[1].get("decision") is None:
+            label = self._confirm[1]["label"]
+            detail = str(self._confirm[1].get("detail") or "").strip()
+            kids.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Icon(
+                                        ft.Icons.WARNING_AMBER_ROUNDED,
+                                        size=tokens.ICON_SM,
+                                        color=ft.Colors.ERROR,
+                                    ),
+                                    ft.Text(label, size=tokens.FONT_SM, weight=ft.FontWeight.W_700),
+                                ],
+                                spacing=tokens.SPACE_SM,
+                            ),
+                            *(
+                                [
+                                    ft.Text(
+                                        detail,
+                                        size=tokens.FONT_XS,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        selectable=True,
+                                    )
+                                ]
+                                if detail
+                                else []
+                            ),
+                            ft.Row(
+                                [
+                                    ft.FilledButton(
+                                        "Allow",
+                                        on_click=lambda e: self._confirm_decision("allow"),
+                                    ),
+                                    ft.OutlinedButton(
+                                        "Deny",
+                                        on_click=lambda e: self._confirm_decision("deny"),
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_SM,
+                            ),
+                            tip_text(f"Auto-denies in {APPROVAL_TIMEOUT_SEC // 60} minutes"),
+                        ],
+                        spacing=tokens.SPACE_SM,
+                        tight=True,
+                    ),
+                    padding=ft.Padding.all(tokens.SPACE_SM),
+                    border_radius=tokens.RADIUS_MD,
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.ERROR)),
+                )
+            )
+
+        if turn.get("text"):
+            # Partial text renders plain, because an unclosed ``` fence makes
+            # the markdown parser swallow the rest of the reply; markdown
+            # arrives with the final text.
+            if turn.get("partial"):
+                kids.append(
+                    ft.Text(
+                        turn["text"], size=tokens.FONT_SM, color=ft.Colors.ON_SURFACE
+                    )
+                )
+            else:
+                kids.append(
+                    ft.Markdown(
+                        turn["text"],
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    )
+                )
+
+        if turn.get("partial") and not turn.get("text") and not turn.get("steps_rows"):
+            kids.append(
+                ft.Row(
+                    [
+                        ft.ProgressRing(width=12, height=12, stroke_width=2),
+                        ft.Text(
+                            "Working…",
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                )
+            )
+
+        if turn.get("error") == "credits":
+            kids.append(_notice("Out of assistant credits.", AppColors.WARNING))
+        elif turn.get("error"):
+            message = turn.get("error_message") or (
+                "Assistant unavailable. Everything else still works."
+            )
+            kids.append(_notice(message, AppColors.ERROR))
+
+        if turn.get("stopped"):
+            kids.append(tip_text("Stopped."))
+
+        if turn.get("cost") and not turn.get("error"):
+            from services.ai_credits import credit_word
+
+            kids.append(
+                tip_text(f"{credit_word(turn['cost'])} · {turn.get('model') or 'router'}")
+            )
+
+        return ft.Container(
+            content=ft.Column(kids, spacing=tokens.SPACE_SM, tight=True),
+            padding=ft.Padding.symmetric(vertical=tokens.SPACE_NANO),
+        )
+
+    def _welcome(self) -> ft.Control:
+        kids: list[ft.Control] = [
+            ft.Container(
+                content=ft.Icon(_CHAT_ICON, size=tokens.ICON_XXL, color=ft.Colors.PRIMARY),
+                alignment=ft.Alignment.CENTER,
+                margin=ft.Margin(0, tokens.SPACE_XXXL, 0, tokens.SPACE_SM),
+            ),
+            ft.Text(
+                "What I can do",
+                size=tokens.FONT_LG,
+                weight=ft.FontWeight.W_700,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            tip_text("I can read your notebooks and terminals, run code, and edit cells."),
+        ]
+        for icon, label, prompt in _starter_rows():
+            kids.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(icon, size=tokens.ICON_SM),
+                            ft.Text(label, size=tokens.FONT_SM, expand=True),
+                            ft.Icon(
+                                ft.Icons.CHEVRON_RIGHT_ROUNDED,
+                                size=tokens.ICON_SM,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        ],
+                        spacing=tokens.SPACE_SM,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding.symmetric(
+                        horizontal=tokens.SPACE_SM, vertical=tokens.SPACE_XS
+                    ),
+                    border_radius=tokens.RADIUS_MD,
+                    on_click=lambda e, q=prompt: self.send(q),
+                    ink=True,
+                )
+            )
+        return ft.Container(
+            content=ft.Column(kids, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+            expand=True,
+        )
+
+    # ── persistence ────────────────────────────────────────────────────────
+
+    def _persist_history(self) -> None:
+        from services.conversation_service import flat_from_turns
+
+        self._conversations.save_conversation(self.conversation_id, flat_from_turns(self._turns))
+
+    def _refresh_credits(self) -> None:
+        from services.ai_credits import refresh_balance
+
+        credits = getattr(self.services, "credits", None)
+        if credits is None:
+            return
+
+        async def _load():
+            try:
+                self._set_credits(await refresh_balance(self.state, credits))
+            except Exception:
+                logger.debug("credit read failed", exc_info=True)
+
+        try:
+            self.page.run_task(_load)
+        except Exception:
+            logger.debug("no run_task available for the credit read")
+
+    def _set_credits(self, value: int) -> None:
+        from components.credit_pill import credit_color
+
+        self._credits_value = value
+        self._credits_text.value = str(value)
+        self._credits_text.color = credit_color(value)
+        try:
+            self._credits_text.update()
+        except Exception:
+            pass
+
+
+def open_assistant(page: ft.Page, state, services, controller=None) -> ChatSession:
+    """Open or re-expand the assistant, reusing the retained session."""
+    existing = getattr(page, "_assistant_session", None)
+    if isinstance(existing, ChatSession):
+        existing.restore()
+        return existing
+    session = ChatSession(page, state, services, controller)
+    page._assistant_session = session
+    page.views.append(session.view)
+    state.assistant_open = True
+    state.assistant_minimized = False
+    try:
+        page.update()
+    except Exception:
+        logger.debug("assistant open: page update failed")
+    return session
+
+
+def shutdown_assistant(page: ft.Page) -> None:
+    """Tear the retained session down (called from app teardown)."""
+    session = getattr(page, "_assistant_session", None)
+    if isinstance(session, ChatSession):
+        session.shutdown()
+        page._assistant_session = None

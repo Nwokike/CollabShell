@@ -1,13 +1,10 @@
-"""Session screen layout components (action chips, keep-alive card, status header)."""
+"""Session screen layout components (action chips, status header)."""
 
 from __future__ import annotations
-
-import asyncio
 
 import flet as ft
 
 from core import constants, tokens
-from core.styles import glass_card
 from core.theme import AppColors
 
 
@@ -41,6 +38,7 @@ def build_action_row(
     on_view_logs,
     on_restart,
     on_stop,
+    on_env=None,
 ):
     return ft.Container(
         content=ft.Row(
@@ -63,6 +61,18 @@ def build_action_row(
                     AppColors.BADGE_GPU,
                 ),
                 build_action_chip(ft.Icons.HISTORY_ROUNDED, "Logs", on_view_logs),
+                *(
+                    [
+                        build_action_chip(
+                            ft.Icons.TUNE_ROUNDED,
+                            "Env",
+                            on_env,
+                            AppColors.BADGE_TPU,
+                        )
+                    ]
+                    if on_env
+                    else []
+                ),
                 build_action_chip(
                     ft.Icons.REFRESH_ROUNDED,
                     "Restart",
@@ -76,7 +86,7 @@ def build_action_row(
                     AppColors.ERROR,
                 ),
             ],
-            scroll=ft.ScrollMode.HIDDEN,
+            scroll=ft.ScrollMode.AUTO,
             spacing=tokens.SPACE_SM,
         ),
         padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
@@ -139,85 +149,5 @@ def build_tab_switcher(active_tab: int, on_switch) -> ft.Container:
             ],
             spacing=tokens.SPACE_XXS,
             tight=True,
-        ),
-    )
-
-
-def build_keep_alive_card(
-    page: ft.Page, state, on_keep_alive, on_keep_alive_disconnect
-):
-    def _keep_alive_toggle(label, tooltip, value, on_change):
-        async def _trigger_change(e):
-            if callable(on_change):
-                res = on_change(e)
-                if asyncio.iscoroutine(res):
-                    await res
-
-        return ft.Row(
-            controls=[
-                ft.Column(
-                    controls=[
-                        ft.Text(
-                            label,
-                            size=tokens.FONT_SM,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        ft.Text(
-                            tooltip,
-                            size=tokens.FONT_XXS,
-                            color=ft.Colors.with_opacity(
-                                0.6, ft.Colors.ON_SURFACE_VARIANT
-                            ),
-                        ),
-                    ],
-                    spacing=tokens.SPACE_XXS,
-                    expand=True,
-                ),
-                ft.Switch(
-                    value=value,
-                    on_change=lambda e: page.run_task(_trigger_change, e),
-                    scale=0.75,
-                ),
-            ],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
-    return glass_card(
-        ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Icon(
-                            ft.Icons.POWER_SETTINGS_NEW_ROUNDED,
-                            size=tokens.ICON_SM,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
-                        ft.Text(
-                            "Keep Session Alive",
-                            size=tokens.FONT_SM,
-                            weight=ft.FontWeight.W_600,
-                            color=ft.Colors.ON_SURFACE,
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                _keep_alive_toggle(
-                    "Active keep-alive",
-                    "Ping the session every 60s to prevent timeout",
-                    state.keep_alive_enabled,
-                    on_keep_alive,
-                ),
-                _keep_alive_toggle(
-                    "Keep alive on disconnect",
-                    "Keep sessions running when the app closes",
-                    state.keep_alive_on_disconnect,
-                    on_keep_alive_disconnect,
-                ),
-            ],
-            spacing=tokens.SPACE_SM,
-        ),
-        margin=ft.Margin(
-            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
         ),
     )

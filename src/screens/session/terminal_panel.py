@@ -33,6 +33,7 @@ from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.state import state as app_state
 from core.theme import AppColors, is_light_theme
+from state import ServiceCtx
 
 logger = logging.getLogger("colab")
 
@@ -40,6 +41,29 @@ logger = logging.getLogger("colab")
 # when the Dart xterm widget is recreated (tab switch, remount). Roughly
 # 2000 chunks ⇒ several screens of output on a busy shell.
 _SCROLLBACK_CHUNKS = 2000
+
+# Live per-session bridges, published by TerminalPanel on every render and read
+# by the assistant, which holds no component handle. Keyed by session name.
+_SESSION_BRIDGES: dict[str, dict] = {}
+
+
+def read_terminal_scrollback(session_name: str, lines: int = 60) -> str:
+    """Recent terminal output for a session, as text.
+
+    Decodes the per-tab UTF-8 scrollback ring buffers. Returns "" when the
+    session has no terminal open.
+    """
+    bridges = _SESSION_BRIDGES.get(session_name)
+    if not bridges:
+        return ""
+    reader = bridges.get("read_scrollback")
+    if reader is None:
+        return ""
+    try:
+        return reader(lines) or ""
+    except Exception:
+        logger.debug("terminal scrollback read failed", exc_info=True)
+        return ""
 
 
 def _compact_btn_style() -> ft.ButtonStyle:
@@ -62,8 +86,10 @@ async def _get_terminal_session(colab_service, session_name: str):
         def _get():
             from colab_cli.common import State
 
+            from services.colab.session_ops import load_session_fresh
+
             st = State()
-            s = st.store.get(session_name)
+            s = load_session_fresh(st, session_name)
             if not s:
                 all_names = list(st.store.list().keys())
                 logger.error(
@@ -247,8 +273,7 @@ def _make_entry_handlers(
         mt = entry.mt
         if mt is None:
             return
-        with mt._terminal._lock:
-            mt._terminal._pending_writes.clear()
+        mt.clear_pending()
         for chunk in list(entry.scrollback):
             mt.send_bytes(chunk)
 
@@ -334,8 +359,8 @@ def _TerminalHost(
             e.data if isinstance(e.data, str) else str(e.data)
         )
         mt.on_resize = handlers["on_resize"]
-        # Firmware-level remount hook (Dart `initState` → "mount" event).
-        mt._terminal.on_mount = handlers["on_mount"]
+        # Public remount hook (Dart `initState` → "mount" event, 0.3.9+).
+        mt.on_mount = handlers["on_mount"]
         # Dart-intercepted host shortcuts (flet-terminal ≥0.3.8). The combos
         # are consumed before the PTY, so they arrive only as events.
         if on_shortcut is not None:
@@ -369,6 +394,14 @@ def TerminalPanel(
     theme follows the app's light/dark mode.
     """
     page = ft.context.page
+
+    # Read through the contexts rather than a new parameter: the panel already
+    # resolves `snack` from the session that mounts it, and threading two more
+    # kwargs through for one button would widen every call site.
+    try:
+        services_ctx = ft.use_context(ServiceCtx)
+    except Exception:
+        services_ctx = None
 
     def _active_entry():
         return next((t for t in ps.terminals if t.id == ps.active_id), None)
@@ -602,13 +635,19 @@ def TerminalPanel(
                 snack("Nothing selected — long-press or drag to select text.")
             return
         try:
-            await ft.Clipboard().set(text)
+            # One shared Clipboard service: constructing ft.Clipboard() per
+            # copy auto-registers another instance on the page under Flet 1.0.
+            if _copy_selection.clipboard is None:
+                _copy_selection.clipboard = ft.Clipboard()
+            await _copy_selection.clipboard.set(text)
             entry.mt.clear_selection()
             if snack:
                 snack("📋 Copied to clipboard")
         except Exception as ex:
             if snack:
                 snack(f"Copy failed: {ex}", is_error=True)
+
+    _copy_selection.clipboard = None
 
     if register_actions:
         register_actions(
@@ -631,6 +670,13 @@ def TerminalPanel(
                 "zoom_reset": _zoom_reset,
                 "toggle_blink": _toggle_blink,
                 "toggle_search": _toggle_search,
+                # Only when AI is on: the FAB menu hides items that would just
+                # open a "turn it on in Settings" notice.
+                "explain": (
+                    lambda: page.run_task(_explain_terminal)
+                    if getattr(app_state, "ai_mode", False)
+                    else None
+                ),
                 "font_size": lambda: (
                     _active_entry().mt.font_size
                     if _active_entry() and _active_entry().mt
@@ -638,6 +684,101 @@ def TerminalPanel(
                 ),
             }
         )
+
+    def _read_scrollback(lines: int) -> str:
+        """Concatenate every tab's scrollback, oldest tab first, newest last."""
+        parts = []
+        for entry in (ps.terminals or {}).values():
+            if not entry.scrollback:
+                continue
+            parts.append(
+                b"".join(list(entry.scrollback)[-lines:]).decode(
+                    "utf-8", errors="replace"
+                )
+            )
+        return "".join(parts)
+
+    # ── Explain with AI (4C) ───────────────────────────────────────────────
+    # Same engine as the in-cell actions: one metered, tool-free turn, and the
+    # answer goes in a dialog rather than a cell — a terminal has nowhere to
+    # put prose. Failure is a notice, never an exception, because this runs
+    # from a button press.
+
+    def _ai_snack(message: str):
+        from core.notifications import show_notification
+
+        try:
+            if snack:
+                snack(message)
+            else:
+                show_notification(page, message, is_warning=True)
+        except Exception:
+            logger.debug("terminal AI notice failed")
+
+    async def _explain_terminal():
+        from services import ai_quick
+
+        text = _read_scrollback(80).strip()
+        if not text:
+            _ai_snack("Nothing in the terminal to explain yet.")
+            return
+        try:
+            answer = await ai_quick.ask(
+                action="explain",
+                state=app_state,
+                credits=getattr(services_ctx, "credits", None),
+                services=services_ctx,
+                prompt=(
+                    "This is output from a Linux shell on a Google Colab "
+                    "runtime.\n\n"
+                    "Explain what just happened and, if there is an error, "
+                    "what caused it and the exact command to fix it. Be "
+                    "specific about paths and exit codes.\n\n"
+                    f"```\n{text[-4000:]}\n```"
+                ),
+                system=ai_quick.system_for(app_state),
+            )
+        except ai_quick.OutOfCredits:
+            _ai_snack("Out of assistant credits — top up in Assistant settings.")
+            return
+        except ai_quick.CellAIDisabled:
+            _ai_snack("Turn the Assistant on in Settings first.")
+            return
+        except Exception as ex:
+            logger.warning("Terminal explain failed: %s", ex)
+            _ai_snack("The Assistant could not answer just now.")
+            return
+
+        if not answer.strip():
+            _ai_snack("The Assistant returned nothing usable.")
+            return
+        page.show_dialog(
+            ft.AlertDialog(
+                modal=True,
+                title=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                        ft.Text("What the terminal is telling you"),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                ),
+                content=ft.Container(
+                    content=ft.Markdown(
+                        answer,
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    ),
+                    width=440,
+                    height=320,
+                ),
+                actions=[ft.TextButton("Close", on_click=lambda e: page.pop_dialog())],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
+
+    # Publish the live bridge so the assistant (which holds no component handle)
+    # can read terminal output for this session. Replaced every render.
+    _SESSION_BRIDGES[session_name] = {"read_scrollback": _read_scrollback}
 
     # Self-initialize on mount; register the resume-reconnect hook globally
     # so main.py's lifecycle handler can reach it, and clear on unmount.
@@ -649,6 +790,9 @@ def TerminalPanel(
         _close_all_clients()
         if getattr(app_state, "terminal_reconnect", None) is _reconnect_dead:
             app_state.terminal_reconnect = None
+        # The session's tabs are gone; drop the bridge so the assistant cannot
+        # read scrollback from a closed session.
+        _SESSION_BRIDGES.pop(session_name, None)
 
     ft.on_mounted(_on_mount)
     ft.use_effect(lambda: None, [], cleanup=_cleanup)

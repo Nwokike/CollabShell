@@ -72,7 +72,44 @@ def AppShell() -> Control:
                     ),
                 )
             )
+            # Ctrl+K opens the command palette. Registered here rather than as
+            # a screen action so it works from every screen including the
+            # fullscreen subviews.
+            bindings.append((Binding("k", ctrl=True), _open_palette))
         return bindings
+
+    def _palette_commands():
+        """Global commands. Session actions are contributed by the session
+        screen; these are the ones available everywhere."""
+        commands = [
+            ("Command palette", ft.Icons.KEYBOARD_COMMAND_KEY_ROUNDED, "Ctrl+K", _open_palette),
+            ("Keyboard shortcuts", ft.Icons.KEYBOARD_ROUNDED, "F1",
+             lambda: open_shortcuts_help(page, "global")),
+        ]
+        if state.ai_mode:
+            commands.append(
+                (
+                    "Open Assistant",
+                    ft.Icons.AUTO_AWESOME_OUTLINED,
+                    "Chat with the assistant",
+                    lambda: controller.open_assistant(),
+                )
+            )
+        commands.extend(
+            ("Go to " + name, ft.Icons.LAUNCH_ROUNDED, f"Ctrl+{i + 1}",
+             lambda i=i: controller.navigate_tab(i))
+            for i, name in enumerate(_TAB_NAMES)
+        )
+        commands.append(
+            ("Toggle theme", ft.Icons.BRIGHTNESS_6_ROUNDED, "Light / dark / system",
+             controller.toggle_theme)
+        )
+        return commands
+
+    def _open_palette():
+        from components.command_palette import open_command_palette
+
+        open_command_palette(page, _palette_commands())
 
     def _register_global_shortcuts():
         return shortcuts_router.register(_global_bindings)
@@ -137,6 +174,44 @@ def AppShell() -> Control:
             state.active_subview,
             state.current_tab,
         ],
+    )
+
+    # ── 1b. Assistant FAB (Deliberate Page Chrome) ──────────────────────────
+    # The chat is a peer of the shell, not a route, so it rides on its own
+    # view on top of views[0] — which means the shell's FAB is simply not
+    # rendered while the chat is open, and comes back when it closes. The
+    # chat's own back arrow is the way out; this button is the way back.
+    def _sync_assistant_fab():
+        if not page or not page.views:
+            return
+        if not (state.ai_mode and state.app_ready and state.onboarding_done):
+            if page.views[0].floating_action_button is not None:
+                page.views[0].floating_action_button = None
+                try:
+                    page.update()
+                except Exception:
+                    logger.exception("Suppressed exception")
+            return
+        if page.views[0].floating_action_button is not None:
+            # Already built; a label change is not worth a rebuild.
+            return
+        page.views[0].floating_action_button = ft.FloatingActionButton(
+            icon=ft.Icons.AUTO_AWESOME_OUTLINED,
+            mini=True,
+            tooltip="Ask Assistant",
+            bgcolor=ft.Colors.PRIMARY,
+            foreground_color=ft.Colors.WHITE,
+            shape=ft.CircleBorder(),
+            on_click=lambda e: controller.open_assistant(),
+        )
+        try:
+            page.update()
+        except Exception:
+            logger.exception("Suppressed exception")
+
+    ft.use_effect(
+        _sync_assistant_fab,
+        [state.ai_mode, state.app_ready, state.onboarding_done, state.is_authenticated],
     )
 
     # ── 2. Loading Splash Screen ──────────────────────────────────────────────

@@ -1,8 +1,6 @@
-import asyncio
 import logging
 import re
 import threading
-import time
 from collections.abc import Callable
 
 logger = logging.getLogger("colab_service")
@@ -21,7 +19,6 @@ class ColabService:
         self._cli_available = False
         self._cli_state = None
         self._cancel_event = threading.Event()
-        self._keep_alive_tasks: dict[str, asyncio.Task] = {}
         self.default_stdin_hook: Callable | None = None
 
     @property
@@ -64,11 +61,11 @@ class ColabService:
         gpu: str | None = None,
         tpu: str | None = None,
         auth_method: str = "oauth2",
-        keep_alive: bool = True,
+        high_mem: bool = False,
     ) -> dict:
         from services.colab.session_ops import new_session_impl
 
-        return await new_session_impl(self, name, gpu, tpu, auth_method, keep_alive)
+        return await new_session_impl(self, name, gpu, tpu, auth_method, high_mem)
 
     async def list_sessions(self, auth_method: str = "oauth2") -> list:
         from services.colab.session_ops import list_sessions_impl
@@ -110,9 +107,10 @@ class ColabService:
         timeout: float = 30.0,
         auth_method: str = "oauth2",
         on_output: Callable | None = None,
-        intercept_oauth: bool = False,
+        intercept_oauth: bool = True,
         stdin_hook: Callable | None = None,
-    ) -> list:
+        env: dict | None = None,
+    ) -> dict:
         from services.colab.execution import exec_code_impl
 
         return await exec_code_impl(
@@ -124,6 +122,7 @@ class ColabService:
             on_output,
             intercept_oauth,
             stdin_hook,
+            env,
         )
 
     def create_terminal_ws_url(
@@ -165,6 +164,13 @@ class ColabService:
             term_name=parsed_term_name,
             session_name=session_name,
         )
+
+    async def get_usage(
+        self, auth_method: str = "oauth2", cached_fallback: dict | None = None
+    ) -> dict | None:
+        from services.colab.usage_ops import get_usage_impl
+
+        return await get_usage_impl(self, auth_method, cached_fallback)
 
     async def ls(
         self,
@@ -297,79 +303,3 @@ class ColabService:
             raise ValueError(
                 f"Multiple sessions active. Specify one: {', '.join(names)}"
             )
-
-    def _start_in_process_keep_alive(
-        self, session_name: str, endpoint: str, auth_method: str
-    ):
-        existing = self._keep_alive_tasks.get(session_name)
-        if existing is not None and not existing.done():
-            existing.cancel()
-
-        task = asyncio.create_task(
-            self._keep_alive_loop(session_name, endpoint, auth_method)
-        )
-        self._keep_alive_tasks[session_name] = task
-
-    async def _keep_alive_loop(
-        self, session_name: str, endpoint: str, auth_method: str
-    ):
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
-
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        start = time.time()
-        max_dur = 24 * 3600
-        consecutive_4xx = 0
-        iterations = 0
-
-        logger.info(
-            "[keep_alive] started session=%s endpoint=%s", session_name, endpoint
-        )
-
-        reason = "time_limit_reached"
-        while time.time() - start < max_dur:
-            iterations += 1
-            try:
-                st = State()
-                st.auth_provider = provider
-
-                # Gap #2: stop immediately if session was removed locally
-                # (e.g. user stopped it from another device or the UI).
-                s = st.store.get(session_name)
-                if not s:
-                    reason = "session_not_found"
-                    break
-                if s.endpoint != endpoint:
-                    reason = "endpoint_mismatch"
-                    break
-
-                await asyncio.to_thread(st.client.keep_alive_assignment, endpoint)
-                consecutive_4xx = 0
-            except Exception as e:
-                code = getattr(getattr(e, "response", None), "status_code", None)
-                logger.warning(
-                    "[keep_alive] error session=%s iteration=%d code=%s err=%s",
-                    session_name,
-                    iterations,
-                    code,
-                    e,
-                )
-                if code is not None and 400 <= code < 500:
-                    consecutive_4xx += 1
-                    if consecutive_4xx >= 2:
-                        reason = "consecutive_4xx_errors"
-                        logger.error(
-                            "[keep_alive] 2 consecutive 4xx — aborting session=%s",
-                            session_name,
-                        )
-                        break
-                # Non-4xx (network, 5xx): retry next cycle
-            await asyncio.sleep(60)
-
-        logger.info(
-            "[keep_alive] stopped session=%s reason=%s iterations=%d duration=%.0fs",
-            session_name,
-            reason,
-            iterations,
-            time.time() - start,
-        )

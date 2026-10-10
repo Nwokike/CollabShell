@@ -3,7 +3,7 @@
 import flet as ft
 
 from core import tokens
-from core.styles import hardware_badge, status_dot
+from core.styles import hardware_badge, shape_chip, status_dot
 from core.theme import adaptive_glass_bg, adaptive_glass_border
 
 
@@ -13,7 +13,7 @@ def build_session_card(
 ) -> ft.Container:
     """Build a session card showing name, hardware, status, and last execution.
 
-    session dict keys: name, accelerator, variant, status, running, last_execution, accelerator_label
+    session dict keys: name, accelerator, variant, status, running, last_execution, accelerator_label, machine_shape
     """
     name = session.get("name", "?")
     variant = session.get("variant", "DEFAULT")
@@ -46,6 +46,7 @@ def build_session_card(
                                     weight=ft.FontWeight.W_600,
                                 ),
                                 hardware_badge(accel_str, variant),
+                                shape_chip(session.get("machine_shape", "STANDARD")),
                             ],
                             spacing=tokens.SPACE_SM,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,

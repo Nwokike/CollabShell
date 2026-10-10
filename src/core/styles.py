@@ -106,8 +106,16 @@ def solid_card(content: ft.Control, **kwargs) -> ft.Container:
 
 
 def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
-    """Build a glass-container-wrapped banner ad (mobile only)."""
+    """Build a glass-container-wrapped banner ad (mobile only).
+
+    Collapses to 0x0 for premium: a paying user never sees an ad.
+    """
     if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
+        return ft.Container(width=0, height=0)
+
+    from core.state import state
+
+    if getattr(state, "is_premium", False):
         return ft.Container(width=0, height=0)
 
     from core.theme import adaptive_glass_bg, adaptive_glass_border
@@ -170,6 +178,30 @@ def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:
             color=ft.Colors.WHITE,
         ),
         bgcolor=color,
+        border_radius=tokens.RADIUS_XS,
+        padding=ft.Padding(
+            tokens.SPACE_SM, tokens.SPACE_XXS, tokens.SPACE_SM, tokens.SPACE_XXS
+        ),
+    )
+
+
+def shape_chip(machine_shape: str | None = None) -> ft.Container:
+    """Build a machine-shape chip (High RAM=purple, Standard RAM=gray).
+
+    Always rendered, matching upstream's always-show `Shape:` segment.
+    Legacy sessions without a shape default to Standard RAM.
+    """
+    from core.theme import AppColors
+
+    high_ram = str(machine_shape or "").upper() == "HIGH_RAM"
+    return ft.Container(
+        content=ft.Text(
+            "High RAM" if high_ram else "Standard RAM",
+            size=tokens.FONT_XXS,
+            weight=ft.FontWeight.W_700,
+            color=ft.Colors.WHITE,
+        ),
+        bgcolor=AppColors.BADGE_PAID if high_ram else AppColors.BADGE_CPU,
         border_radius=tokens.RADIUS_XS,
         padding=ft.Padding(
             tokens.SPACE_SM, tokens.SPACE_XXS, tokens.SPACE_SM, tokens.SPACE_XXS

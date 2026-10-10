@@ -6,7 +6,18 @@ CHANGELOG: dict[str, str] = {
     "2.1.2": (
         "- Fixed phantom update prompt — build number is now in sync\n"
         "  across the app, store config, and update feed\n"
-        "- No more 'update available' for the version you already run"
+        "- No more 'update available' for the version you already run\n"
+        "- High-RAM shape for new sessions (Colab Pro/Pro+)\n"
+        "- Compute usage card + home balance chip (Settings → Account;\n"
+        "  auto-loads on open, tap Refresh to re-fetch — values, a fetched\n"
+        "  timestamp, and truthful errors every time)\n"
+        "- Per-session environment variables (defaults + override;\n"
+        "  values are never logged)\n"
+        "- Multiple notebooks per session, each with isolated saves/exports\n"
+        "- Sessions survive stale tokens via automatic refresh\n"
+        "- Friendly errors for GPU allocation limits\n"
+        "- Session header rails scroll visibly on narrow screens\n"
+        "- Direct SSH access deferred to a later release"
     ),
     "2.1.1": (
         "- Sessions no longer die after hours idle — the runtime proxy token\n"

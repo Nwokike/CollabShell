@@ -31,6 +31,7 @@ def _store_with(session):
     store.get = MagicMock(return_value=session)
     st = MagicMock()
     st.store = store
+    st.get_session = MagicMock(return_value=session)
     return st
 
 
@@ -72,10 +73,9 @@ def test_refresh_credentials_skipped_without_session_name():
 
 def test_refresh_credentials_swallows_store_errors():
     client = _client()
-    store = MagicMock()
-    store.get = MagicMock(side_effect=RuntimeError("boom"))
     st = MagicMock()
-    st.store = store
+    st.store = MagicMock()
+    st.get_session = MagicMock(side_effect=RuntimeError("boom"))
 
     with patch("colab_cli.common.State", side_effect=lambda: st):
         changed = asyncio.run(client._refresh_cached_credentials())

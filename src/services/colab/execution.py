@@ -7,21 +7,89 @@ from collections.abc import Callable
 logger = logging.getLogger("colab_execution")
 
 
+def _join_text(value) -> str:
+    """Jupyter ``stream`` text may arrive as a string or a list of chunks.
+
+    The wire format sends a string; the nbformat file format uses a list.
+    Normalising here is what stops a list chunk rendering as Python repr
+    (``"['line\\n']"``) in the cell.
+    """
+    if isinstance(value, list):
+        return "".join(str(v) for v in value)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _to_cell_output(out: dict) -> dict:
+    """Map a normalized Jupyter output dict to the cell's stored shape.
+
+    Upstream (``colab_cli.runtime.execute_code``) hands our hook the dict
+    produced by ``jupyter_kernel_client.client.output_hook`` — already
+    normalized to ``output_type``/``text``/``data`` — so this is a shape
+    translation, not a re-parse of raw messages.
+
+    Rich outputs keep their mime bundle. Flattening to ``text/plain`` here is
+    what used to discard every ``image/png`` before it could be rendered or
+    exported.
+
+    ``clear_output`` is deliberately unhandled: ``colab_cli``'s wrapper clears
+    its buffer and then reports indexes against an empty list, so the message
+    never reaches a custom hook. Surfacing it would mean bypassing
+    ``runtime.execute_code`` — forking an upstream contract that also carries
+    its timeout and error-synthesis behaviour. Same limitation as `colab exec`.
+    """
+    otype = out.get("output_type")
+    if otype == "stream":
+        entry = {"type": "stream", "text": _join_text(out.get("text", ""))}
+        if out.get("name"):
+            entry["name"] = out["name"]
+        return entry
+    if otype in ("execute_result", "display_data"):
+        entry = {"type": otype, "data": out.get("data") or {}}
+        if out.get("metadata") is not None:
+            entry["metadata"] = out["metadata"]
+        if otype == "execute_result":
+            entry["execution_count"] = out.get("execution_count")
+        elif out.get("transient") is not None:
+            entry["transient"] = out["transient"]
+        return entry
+    if otype == "error":
+        return {
+            "type": "error",
+            "ename": out.get("ename") or "Error",
+            "evalue": out.get("evalue") or "",
+            "traceback": out.get("traceback") or [],
+        }
+    # Unknown message kinds are preserved rather than dropped, so a future
+    # upstream output type degrades to "unknown" instead of vanishing.
+    return {"type": otype or "unknown", **out}
+
+
 async def exec_code_impl(
     service,
     code: str,
     session_name: str,
-    timeout: float = 60.0,
+    timeout: float = 30.0,
     auth_method: str = "oauth2",
     on_output: Callable | None = None,
     intercept_oauth: bool = True,
     stdin_hook: Callable | None = None,
+    env: dict | None = None,
 ) -> dict:
-    """Execute Python code in a session."""
+    """Execute Python code in a session.
+
+    `env` maps KEY -> VALUE for remote-kernel environment injection (upstream
+    `colab run/exec --env` analog). Values travel to the kernel ONLY — history
+    logs the user code plus key NAMES (`env_keys`), never values. This is a
+    deliberate divergence from upstream, which logs the prelude verbatim.
+    """
     await service._ensure_online()
     service._cancel_event.clear()
 
     def _exec():
+        import re
+
         from colab_cli.auth import AuthProvider
         from colab_cli.common import State
         from colab_cli.runtime import ColabRuntime
@@ -29,6 +97,7 @@ async def exec_code_impl(
         from services.colab.session_ops import (
             _refresh_runtime_token_sync as _heal_runtime_token,
         )
+        from services.colab.session_ops import load_session_fresh
 
         if service._cancel_event.is_set():
             service._cancel_event.clear()
@@ -37,9 +106,32 @@ async def exec_code_impl(
         provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
         st = State()
         st.auth_provider = provider
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             raise ValueError(f"Session '{session_name}' not found")
+
+        # Validate env keys with upstream `colab exec --env` semantics
+        # (colab_cli/commands/execution.py: _parse_env_vars/_build_env_prelude).
+        # NOTE: we intentionally do NOT import those helpers: importing
+        # colab_cli.commands.execution pulls in colab_cli.console, which
+        # imports POSIX-only `termios` and crashes on Windows. The two rules
+        # below mirror upstream exactly: strict KEY regex + split("=", 1).
+        env_vars: dict = {}
+        if env:
+            for raw_key, raw_value in dict(env).items():
+                key = str(raw_key)
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                    raise ValueError(
+                        f"Invalid environment variable key {key!r}. Expected a "
+                        "valid environment variable name (KEY=VALUE)."
+                    )
+                env_vars[key] = str(raw_value)
+        if env_vars:
+            lines = ["import os"]
+            lines.extend(f"os.environ[{k!r}] = {v!r}" for k, v in env_vars.items())
+            env_prelude = "\n".join(lines) + "\n"
+        else:
+            env_prelude = ""
 
         def on_started(kid):
             s.kernel_id = kid
@@ -77,7 +169,7 @@ async def exec_code_impl(
                 # expired while the assignment stayed alive. Heal it once
                 # before pruning a session that may still be server-side.
                 if attempt == 0 and _heal_runtime_token(st, session_name):
-                    fresh = st.store.get(session_name)
+                    fresh = load_session_fresh(st, session_name)
                     if fresh:
                         s = fresh
                         runtime = _new_runtime()
@@ -104,20 +196,7 @@ async def exec_code_impl(
                     logger.exception("Suppressed exception")
                 raise RuntimeError("Execution cancelled by user")
             if on_output:
-                text = ""
-                if out.get("output_type") == "stream":
-                    text = out.get("text", "")
-                elif "data" in out:
-                    data = out["data"]
-                    text = data.get("text/plain", "")
-                elif out.get("output_type") == "error":
-                    tb = out.get("traceback", [])
-                    if tb:
-                        text = "\n".join(tb)
-                    else:
-                        text = f"{out.get('ename', 'Error')}: {out.get('evalue', '')}"
-                if text:
-                    on_output(text)
+                on_output(_to_cell_output(out))
 
         if intercept_oauth:
             import json
@@ -272,8 +351,10 @@ async def exec_code_impl(
             wrapped_user_stdin_hook = _app_stdin_hook
 
         def _execute_main():
+            # Env prelude goes AFTER the /content preflight (separate call
+            # above) and BEFORE user code — upstream execution.py:234-235.
             return runtime.execute_code(
-                code,
+                env_prelude + code,
                 output_hook=output_hook if on_output else None,
                 timeout=timeout,
                 allow_stdin=intercept_oauth or (active_stdin_hook is not None),
@@ -297,7 +378,7 @@ async def exec_code_impl(
                     # A stale runtime-proxy token 404s exactly like a dead
                     # kernel. Heal once before removing a live session.
                     if attempt == 0 and _heal_runtime_token(st, session_name):
-                        fresh = st.store.get(session_name)
+                        fresh = load_session_fresh(st, session_name)
                         if fresh:
                             s = fresh
                             runtime = _new_runtime()
@@ -315,7 +396,12 @@ async def exec_code_impl(
                     session_name,
                     "execution",
                     {
+                        # DIVERGENCE from upstream (deliberate): upstream logs
+                        # the prelude WITH plaintext values. We log user code
+                        # plus key NAMES only — values never touch history,
+                        # logs passthrough, or export.
                         "code": code,
+                        "env_keys": sorted(env_vars),
                         "outputs": outputs,
                     },
                 )
@@ -324,7 +410,7 @@ async def exec_code_impl(
             if intercept_oauth and runtime:
                 runtime.colab_request_hook = None
             s.running = None
-            if st.store.get(session_name):
+            if load_session_fresh(st, session_name):
                 st.store.add(s)
             runtime.stop()
 

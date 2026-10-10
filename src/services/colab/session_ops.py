@@ -10,7 +10,7 @@ async def new_session_impl(
     gpu: str | None = None,
     tpu: str | None = None,
     auth_method: str = "oauth2",
-    keep_alive: bool = True,
+    high_mem: bool = False,
 ) -> dict:
     """Create a new Colab session."""
     await service._ensure_online()
@@ -19,7 +19,14 @@ async def new_session_impl(
         import uuid
 
         from colab_cli.auth import AuthProvider
-        from colab_cli.client import Accelerator, ColabRequestError, Variant
+        from colab_cli.client import (
+            Accelerator,
+            ColabRequestError,
+            Shape,
+            TooManyAssignmentsError,
+            Variant,
+            resolve_assign_shape,
+        )
         from colab_cli.common import State
         from colab_cli.state import SessionState
         from colab_cli.utils import get_status_code
@@ -48,15 +55,33 @@ async def new_session_impl(
             }
             accelerator = mapping.get(gpu.lower(), Accelerator.T4)
 
+        shape = resolve_assign_shape(accelerator, high_mem=high_mem)
+
         try:
             res = st.client.assign(
-                uuid.uuid4(), variant=variant, accelerator=accelerator
+                uuid.uuid4(), variant=variant, accelerator=accelerator, shape=shape
+            )
+        except TooManyAssignmentsError:
+            raise RuntimeError(
+                "[colab] Allocation refused (precondition failed). This can mean "
+                "too many active sessions, or a temporary usage or capacity "
+                "limit for the requested runtime. Run `colab stop` to free up a "
+                "session, wait and retry, or try a different accelerator."
             )
         except ColabRequestError as e:
-            if get_status_code(e) == 400 and accelerator != Accelerator.NONE:
+            status_code = get_status_code(e)
+            if status_code == 400 and accelerator != Accelerator.NONE:
                 raise ValueError(
-                    f"Accelerator '{accelerator.value}' rejected. "
-                    "You may not have quota. Try T4 (free) or CPU."
+                    f"Backend rejected accelerator '{accelerator.value}'. "
+                    "You may not have quota or entitlement for this accelerator "
+                    "on your account. Try T4 (free) or CPU."
+                )
+            if status_code and status_code >= 500 and high_mem:
+                # Live-observed: CPU + shape=hm returns 503 Service Unavailable
+                # on free accounts. The shape is the problem, not the server.
+                raise ValueError(
+                    "High-RAM is not available on your free account — retry as "
+                    "Standard RAM. High-RAM needs Colab Pro/Pro+."
                 )
             raise
 
@@ -82,47 +107,19 @@ async def new_session_impl(
             token=token,
             url=url,
             endpoint=endpoint,
+            token_expires_at=(
+                res.runtime_proxy_info.expires_at()
+                if hasattr(res, "runtime_proxy_info")
+                else None
+            ),
             variant=variant.value,
             accelerator=accelerator.value,
+            machine_shape=(
+                Shape.HIGH_RAM.name if shape == Shape.HIGH_RAM else Shape.STANDARD.name
+            ),
         )
 
-        if keep_alive:
-            # Pre-flight the keep-alive ping. If it returns a 403 caused by
-            # missing OAuth scopes the in-process loop will fail the same way —
-            # unassign the VM now so we don't leak a billable assignment.
-            try:
-                st.client.keep_alive_assignment(endpoint)
-            except ColabRequestError as e:
-                status_code = get_status_code(e)
-                body = str(getattr(e, "response_body", "") or "")
-                is_scope_err = (
-                    "insufficient_scope" in body
-                    or "insufficient authentication scopes" in body.lower()
-                )
-                if status_code == 403 and is_scope_err:
-                    logger.error(
-                        "[keep_alive] pre-flight 403 scope error for %s — "
-                        "unassigning to prevent billable VM leak",
-                        session_name,
-                    )
-                    try:
-                        st.client.unassign(endpoint)
-                    except Exception:
-                        logger.exception("Suppressed exception")
-                    raise RuntimeError(
-                        "Keep-alive pre-flight failed: OAuth credentials are "
-                        "missing a Colab scope. Please re-authenticate."
-                    ) from e
-                # Any other error (network blip, 5xx): non-fatal.
-                # The in-process loop will retry after 60 s.
-                logger.warning(
-                    "[keep_alive] pre-flight non-fatal error (will retry): %s", e
-                )
-
-            st.store.add(s)
-            s.keep_alive_pid = None
-        else:
-            st.store.add(s)
+        st.store.add(s)
         st.history.log_event(
             session_name,
             "session_created",
@@ -130,6 +127,7 @@ async def new_session_impl(
                 "endpoint": endpoint,
                 "variant": variant.value,
                 "accelerator": accelerator.value,
+                "machine_shape": s.machine_shape,
             },
         )
 
@@ -138,15 +136,11 @@ async def new_session_impl(
             "endpoint": endpoint,
             "variant": variant.value,
             "accelerator": accelerator.value,
+            "machine_shape": s.machine_shape,
             "status": "READY",
         }
 
     result = await asyncio.to_thread(_new)
-
-    if keep_alive:
-        service._start_in_process_keep_alive(
-            result["name"], result["endpoint"], auth_method
-        )
 
     return result
 
@@ -164,29 +158,10 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
         st.auth_provider = provider
 
         local_sessions, assignments = st.sync_sessions()
-
-        # The runtime-proxy JWT is short-lived; list_assignments() hands us a
-        # fresh one on every sync. Persist it onto existing local records so
-        # long-running sessions don't start failing with 404s hours in.
-        name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
-        for a in assignments:
-            existing_name = name_by_ep.get(a.endpoint)
-            if not existing_name:
-                continue
-            s = local_sessions.get(existing_name)
-            if s is None:
-                continue
-            if (
-                s.token != a.runtime_proxy_info.token
-                or s.url != a.runtime_proxy_info.url
-            ):
-                s.token = a.runtime_proxy_info.token
-                s.url = a.runtime_proxy_info.url
-                st.store.add(s)
-                logger.info(
-                    "[sync] refreshed runtime proxy token for session %s",
-                    existing_name,
-                )
+        # NOTE: upstream 0.7.4 `sync_sessions` already refreshes tokens +
+        # `token_expires_at` for surviving sessions via `_apply_proxy_info`,
+        # so no custom re-mint loop is needed here (it would only duplicate
+        # the refresh without the expiry math).
 
         results = []
         name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
@@ -206,8 +181,10 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
                     token=a.runtime_proxy_info.token,
                     url=a.runtime_proxy_info.url,
                     endpoint=a.endpoint,
+                    token_expires_at=a.runtime_proxy_info.expires_at(),
                     variant=a.variant.name,
                     accelerator=a.accelerator.value,
+                    machine_shape=a.machine_shape.name,
                 )
                 st.store.add(recovered_session)
                 local_sessions[name] = recovered_session
@@ -238,6 +215,7 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
                     "accelerator": a.accelerator.value,
                     "variant": a.variant.name,
                     "accelerator_label": accel_label,
+                    "machine_shape": a.machine_shape.name,
                     "status": status,
                     "running": running,
                     "last_execution": last_exec,
@@ -253,6 +231,18 @@ async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
         return []
 
 
+def load_session_fresh(st, session_name: str):
+    """GUI-safe wrapper over upstream `State.get_session`.
+
+    Always passes `ignore_missing_session=True` because bare `get_session`
+    raises `typer.Exit(1)` (plus a `typer.echo` to stdout) on missing
+    sessions — an unhandled control-flow exception inside Flet async code.
+    Returns the refreshed `SessionState`, or `None` when missing/pruned so
+    callers can map to their existing `ValueError`/status-string contracts.
+    """
+    return st.get_session(session_name, ignore_missing_session=True)
+
+
 def _refresh_runtime_token_sync(st, session_name: str) -> bool:
     """Synchronously re-mint one session's runtime-proxy token from the server.
 
@@ -262,7 +252,7 @@ def _refresh_runtime_token_sync(st, session_name: str) -> bool:
     or the refresh itself failed (the caller keeps its existing error path).
     """
     try:
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             return False
 
@@ -310,17 +300,6 @@ async def stop_session_impl(
 ) -> bool:
     """Stop a session by name."""
     await service._ensure_online()
-    task = service._keep_alive_tasks.pop(session_name, None)
-    if task is not None and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception(
-                "keep-alive task for %s raised unexpected exception", session_name
-            )
 
     def _stop():
         from colab_cli.auth import AuthProvider
@@ -331,11 +310,13 @@ async def stop_session_impl(
         st = State()
         st.auth_provider = provider
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             return False
 
         try:
+            # Fresh-read the token first: a long-lived session may have
+            # outlived its runtime-proxy token (upstream run.py teardown pattern).
             runtime = ColabRuntime(s.url, s.token, kernel_id=s.kernel_id)
             runtime.stop(shutdown_kernel=True)
         except Exception:
@@ -365,7 +346,7 @@ async def restart_kernel_impl(
         st = State()
         st.auth_provider = provider
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             return False
 
@@ -402,7 +383,7 @@ async def restart_kernel_impl(
                 # kernel. Re-mint the token and retry once before pruning a
                 # session that may still be alive server-side.
                 if _refresh_runtime_token_sync(st, session_name):
-                    s = st.store.get(session_name)
+                    s = load_session_fresh(st, session_name)
                     retry = ColabRuntime(
                         s.url,
                         s.token,
@@ -447,7 +428,7 @@ async def get_session_url_impl(
         st = State()
         st.auth_provider = provider
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             raise ValueError(f"Session '{session_name}' not found locally.")
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import posixpath
 
 import flet as ft
@@ -9,6 +10,7 @@ import flet as ft
 from components.file_item import build_file_item
 from components.shortcuts_help import open_shortcuts_help
 from core import tokens
+from core.notifications import show_notification
 from core.shortcuts import Binding, shortcuts_router
 from core.styles import build_banner_ad
 from core.theme import adaptive_glass_bg, adaptive_glass_border
@@ -24,6 +26,8 @@ from screens.files.components import (
     parent_path,
 )
 from state import AppStateCtx, ServiceCtx
+
+logger = logging.getLogger("files")
 
 
 @ft.component
@@ -161,7 +165,7 @@ def FilesScreen(session_name: str) -> ft.Control:
         tf = ft.TextField(
             label="Folder name",
             autofocus=True,
-            border_radius=tokens.RADIUS_MD,
+            border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
             on_submit=lambda e: (
                 _close_dlg(),
                 page.run_task(
@@ -244,6 +248,90 @@ def FilesScreen(session_name: str) -> ft.Control:
             )
         )
 
+    # ── Explain with AI (4C) ───────────────────────────────────────────────
+    # Reads the selected file off the VM and asks what it is. Same one-shot
+    # metered engine as the cell and terminal actions, and the answer goes in
+    # a dialog because a file listing has nowhere to put prose.
+
+    def _notify(message: str, is_error: bool = False):
+        try:
+            show_notification(page, message, is_error=is_error)
+        except Exception:
+            logger.debug("files AI notice failed")
+
+    async def _explain_selected():
+        from services import ai_quick, file_read
+
+        if not selected:
+            _notify("Select a file first.")
+            return
+        # Deterministic when several files are selected: the first alphabetically.
+        name = min(selected)
+        path = f"{current_path.rstrip('/')}/{name}"
+        text = await file_read.read_file_text(
+            path,
+            colab_service=services.colab,
+            session_name=session_name,
+            auth_method=state.auth_method,
+        )
+        if not text:
+            _notify("That file is empty or could not be read.")
+            return
+        try:
+            answer = await ai_quick.ask(
+                action="explain",
+                state=state,
+                credits=getattr(services, "credits", None),
+                services=services,
+                prompt=(
+                    f"This is the head of `{path}` on a Google Colab runtime.\n\n"
+                    "Tell the user what this file is: its format, what it "
+                    "holds, roughly how many rows or records if that is "
+                    "obvious, and anything worth knowing before they use it. "
+                    "Be brief and specific.\n\n"
+                    f"```\n{file_read.clip(text)}\n```"
+                ),
+                system=ai_quick.system_for(state),
+            )
+        except ai_quick.OutOfCredits:
+            _notify("Out of assistant credits — top up in Assistant settings.", True)
+            return
+        except ai_quick.CellAIDisabled:
+            _notify("Turn the Assistant on in Settings first.", True)
+            return
+        except Exception as ex:
+            logger.warning("Files explain failed: %s", ex)
+            _notify("The Assistant could not answer just now.", True)
+            return
+        if not answer.strip():
+            _notify("The Assistant returned nothing usable.")
+            return
+        page.show_dialog(
+            ft.AlertDialog(
+                modal=True,
+                title=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                        ft.Text(name),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                ),
+                content=ft.Container(
+                    content=ft.Markdown(
+                        answer,
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    ),
+                    width=440,
+                    height=320,
+                ),
+                actions=[
+                    ft.TextButton("Close", on_click=lambda e: page.pop_dialog())
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
+
     # Refresh the shortcut handler table with this render's closures.
     kb_ctx.current["handlers"] = {
         "refresh": lambda: page.run_task(_fetch, current_path),
@@ -251,6 +339,7 @@ def FilesScreen(session_name: str) -> ft.Control:
         "new_folder": _open_new_folder_dialog,
         "delete": _open_delete_dialog,
         "clear_selection": _clear_selection,
+        "explain": _explain_selected if state.ai_mode else None,
     }
 
     # ── Toolbar ───────────────────────────────────────────────────────────────
@@ -291,6 +380,18 @@ def FilesScreen(session_name: str) -> ft.Control:
                                 state.auth_method,
                                 _clear_selection,
                             )
+                        ),
+                    ),
+                    ft.IconButton(
+                        ft.Icons.AUTO_AWESOME_OUTLINED,
+                        icon_color=ft.Colors.PRIMARY
+                        if has_sel and state.ai_mode
+                        else ft.Colors.ON_SURFACE_VARIANT,
+                        tooltip="Explain this file with AI",
+                        on_click=(
+                            None
+                            if not (has_sel and state.ai_mode)
+                            else lambda e: page.run_task(_explain_selected)
                         ),
                     ),
                     ft.IconButton(

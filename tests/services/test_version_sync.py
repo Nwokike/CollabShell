@@ -75,3 +75,32 @@ def test_workflow_defaults_in_sync():
     )
     assert f"inputs.build_version || '{APP_VERSION}'" in workflow
     assert f"inputs.build_number || '{APP_BUILD_NUMBER}'" in workflow
+
+
+# Flet framework pins (F4): the UI framework + terminal extension move in
+# lockstep; a partial bump (core without terminal, or vice versa) breaks the
+# terminal panel (flet-terminal 0.3.9 floors flet>=1.0.1). Fails loudly on the
+# next bump instead of silently drifting.
+FLET_PINS = {
+    "flet": "1.0.3",
+    "flet-ads": "1.0.3",
+    "flet-cli": "1.0.3",
+    "flet-desktop": "1.0.3",
+    "flet-terminal": "0.3.9",
+}
+
+
+def test_flet_pins_in_sync():
+    """pyproject pins and uv.lock must agree on the Flet framework set."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    deps = pyproject["project"]["dependencies"]
+    lock_text = (ROOT / "uv.lock").read_text()
+    for name, version in FLET_PINS.items():
+        assert any(
+            d == f"{name}=={version}" or d.startswith(f"{name}=={version};")
+            for d in deps
+        ), f"pyproject missing pin {name}=={version}"
+        assert f'name = "{name}"\nversion = "{version}"' in lock_text, (
+            f"uv.lock {name} entry is stale — run `uv lock && uv sync` "
+            f"(expected {version})"
+        )

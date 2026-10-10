@@ -63,6 +63,16 @@ class AdService:
             return self.NATIVE_ID_ANDROID_TEST
         return self.NATIVE_ID_ANDROID_PROD
 
+    @property
+    def _premium(self) -> bool:
+        """True when the user owns Kiri premium: no ads, ever."""
+        try:
+            from core.state import state
+
+            return bool(getattr(state, "is_premium", False))
+        except Exception:
+            return False
+
     def _is_mobile(self) -> bool:
         try:
             return self.page.platform.is_mobile()
@@ -104,7 +114,12 @@ class AdService:
 
     def get_banner_ad(self) -> ft.Control:
         """Return a banner ad control, or empty container on desktop."""
-        if not _HAS_ADS or not self._is_mobile() or not self._can_request_ads:
+        if (
+            not _HAS_ADS
+            or not self._is_mobile()
+            or not self._can_request_ads
+            or self._premium
+        ):
             return ft.Container(width=0, height=0)
         try:
             from core import tokens
@@ -134,7 +149,12 @@ class AdService:
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Pre-load an interstitial ad for later display."""
         self._on_close = on_close
-        if not _HAS_ADS or not self._is_mobile() or not self._can_request_ads:
+        if (
+            not _HAS_ADS
+            or not self._is_mobile()
+            or not self._can_request_ads
+            or self._premium
+        ):
             return
         try:
             self.interstitial = fta.InterstitialAd(

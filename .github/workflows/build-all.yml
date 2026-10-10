@@ -9,11 +9,11 @@ on:
       build_version:
         description: "Build version"
         required: true
-        default: "2.1.2"
+        default: "2.1.3"
       build_number:
         description: "Build number"
         required: true
-        default: "12"
+        default: "13"
 
 permissions:
   contents: write
@@ -22,8 +22,8 @@ env:
   PYTHONUTF8: "1"
   FLET_CLI_NO_RICH_OUTPUT: "1"
   UV_PYTHON: "3.14"
-  BUILD_VERSION: ${{ inputs.build_version || '2.1.2' }}
-  BUILD_NUMBER: ${{ inputs.build_number || '12' }}
+  BUILD_VERSION: ${{ inputs.build_version || '2.1.3' }}
+  BUILD_NUMBER: ${{ inputs.build_number || '13' }}
 
 jobs:
   # ─── 0. Create Release Tag & Placeholder ───────────────
@@ -128,6 +128,10 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: echo "$KEYSTORE_BASE64" | base64 --decode > kiri_keystore.jks
+      # Channel marker: the AAB that ships to Play is the "play" build —
+      # free tier with ads, no premium of any kind (core/channel.py).
+      - name: Mark the Play channel
+        run: echo 'CHANNEL = "play"' > src/core/channel.py
       - name: Build AAB
         env:
           PIP_FIND_LINKS: ${{ github.workspace }}/wheels
@@ -158,10 +162,10 @@ jobs:
       - name: Build Windows Portable
         run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
 
-      - name: Generate Icon for Installer
-        run: |
-          uv pip install pillow
-          uv run python -c "from PIL import Image; Image.open('src/assets/icon.png').save('src/assets/icon.ico', format='ICO', sizes=[(256, 256)])"
+      # NOTE (Flet 1.0.3): the 4-entry app_icon.ico (16/32/48/256) is generated
+      # by flet-platform-assets during `flet build windows` — the old Pillow
+      # single-256 step was deleted. Inno SetupIconFile points at the
+      # generator output below.
 
       - name: Build Windows Installer (Inno Setup)
         run: |
@@ -185,7 +189,7 @@ jobs:
           ArchitecturesAllowed=x64
           ArchitecturesInstallIn64BitMode=x64
           PrivilegesRequired=lowest
-          SetupIconFile=.\src\assets\icon.ico
+          SetupIconFile=.\build\windows\runner\resources\app_icon.ico
           UninstallDisplayIcon={app}\collabshell.exe
           CloseApplications=yes
           AppMutex=CollabShell_Mutex

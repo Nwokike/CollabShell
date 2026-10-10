@@ -112,19 +112,36 @@ def HistoryScreen() -> ft.Control:
     try:
         limit = None if max_lines == "all" else int(max_lines)
         display_events = filtered if limit is None else filtered[-limit:]
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         display_events = filtered
+
+    def _shape_label(shape) -> str:
+        return "High RAM" if str(shape or "").upper() == "HIGH_RAM" else "Standard RAM"
 
     # ── Event item ────────────────────────────────────────────────────
     def _build_event_item(ev: dict) -> ft.Control:
         ev_type = ev.get("event_type") or ev.get("type", "unknown")
         ts = ev.get("timestamp", "")
         detail = ev.get("detail") or ev.get("source") or ev.get("code", "")[:80]
+        if ev_type == "session_created":
+            parts = [
+                str(ev.get("variant", "")),
+                str(ev.get("accelerator", "")),
+                _shape_label(ev.get("machine_shape")),
+            ]
+            detail = " · ".join(p for p in parts if p) or detail
+        elif ev_type == "execution" and ev.get("env_keys"):
+            keys = ", ".join(str(k) for k in ev.get("env_keys") or [])
+            if keys:
+                detail = f"{detail} · env: {keys}" if detail else f"env: {keys}"
+        elif ev_type == "session_terminated" and ev.get("reason"):
+            detail = str(ev.get("reason"))
         icon_map = {
             "execution": ft.Icons.CODE_ROUNDED,
             "file_operation": ft.Icons.FOLDER_ROUNDED,
             "automation": ft.Icons.AUTO_FIX_HIGH_ROUNDED,
             "session_created": ft.Icons.STORAGE_ROUNDED,
+            "session_terminated": ft.Icons.STORAGE_ROUNDED,
         }
         icon = icon_map.get(ev_type, ft.Icons.CIRCLE_ROUNDED)
         return ft.Container(
@@ -222,7 +239,9 @@ def HistoryScreen() -> ft.Control:
                                         options=[
                                             ft.dropdown.Option(n, n) for n in sessions
                                         ],
-                                        border_radius=tokens.RADIUS_MD,
+                                        border=ft.OutlineInputBorder(
+                                            border_radius=tokens.RADIUS_MD
+                                        ),
                                         on_select=lambda e: page.run_task(
                                             _on_session_change, e
                                         ),
@@ -250,7 +269,9 @@ def HistoryScreen() -> ft.Control:
                                                         "Session Created",
                                                     ),
                                                 ],
-                                                border_radius=tokens.RADIUS_MD,
+                                                border=ft.OutlineInputBorder(
+                                                    border_radius=tokens.RADIUS_MD
+                                                ),
                                                 on_select=lambda e: set_filter_type(
                                                     e.control.value or "all"
                                                 ),
@@ -267,7 +288,9 @@ def HistoryScreen() -> ft.Control:
                                                     ),
                                                     ft.dropdown.Option("all", "All"),
                                                 ],
-                                                border_radius=tokens.RADIUS_MD,
+                                                border=ft.OutlineInputBorder(
+                                                    border_radius=tokens.RADIUS_MD
+                                                ),
                                                 on_select=lambda e: set_max_lines(
                                                     e.control.value or "50"
                                                 ),
