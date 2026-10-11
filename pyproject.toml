@@ -18,6 +18,18 @@ dependencies = [
     # way, but the Android/desktop builds re-resolve from this file, and an
     # unpinned 1.x there fails the whole build with ResolutionImpossible.
     "jupyter-kernel-client<1.0",
+    # The jupyter-kernel-client subtree is what the Android (Pyodide/WASM) and
+    # desktop builds resolve on, and it is where v2.1.3's build broke. The
+    # last build that shipped green resolved this subtree at:
+    #   jupyter-client 8.9.1, pyarrow 25.0.1, tornado 6.5.8
+    # and HEAD resolved 8.10.0 / 26.0.0 / 6.5.10, after which every Android
+    # target failed with "Cannot install jupyter-kernel-client ...
+    # ResolutionImpossible". The local uv.lock and the whole test suite stay
+    # green either way, so only a build that re-resolves notices — the same
+    # blind spot that produced the 2.1.1 phantom-update prompt.
+    "jupyter-client<8.10",
+    "pyarrow<26",
+    "tornado<6.5.10",
     "rich>=15.0.0",
     "mirascope[openai]>=2.5.0",
 ]
