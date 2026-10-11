@@ -104,3 +104,43 @@ def test_flet_pins_in_sync():
             f"uv.lock {name} entry is stale — run `uv lock && uv sync` "
             f"(expected {version})"
         )
+
+
+# ── dependency pins the builds depend on ────────────────────────────────────
+# These are not "sync" checks like the ones above: each pin exists because
+# dropping it breaks a *build*, not the test suite. The local uv.lock keeps
+# resolving fine, so only the re-resolving Android/desktop builds notice.
+# This is the same failure mode as the phantom-update prompt in 2.1.1: a
+# partial bump shipped green locally and broke in CI.
+
+# colab-cli imports jupyter_kernel_client.JupyterSubprotocol
+# (colab_cli/runtime.py:55). 1.0.0 renamed it, so the pin must stay.
+CRITICAL_PINS = {
+    "jupyter-kernel-client": "<1.0",
+}
+
+
+def test_build_breaking_dependency_pins_are_present():
+    """A pin that only CI notices must be pinned in the test suite too,
+    otherwise dropping it is invisible until a release build fails."""
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    deps = pyproject["project"]["dependencies"]
+    for name, constraint in CRITICAL_PINS.items():
+        assert any(
+            d.startswith(f"{name}") and constraint in d for d in deps
+        ), f"{name}{constraint} is required by colab-cli — dropping it breaks the CI build"
+
+
+def test_the_installed_version_satisfies_each_pin():
+    """The pin must also be satisfiable locally, so `uv sync` does not fight it."""
+    import importlib.metadata as md
+
+    for name, constraint in CRITICAL_PINS.items():
+        try:
+            version = md.version(name)
+        except md.PackageNotFoundError as exc:  # pragma: no cover
+            raise AssertionError(f"{name} is not installed") from exc
+        assert version.startswith("0."), (
+            f"{name} {version} is installed but {name}{constraint} is the "
+            "supported range for colab-cli"
+        )

@@ -299,37 +299,59 @@ def test_hourly_loop_runs_until_shutdown(env, monkeypatch):
     premium = env.premium
 
     calls = []
+    ticked = asyncio.Event()
     original = premium.reconcile
 
     async def _counting():
         calls.append(1)
         await original()
+        ticked.set()
 
     monkeypatch.setattr(premium, "reconcile", _counting)
     premium.start_reconcile_loop()
-    env.loop.run_until_complete(asyncio.sleep(0.08))
+    # Wait for the tick rather than sleeping a fixed window — a wall-clock
+    # sleep passes idle and flakes under load.
+    try:
+        env.loop.run_until_complete(asyncio.wait_for(ticked.wait(), timeout=5.0))
+    except TimeoutError:
+        raise AssertionError("the reconcile loop never ticked") from None
     premium.shutdown()
     _settle(env.loop)
     assert len(calls) >= 1
 
 
 def test_reconcile_loop_survives_failure(env, monkeypatch):
+    """A failing tick must not kill the loop.
+
+    Waits for the second tick rather than sleeping a fixed window: a wall-clock
+    sleep passes on an idle machine and flakes under load, which is a
+    false failure indistinguishable from a real regression.
+    """
     monkeypatch.setattr(ps, "RECONCILE_INTERVAL", 0.01)
     premium = env.premium
 
     calls = []
+    second_tick = asyncio.Event()
 
     async def _boom_once():
         calls.append(1)
         if len(calls) == 1:
             raise RuntimeError("db blew up")
+        second_tick.set()
 
     monkeypatch.setattr(premium, "reconcile", _boom_once)
     premium.start_reconcile_loop()
-    env.loop.run_until_complete(asyncio.sleep(0.08))
+    try:
+        env.loop.run_until_complete(
+            asyncio.wait_for(second_tick.wait(), timeout=5.0)
+        )
+    except TimeoutError:
+        raise AssertionError(
+            "the loop did not tick again after a failing tick — it died"
+        ) from None
     premium.shutdown()
     _settle(env.loop)
-    assert len(calls) >= 2, "the loop must survive a failing tick"
+    assert len(calls) >= 2
 
 
 def test_reconcile_stamps_after_work(env, monkeypatch):
