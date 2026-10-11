@@ -17,6 +17,7 @@ from components.offline_flow import OfflineFlow
 from components.shortcuts_help import build_help_button, open_shortcuts_help
 from core import constants, tokens
 from core.shortcuts import Binding, shortcuts_router
+from core.theme import brand_color
 from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
 from state import AppStateCtx, ControllerMethodsCtx
 
@@ -210,16 +211,29 @@ def AppShell() -> Control:
                     logger.exception("Suppressed exception")
             return
         if ours:
-            return  # already in place; a rebuild would churn the widget tree
+            # Only the meaning changes between "new chat" and "restore", so
+            # relabel in place rather than rebuilding the button.
+            wanted = "Back to Assistant" if state.assistant_minimized else "Ask Assistant"
+            if current.tooltip != wanted:
+                current.tooltip = wanted
+                try:
+                    page.update()
+                except Exception:
+                    logger.exception("Suppressed exception")
+            return
         if current is not None:
             return  # the session screen owns the slot right now
+        # DDGS's recipe verbatim: mini, white icon, brand fill, tooltip only.
+        # No shape override (the platform's own roundness is right) and no
+        # badge or per-credit rebuild.
         fab = ft.FloatingActionButton(
-            icon=ft.Icons.AUTO_AWESOME_OUTLINED,
-            mini=True,
-            tooltip="Ask Assistant",
-            bgcolor=ft.Colors.PRIMARY,
+            icon=ft.Icons.CHAT_BUBBLE_ROUNDED,
             foreground_color=ft.Colors.WHITE,
-            shape=ft.CircleBorder(),
+            bgcolor=brand_color(page),
+            mini=True,
+            tooltip="Back to Assistant"
+            if state.assistant_minimized
+            else "Ask Assistant",
             on_click=lambda e: controller.open_assistant(),
         )
         _assistant_fab_ref.current = fab
@@ -235,10 +249,12 @@ def AppShell() -> Control:
             state.app_ready,
             state.onboarding_done,
             state.is_authenticated,
-            # Without this the FAB never comes back after a session: the session
-            # screen owns views[0].floating_action_button while it is open, so
-            # leaving it clears the slot and only a re-run of this effect puts
-            # the assistant button there again.
+            # Relabel when the chat is minimized vs closed, and restore the FAB
+            # after a session: the session screen owns
+            # views[0].floating_action_button while it is open, so leaving it
+            # clears the slot and only a re-run of this effect puts the
+            # assistant button there again.
+            state.assistant_minimized,
             state.active_subview,
         ],
     )

@@ -28,9 +28,10 @@ import time
 
 import flet as ft
 
+from components.model_pill import build_model_pill
 from core import tokens
 from core.styles import tip_text
-from core.theme import AppColors
+from core.theme import AppColors, brand_color
 
 logger = logging.getLogger("assistant")
 
@@ -192,6 +193,39 @@ class ChatSession:
 
         self._credits_text = ft.Text("…", size=tokens.FONT_XS, weight=ft.FontWeight.W_600)
 
+        # The balance is a control, not a readout: tapping it opens the wallet
+        # (balance, cost table, ad top-up) exactly as DDGS's chip does. A
+        # number nobody can act on is just decoration.
+        self.credits_chip = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(_CHAT_ICON, size=tokens.ICON_SM, color=self._credit_color()),
+                    self._credits_text,
+                ],
+                spacing=2,
+                tight=True,
+            ),
+            # Same geometry as the model pill so the two read as one family;
+            # the colour stays because it carries the balance signal.
+            padding=ft.Padding.symmetric(horizontal=7, vertical=3),
+            border_radius=tokens.RADIUS_PILL,
+            bgcolor=ft.Colors.with_opacity(0.1, self._credit_color()),
+            ink=True,
+            tooltip="Assistant credits, tap for details",
+            on_click=lambda e: self._open_wallet(),
+        )
+
+        # Model selector: an actual dropdown menu (LM Router's pattern), not
+        # the modal list DDGS uses — you keep the transcript in view.
+        self.model_chip = build_model_pill(
+            self.page, on_pick=self._pick_model
+        )
+
+        # Sherlock's header shape (via DDGS): ONE row, left group and right
+        # group, SPACE_BETWEEN, and scroll on the whole row so oversized
+        # controls scroll instead of clipping on narrow screens. An ft.AppBar
+        # cannot do this — its actions get unbounded width and the wide pills
+        # push the + off and paint over the title.
         header = ft.Container(
             content=ft.Row(
                 controls=[
@@ -202,49 +236,47 @@ class ChatSession:
                                 tooltip="Minimize assistant",
                                 on_click=lambda e: self.close(),
                             ),
-                            ft.Icon(_CHAT_ICON, size=tokens.ICON_MD, color=self._brand()),
+                            ft.Icon(_CHAT_ICON, size=20, color=self._brand()),
                             ft.Text(
                                 "Assistant",
                                 size=tokens.FONT_MD,
                                 weight=ft.FontWeight.W_700,
+                                font_family="Outfit",
                             ),
                         ],
-                        spacing=tokens.SPACE_SM,
+                        spacing=6,
                         tight=True,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
+                    # Right controls: creation, history, the readouts, then the
+                    # model selector. Plus and history carry tight padding so
+                    # they read as one pair.
                     ft.Row(
                         [
                             ft.IconButton(
                                 icon=ft.Icons.ADD_ROUNDED,
-                                icon_size=tokens.ICON_SM,
+                                icon_size=18,
                                 icon_color=self._brand(),
                                 tooltip="New chat",
                                 style=ft.ButtonStyle(
-                                    padding=ft.Padding(2, tokens.SPACE_SM, 2, tokens.SPACE_SM)
+                                    padding=ft.Padding(2, 6, 2, 6)
                                 ),
                                 on_click=lambda e: self.new_conversation(),
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.HISTORY_ROUNDED,
-                                icon_size=tokens.ICON_SM,
+                                icon_size=18,
                                 icon_color=self._brand(),
-                                tooltip="History",
+                                tooltip="Past chats",
                                 style=ft.ButtonStyle(
-                                    padding=ft.Padding(2, tokens.SPACE_SM, 2, tokens.SPACE_SM)
+                                    padding=ft.Padding(2, 6, 2, 6)
                                 ),
                                 on_click=lambda e: self._show_history(),
                             ),
-                            ft.Container(
-                                content=self._credits_text,
-                                padding=ft.Padding.symmetric(
-                                    horizontal=tokens.SPACE_SM, vertical=tokens.SPACE_XS
-                                ),
-                                border_radius=tokens.RADIUS_PILL,
-                                tooltip="Assistant credits",
-                            ),
+                            self.credits_chip,
+                            self.model_chip,
                         ],
-                        spacing=tokens.SPACE_XS,
+                        spacing=4,
                         tight=True,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
@@ -288,16 +320,69 @@ class ChatSession:
         self._refresh_credits()
 
     def _brand(self) -> str:
-        """The theme's brand color, read live so the header follows a theme
-        change instead of pinning one hue from the first build."""
+        """The live brand colour. Shared with the FAB and the model pill so the
+        three can never disagree, and read from the theme so a light/dark flip
+        is followed rather than pinned."""
+        return brand_color(self.page)
+
+    def _credit_color(self) -> str:
+        """The balance's band colour: green comfortable, amber near the wall,
+        red at it."""
+        from components.credit_pill import credit_color
+
+        return credit_color(self._credits_value)
+
+    def _open_wallet(self) -> None:
+        """Open the wallet dialog (balance, cost table, ad top-up)."""
         try:
-            theme = ft.context.page.theme
-            primary = getattr(getattr(theme, "color_scheme", None), "primary", None)
-            if primary:
-                return primary
+            from components.wallet_dialog import show_wallet_dialog
+
+            show_wallet_dialog(self.page, self.state, self.services)
         except Exception:
-            pass
-        return ft.Colors.PRIMARY
+            logger.debug("wallet open failed", exc_info=True)
+
+    def _pick_model(self, model_id: str) -> None:
+        """Persist a model choice made from the header dropdown."""
+        from services import model_catalog
+
+        async def _save() -> None:
+            self.state.ai_model = model_id
+            storage = getattr(self.services, "storage", None)
+            if storage is not None:
+                try:
+                    from core.constants import STORAGE_AI_MODEL
+
+                    await storage.set(STORAGE_AI_MODEL, model_id)
+                except Exception:
+                    logger.debug("model save failed", exc_info=True)
+            try:
+                await model_catalog.refresh_catalog(
+                    str(getattr(self.state, "ai_router_url", "") or "")
+                )
+            except Exception:
+                pass
+            # Rebuild the pill so its label matches the new choice.
+            self._rebuild_header_controls()
+
+        try:
+            self.page.run_task(_save)
+        except Exception:
+            logger.debug("model pick failed", exc_info=True)
+
+    def _rebuild_header_controls(self) -> None:
+        """Swap the credits chip and model pill for freshly-built ones.
+
+        The pill's label is derived from the catalog, so after a pick (or a
+        balance change) it has to be rebuilt rather than mutated in place.
+        """
+        try:
+            self.credits_chip.bgcolor = ft.Colors.with_opacity(
+                0.1, self._credit_color()
+            )
+            self.credits_chip.content.controls[0].color = self._credit_color()
+            self.credits_chip.update()
+        except Exception:
+            logger.debug("credit chip refresh failed", exc_info=True)
 
     # ── lifecycle ──────────────────────────────────────────────────────────
 
@@ -959,11 +1044,16 @@ class ChatSession:
 
         self._credits_value = value
         self._credits_text.value = str(value)
-        self._credits_text.color = credit_color(value)
+        color = credit_color(value)
+        self._credits_text.color = color
+        # The chip's fill and leading icon carry the same band as the number,
+        # so the balance reads at a glance without parsing it.
         try:
-            self._credits_text.update()
+            self.credits_chip.bgcolor = ft.Colors.with_opacity(0.1, color)
+            self.credits_chip.content.controls[0].color = color
+            self._rebuild_header_controls()
         except Exception:
-            pass
+            logger.debug("credit chip repaint failed", exc_info=True)
 
 
 def open_assistant(page: ft.Page, state, services, controller=None) -> ChatSession:
