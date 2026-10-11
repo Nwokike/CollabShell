@@ -69,7 +69,9 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             return
         granted = {"ok": False}
 
-        def _on_reward(_ok):
+        def _on_reward(_ok=True):
+            # AdService calls this with no argument on the desktop/no-ads
+            # path (ad_service.py:190-196), so the parameter must be optional.
             granted["ok"] = bool(_ok)
 
         try:
@@ -82,11 +84,15 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             _refresh()
         page.update()
 
-    can_ads = bool(
-        ad_service is not None
-        and getattr(ad_service, "_is_mobile", False)
-        and not is_premium
-    )
+    def _ads_available() -> bool:
+        if ad_service is None or is_premium:
+            return False
+        probe = getattr(ad_service, "_is_mobile", None)
+        # It is a method, not a property: a truthy bound method here made
+        # desktop offer an ad top-up it cannot show.
+        return bool(probe() if callable(probe) else probe)
+
+    can_ads = _ads_available()
 
     page.show_dialog(
         ft.AlertDialog(

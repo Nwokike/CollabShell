@@ -147,10 +147,12 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
                 # A plot produced by THIS run is worth seeing, not just reading.
                 images.extend(_images_from_outputs([entry]))
 
-            from services.colab import exec_code
-
-            await exec_code(
-                services.colab,
+            # exec_code is a ColabService method — it owns the timeout and
+            # OAuth-intercept defaults. Importing it from the package module
+            # (as this once did) raises ImportError, so every execution fell
+            # into the except path and the model only ever saw "Execution
+            # failed". Call it as the method it is.
+            await services.colab.exec_code(
                 code,
                 session_name,
                 timeout=float(getattr(state, "default_timeout", 30.0)),

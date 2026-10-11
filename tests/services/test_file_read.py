@@ -23,15 +23,23 @@ from services import file_read
 
 
 class _FakeColab:
-    def __init__(self, ok=True, raises=None):
+    """Stands in for ColabService, which downloads the remote file INTO
+    local_path (colab/__init__.py:198) — so the fake must write there too, and
+    must record that local_path was passed at all."""
+
+    def __init__(self, ok=True, raises=None, body="id,v\n1,2\n"):
         self.ok = ok
         self.raises = raises
+        self.body = body
         self.downloads = []
 
-    async def download(self, path, session_name=None, auth_method=None):
-        self.downloads.append(path)
+    async def download(self, remote_path, local_path, session_name=None, auth_method=None):
+        self.downloads.append((remote_path, local_path))
         if self.raises:
             raise self.raises
+        if local_path:
+            with open(local_path, "w", encoding="utf-8") as fh:  # noqa: ASYNC230
+                fh.write(self.body)
         return self.ok
 
 
@@ -42,12 +50,8 @@ def _call(colab, tmp_path, monkeypatch, path="/content/x.csv"):
     real_mkstemp = file_read.tempfile.mkstemp
 
     def fake_mkstemp(**kw):
-
         fd, name = real_mkstemp(dir=str(tmp_path), **kw)
         made.append(name)
-        if colab.ok and not colab.raises:
-            with open(name, "w", encoding="utf-8") as fh:
-                fh.write("id,v\n1,2\n")
         return fd, name
 
     monkeypatch.setattr(file_read.tempfile, "mkstemp", fake_mkstemp)
@@ -147,3 +151,42 @@ def test_clip_passes_short_text_through_unchanged():
 
 def test_clip_of_empty_is_empty():
     assert file_read.clip("") == ""
+
+
+def test_download_is_given_the_local_path():
+    """ColabService.download requires local_path (colab/__init__.py:198).
+    Omitting it raises TypeError, which read_file_text caught and swallowed, so
+    every file read returned "" and the assistant saw nothing useful."""
+    import tempfile
+
+    colab = _FakeColab()
+    with tempfile.TemporaryDirectory() as td:
+        real = file_read.tempfile.mkstemp
+        file_read.tempfile.mkstemp = lambda **kw: real(dir=td, **kw)
+        try:
+            out = asyncio.run(
+                file_read.read_file_text(
+                    "/content/x.csv",
+                    colab_service=colab,
+                    session_name="s",
+                    auth_method="oauth2",
+                )
+            )
+        finally:
+            file_read.tempfile.mkstemp = real
+
+    assert out.startswith("id,v"), out
+    remote, local = colab.downloads[0]
+    assert remote == "/content/x.csv"
+    assert local, "a local_path must be passed to download"
+
+
+def test_a_fake_matching_the_real_signature_is_required():
+    """The fake above mirrors ColabService.download's arity. If the real
+    signature changes, this test changes with it."""
+    import inspect
+
+    from services.colab import ColabService
+
+    params = list(inspect.signature(ColabService.download).parameters)
+    assert "local_path" in params, params

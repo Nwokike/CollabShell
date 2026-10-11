@@ -14,6 +14,7 @@ import flet as ft
 
 from core import tokens
 from core.channel import CHANNEL
+from core.notifications import show_notification
 from core.styles import glass_card, section_header, tip_text
 
 logger = logging.getLogger("PremiumSection")
@@ -88,7 +89,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
                     trailing=ft.OutlinedButton(
                         "Copy",
                         icon=ft.Icons.COPY_ROUNDED,
-                        on_click=lambda e: _copy(recovery, page),
+                        on_click=lambda e: _copy_handler(recovery),
                     ),
                 )
             )
@@ -118,9 +119,17 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
         except Exception as ex:
             logger.warning("Premium render failed: %s", ex)
 
-    def _copy(text: str, pg):
-        pg.set_clipboard(text)
-        pg.show_snack("Recovery ID copied. Keep it somewhere safe.")
+    async def _copy(text: str):
+        # Page has no set_clipboard/show_snack in flet 1.0 — use the
+        # Clipboard service and the shared notification helper.
+        try:
+            await ft.Clipboard().set(text)
+        except Exception as ex:
+            logger.warning("Recovery ID copy failed: %s", ex)
+        show_notification(page, "Recovery ID copied. Keep it somewhere safe.")
+
+    def _copy_handler(text: str):
+        page.run_task(_copy, text)
 
     async def _load(ev=None):
         # StorageService.get is a coroutine and there is no sync `.data`, so
@@ -179,7 +188,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
         try:
             checkout = await premium.kiri_checkout(product_id, email)
         except Exception as ex:
-            page.show_snack(f"Could not open the payment page: {ex}")
+            show_notification(page, f"Could not open the payment page: {ex}", is_error=True)
             return
         # The hosted page opens outside the app; the watcher polls in the
         # background and unlocks by itself.
@@ -188,12 +197,12 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
 
             webbrowser.open(checkout.checkout_url)
         except Exception:
-            page.show_snack(
-                "Complete the payment. This screen unlocks itself when it lands."
+            show_notification(
+                page, "Complete the payment. This screen unlocks itself when it lands."
             )
         else:
-            page.show_snack(
-                "Complete the payment. This screen unlocks itself when it lands."
+            show_notification(
+                page, "Complete the payment. This screen unlocks itself when it lands."
             )
 
     _render([])

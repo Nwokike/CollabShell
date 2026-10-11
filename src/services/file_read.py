@@ -35,11 +35,17 @@ async def read_file_text(path: str, *, colab_service, session_name: str, auth_me
     """
     import asyncio
 
+    # The staged temp file is BOTH the scratch name and the download target:
+    # ColabService.download requires a local_path (colab/__init__.py:198), and
+    # omitting it raised TypeError, so every read silently returned "".
     fd, local = tempfile.mkstemp(suffix="_ai_read")
     os.close(fd)
     try:
         ok = await colab_service.download(
-            path, session_name=session_name, auth_method=auth_method
+            path,
+            local,
+            session_name=session_name,
+            auth_method=auth_method,
         )
         if not ok:
             return ""

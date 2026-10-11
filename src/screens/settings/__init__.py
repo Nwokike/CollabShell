@@ -33,17 +33,19 @@ def SettingsScreen() -> ft.Control:
 
     # Each section is built in isolation so one broken card cannot blank the
     # whole screen — and so the traceback names the section instead of leaving
-    # the user with an empty column and no idea why.
+    # the user with an empty column and no idea why. Every entry takes the
+    # same (page, state, services) triple; the banner builder takes fewer, so
+    # it is wrapped to match rather than called bare.
     sections = (
         build_preferences_section,
         build_account_section,
-        lambda: build_banner_ad(page),
+        lambda page, state, services: build_banner_ad(page),
         build_ai_section,
         build_premium_section,
         build_hardware_section,
         build_execution_section,
         build_behavior_section,
-        lambda: build_banner_ad(page),
+        lambda page, state, services: build_banner_ad(page),
         build_advanced_section,
         build_logs_section,
         build_data_section,

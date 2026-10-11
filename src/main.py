@@ -732,25 +732,6 @@ class AppController:
         # on its own view above the shell, so a back press while it is open must
         # minimize it — otherwise the shell's root view is popped underneath and
         # the app is left with nothing to show.
-        def _on_view_pop(e: ft.ViewPopEvent):
-            from screens.assistant_view import shutdown_assistant
-
-            if len(page.views) > 1 and page.views[-1].route == "/assistant":
-                session = getattr(page, "_assistant_session", None)
-                if session is not None:
-                    # Minimize rather than tear down: the turn keeps running
-                    # and the transcript survives.
-                    session.close()
-                page.update()
-                return
-            if len(page.views) > 1:
-                page.views.pop()
-                page.update()
-                return
-            shutdown_assistant(page)
-
-        page.on_view_pop = _on_view_pop
-
         # Android lifecycle handler
         async def _on_lifecycle_change(e: ft.AppLifecycleStateChangeEvent):
             if e.state not in (
@@ -795,7 +776,22 @@ class AppController:
 
         # Android hardware BACK: close the active subview (session/history)
         # before letting the system pop the root view.
+        #
+        # The assistant rides its own view above the shell, so BACK while it is
+        # open must minimise it — keeping a running turn and its transcript
+        # alive — rather than tear it down or pop the shell underneath. This
+        # case is checked first because the chat view is the topmost one.
         async def _on_view_pop(e):
+            if len(page.views) > 1 and page.views[-1].route == "/assistant":
+                from screens.assistant_view import shutdown_assistant
+
+                session = getattr(page, "_assistant_session", None)
+                if session is not None:
+                    session.close()  # minimize, not shut down
+                else:
+                    shutdown_assistant(page)
+                page.update()
+                return
             if state.active_subview:
                 self._navigate("/home")
             elif len(page.views) > 1:
