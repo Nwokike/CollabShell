@@ -196,7 +196,11 @@ def AppShell() -> Control:
             return
         current = page.views[0].floating_action_button
         ours = current is not None and current is _assistant_fab_ref.current
-        if not (state.ai_mode and state.app_ready and state.onboarding_done):
+        # The FAB is always present once the app is up, the way DDGS ships it —
+        # it is the entry point to the assistant, so hiding it until ai_mode is
+        # on makes the feature undiscoverable. The assistant itself still gates
+        # on ai_mode and says so when it is off.
+        if not (state.app_ready and state.onboarding_done):
             if ours:
                 page.views[0].floating_action_button = None
                 _assistant_fab_ref.current = None
@@ -228,7 +232,6 @@ def AppShell() -> Control:
     ft.use_effect(
         _sync_assistant_fab,
         [
-            state.ai_mode,
             state.app_ready,
             state.onboarding_done,
             state.is_authenticated,

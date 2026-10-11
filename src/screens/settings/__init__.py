@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from core import tokens
@@ -19,6 +21,8 @@ from screens.settings.preferences_section import build_preferences_section
 from screens.settings.premium_section import build_premium_section
 from state import AppStateCtx, ServiceCtx
 
+logger = logging.getLogger("Settings")
+
 
 @ft.component
 def SettingsScreen() -> ft.Control:
@@ -27,21 +31,46 @@ def SettingsScreen() -> ft.Control:
     services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
+    # Each section is built in isolation so one broken card cannot blank the
+    # whole screen — and so the traceback names the section instead of leaving
+    # the user with an empty column and no idea why.
+    sections = (
+        build_preferences_section,
+        build_account_section,
+        lambda: build_banner_ad(page),
+        build_ai_section,
+        build_premium_section,
+        build_hardware_section,
+        build_execution_section,
+        build_behavior_section,
+        lambda: build_banner_ad(page),
+        build_advanced_section,
+        build_logs_section,
+        build_data_section,
+        build_about_section,
+    )
+
+    controls: list[ft.Control] = []
+    for build in sections:
+        try:
+            controls.append(build(page, state, services))
+        except Exception as ex:
+            logger.exception("Settings section failed: %r", build)
+            controls.append(
+                ft.Container(
+                    content=ft.Text(
+                        "This section could not be shown. "
+                        f"{type(ex).__name__}: {ex}",
+                        size=tokens.FONT_SM,
+                        color=ft.Colors.ERROR,
+                    ),
+                    padding=tokens.SPACE_MD,
+                )
+            )
+
     return ft.Column(
         controls=[
-            build_preferences_section(page, state, services),
-            build_account_section(page, state, services),
-            build_banner_ad(page),
-            build_ai_section(page, state, services),
-            build_premium_section(page, state, services),
-            build_hardware_section(page, state, services),
-            build_execution_section(page, state, services),
-            build_behavior_section(page, state, services),
-            build_banner_ad(page),
-            build_advanced_section(page, state, services),
-            build_logs_section(page, state, services),
-            build_data_section(page, state, services),
-            build_about_section(page, state, services),
+            *controls,
             ft.Container(height=tokens.SPACE_XXL),
         ],
         spacing=tokens.SPACE_SM,

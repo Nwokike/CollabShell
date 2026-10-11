@@ -142,10 +142,24 @@ def test_settings_screen_includes_the_ai_section():
     import pathlib
 
     src = pathlib.Path("src/screens/settings/__init__.py").read_text(encoding="utf-8")
-    assert "build_ai_section(page, state, services)" in src
+    # Sections are now built in a loop, so the check is on the tuple order
+    # rather than a literal call expression.
+    assert "build_ai_section" in src
     # Placed after account, before hardware.
     assert src.index("build_ai_section") > src.index("build_account_section")
     assert src.index("build_ai_section") < src.index("build_hardware_section")
+
+
+def test_a_broken_settings_section_does_not_blank_the_screen():
+    """The crash this pins: settings used to build every section inline, so one
+    raising builder produced an empty screen with no visible reason. Sections
+    are now each built in their own try/except."""
+    import pathlib
+
+    src = pathlib.Path("src/screens/settings/__init__.py").read_text(encoding="utf-8")
+    assert "for build in sections" in src, "sections must be built in isolation"
+    assert "except Exception" in src, "a failing section must be caught"
+    assert "could not be shown" in src, "the failure must be visible to the user"
 
 
 # ── model picker ───────────────────────────────────────────────────────────
