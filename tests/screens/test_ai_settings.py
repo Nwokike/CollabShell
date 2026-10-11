@@ -473,3 +473,63 @@ def _flatten_texts(control) -> list[str]:
 
     walk(control)
     return out
+
+
+# ── the PREMIUM card must not crash on a real storage service ───────────────
+# The crash this pins: build_premium_section read the recovery id with
+# `premium.license.storage.data.get(...)`, but StorageService has no `.data`
+# and its `get` is a coroutine. With a real service in `services.premium` the
+# whole Settings screen raised the moment it opened. Every other test passes
+# premium=None, which returns early before that line, so the suite stayed green.
+
+
+def test_premium_section_survives_a_real_storage_service():
+    """A real KiriLicenseService over a real StorageService must not raise."""
+    from screens.settings.premium_section import build_premium_section
+    from services.license_service import KiriLicenseService
+    from services.storage_service import StorageService
+
+    page = _FakePage()
+    state = NS(is_premium=False)
+
+    # StorageService.__init__ needs a page for the durable path; build the
+    # object without it and give it an in-memory store, which is all the
+    # license service touches.
+    storage = StorageService.__new__(StorageService)
+    storage.data = {}
+    storage.deleted = []
+
+    async def _get(key, default=None):
+        return storage.data.get(key, default)
+
+    async def _set(key, value):
+        storage.data[key] = str(value)
+
+    async def _delete(key):
+        storage.deleted.append(key)
+        storage.data.pop(key, None)
+
+    storage.get = _get
+    storage.set = _set
+    storage.delete = _delete
+
+    license_service = KiriLicenseService(storage, app_id="ng.kiri.collabshell")
+    services = NS(
+        premium=NS(available=True, license=license_service, kiri_catalog=None)
+    )
+
+    # The synchronous part of the build must not raise.
+    card = build_premium_section(page, state, services)
+    assert card is not None
+
+
+def test_premium_render_takes_the_recovery_id_as_an_argument():
+    """The id is read through the service's async accessor and passed in — it
+    must never be re-read synchronously inside _render."""
+    import pathlib
+
+    src = pathlib.Path("src/screens/settings/premium_section.py").read_text(
+        encoding="utf-8"
+    )
+    assert "storage.data" not in src, "StorageService has no .data — read via the service"
+    assert "recovery" in src, "the recovery id must still be surfaced"

@@ -181,21 +181,35 @@ def AppShell() -> Control:
     # view on top of views[0] — which means the shell's FAB is simply not
     # rendered while the chat is open, and comes back when it closes. The
     # chat's own back arrow is the way out; this button is the way back.
+    #
+    # Both this effect and the session screen write the SAME slot
+    # (views[0].floating_action_button), so ownership matters:
+    #   - a FAB that is not ours is the session's and must be left alone;
+    #   - leaving a session clears the slot, and only a re-run of this effect
+    #     (hence state.active_subview in the deps) puts ours back.
+    # `_assistant_fab_ref` holds the button we actually created, so identity —
+    # not a ValueKey comparison — decides whether the slot is already ours.
+    _assistant_fab_ref = ft.Ref[ft.FloatingActionButton]()
+
     def _sync_assistant_fab():
         if not page or not page.views:
             return
+        current = page.views[0].floating_action_button
+        ours = current is not None and current is _assistant_fab_ref.current
         if not (state.ai_mode and state.app_ready and state.onboarding_done):
-            if page.views[0].floating_action_button is not None:
+            if ours:
                 page.views[0].floating_action_button = None
+                _assistant_fab_ref.current = None
                 try:
                     page.update()
                 except Exception:
                     logger.exception("Suppressed exception")
             return
-        if page.views[0].floating_action_button is not None:
-            # Already built; a label change is not worth a rebuild.
-            return
-        page.views[0].floating_action_button = ft.FloatingActionButton(
+        if ours:
+            return  # already in place; a rebuild would churn the widget tree
+        if current is not None:
+            return  # the session screen owns the slot right now
+        fab = ft.FloatingActionButton(
             icon=ft.Icons.AUTO_AWESOME_OUTLINED,
             mini=True,
             tooltip="Ask Assistant",
@@ -204,6 +218,8 @@ def AppShell() -> Control:
             shape=ft.CircleBorder(),
             on_click=lambda e: controller.open_assistant(),
         )
+        _assistant_fab_ref.current = fab
+        page.views[0].floating_action_button = fab
         try:
             page.update()
         except Exception:
@@ -211,7 +227,17 @@ def AppShell() -> Control:
 
     ft.use_effect(
         _sync_assistant_fab,
-        [state.ai_mode, state.app_ready, state.onboarding_done, state.is_authenticated],
+        [
+            state.ai_mode,
+            state.app_ready,
+            state.onboarding_done,
+            state.is_authenticated,
+            # Without this the FAB never comes back after a session: the session
+            # screen owns views[0].floating_action_button while it is open, so
+            # leaving it clears the slot and only a re-run of this effect puts
+            # the assistant button there again.
+            state.active_subview,
+        ],
     )
 
     # ── 2. Loading Splash Screen ──────────────────────────────────────────────

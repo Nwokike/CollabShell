@@ -12,7 +12,7 @@ import logging
 
 import flet as ft
 
-from core import constants, tokens
+from core import tokens
 from core.channel import CHANNEL
 from core.styles import glass_card, section_header, tip_text
 
@@ -74,12 +74,11 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
 
     body = ft.Column(controls=[], spacing=tokens.SPACE_XS, tight=True)
 
-    def _render(products: list):
+    def _render(products: list, recovery: str = ""):
         body.controls.clear()
         body.controls.append(
             _row("Premium", premium_subtitle(state, premium.license.claims))
         )
-        recovery = premium.license.storage.data.get(constants.SETTING_RECOVERY_ID, "")
         if recovery:
             body.controls.append(
                 _row(
@@ -124,8 +123,20 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
         pg.show_snack("Recovery ID copied. Keep it somewhere safe.")
 
     async def _load(ev=None):
-        products = await premium.kiri_catalog()
-        _render(products)
+        # StorageService.get is a coroutine and there is no sync `.data`, so
+        # the recovery id is read through the service's own accessor. A
+        # failure here must not blank the card.
+        try:
+            recovery = (await premium.license.recovery_id()) or ""
+        except Exception as ex:
+            logger.warning("Premium recovery read failed: %s", ex)
+            recovery = ""
+        try:
+            products = await premium.kiri_catalog()
+        except Exception as ex:
+            logger.warning("Premium catalog failed: %s", ex)
+            products = []
+        _render(products, recovery)
 
     def _ask_email(product_id: str):
         email_ref = ft.Ref[ft.TextField]()
