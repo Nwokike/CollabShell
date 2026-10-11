@@ -260,6 +260,13 @@ class AppController:
         self.credit_service = CreditService()
         self.license_service = KiriLicenseService(self.storage)
         self.premium_service = PremiumService(page, state, self.storage)
+        # OS notifications: a finished cell, a ready runtime, a drained credit
+        # balance. Constructed here so it is on the Services bundle the whole
+        # tree already reads, and so permission can be asked once at boot.
+        from services.notify import NotifyService
+
+        self.notify_service = NotifyService(state=state)
+        page.run_task(self.notify_service.initialise)
         # Unlock from the cached token, then start the hourly re-check.
         page.run_task(self.premium_service.load_local)
         self.premium_service.start_reconcile_loop()
@@ -478,6 +485,7 @@ class AppController:
             page=page,
             credits=self.credit_service,
             premium=self.premium_service,
+            notify=self.notify_service,
         )
 
         # ── Register Lifecycle & Disconnect Handlers ──────────────────────────

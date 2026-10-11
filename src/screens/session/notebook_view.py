@@ -385,6 +385,7 @@ def NotebookView(
                 page, prompt, controller.show_snack, *args, **kwargs
             )
 
+        ok = True
         try:
             await services.colab.exec_code(
                 cell.source,
@@ -397,10 +398,47 @@ def NotebookView(
                 env=_effective_env() or None,
             )
         except Exception as ex:
+            ok = False
             _append_output(cell, {"type": "error", "traceback": [str(ex)]})
         finally:
             cell.is_running = False
             _save()
+            # Tell the OS. A cell can train for twenty minutes; without this the
+            # only way to learn it finished is to come back and look.
+            await _notify_cell_done(cell, ok)
+
+    async def _notify_cell_done(cell: CellData, ok: bool):
+        """Post the OS notification for a finished cell. Never raises."""
+        notify = getattr(services, "notify", None)
+        if notify is None:
+            return
+        tab = _get_tab()
+        try:
+            await notify.cell_done(
+                session_name=session_name,
+                tab_id=tab["id"] if tab else "",
+                cell_id=cell.id,
+                ok=ok,
+                detail=_first_error_line(cell) if not ok else _output_digest(cell),
+            )
+        except Exception as ex:
+            logger.debug("cell notify failed: %s", ex)
+
+    def _first_error_line(cell) -> str:
+        for entry in getattr(cell, "outputs", None) or []:
+            if isinstance(entry, dict) and entry.get("type") == "error":
+                traceback = entry.get("traceback") or []
+                return str(traceback[-1] if traceback else entry)[:180]
+        return ""
+
+    def _output_digest(cell) -> str:
+        """A short, honest digest of what the cell produced."""
+        for entry in reversed(list(getattr(cell, "outputs", None) or [])):
+            if isinstance(entry, dict):
+                text = entry.get("text") or entry.get("output")
+                if text:
+                    return " ".join(str(text).split())[:180]
+        return ""
 
     def _stop_cell(cell: CellData):
         services.colab.cancel()
