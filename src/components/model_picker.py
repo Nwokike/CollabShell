@@ -95,10 +95,15 @@ def show_model_picker(page: ft.Page, state, services) -> None:
     """Dialog listing the router's ranked models, with ``auto`` first."""
 
     async def _load():
-        from services import model_catalog
+        from services import model_catalog, router
 
-        router_url = getattr(
-            state, "ai_router_url", constants.AI_DEFAULT_ROUTER_URL
+        # The router's actual port first, then the override, then the constant.
+        # Refreshing the catalog from a stale 8082 when the router answered on
+        # 8083 is how the picker shows models nobody can use.
+        router_url = (
+            router.current_url()
+            or str(getattr(state, "ai_router_url", "") or "").strip()
+            or constants.AI_DEFAULT_ROUTER_URL
         )
         try:
             from services.ai_service import configure_provider

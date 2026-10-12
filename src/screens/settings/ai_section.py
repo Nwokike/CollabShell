@@ -45,6 +45,22 @@ def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
     )
 
 
+def _effective_router_url(state) -> str:
+    """The URL the app is actually using: the override, or the router's port.
+
+    Showing the live value means the field never lies — before this it showed a
+    hardcoded 8082 that had nothing to do with where the router actually
+    landed. An empty override shows the derived URL, so the default path is
+    visible rather than looking like the field was never filled in.
+    """
+    override = str(getattr(state, "ai_router_url", "") or "").strip()
+    if override:
+        return override
+    from services import router
+
+    return router.current_url()
+
+
 def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     """The ASSISTANT settings block."""
     credits = getattr(services, "credits", None)
@@ -118,9 +134,13 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             )
         page.update()
 
+    # The override field: what is shown is what the app is actually using right
+    # now — either the saved override, or the port the router landed on. An
+    # empty field means "no override", which is the normal path (the app probes
+    # 8082..8092 and embeds its own router).
     router_field = ft.TextField(
-        value=constants.AI_DEFAULT_ROUTER_URL,
-        label="Router URL",
+        value=_effective_router_url(state),
+        label="Router URL (advanced — leave blank to auto-start)",
         hint_text="http://127.0.0.1:8082/v1",
         text_size=tokens.FONT_SM,
         border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
@@ -129,18 +149,19 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
 
     async def _save_router(ev=None):
         url = (router_field.value or "").strip()
-        if not url:
-            return
+        # Clearing the field is the way to go back to auto-start, so an empty
+        # value is a real state and not a no-op.
         state.ai_router_url = url
         storage = getattr(services, "storage", None)
         if storage is not None:
             await storage.set(constants.STORAGE_AI_ROUTER_URL, url)
-        try:
-            from services.ai_service import configure_provider
+        if url:
+            try:
+                from services.ai_service import configure_provider
 
-            configure_provider(url)
-        except Exception as ex:
-            logger.warning("Provider reconfiguration failed: %s", ex)
+                configure_provider(url)
+            except Exception as ex:
+                logger.warning("Provider reconfiguration failed: %s", ex)
         page.update()
 
     router_field.on_submit = lambda ev: page.run_task(_save_router)

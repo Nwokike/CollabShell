@@ -583,21 +583,28 @@ class AppController:
             if saved_ai_model:
                 state.ai_model = saved_ai_model
 
+            # The stored router URL is an ADVANCED OVERRIDE. Empty (the default)
+            # means the app probes 8082..8092 and embeds its own router on the
+            # first turn, which is the path that works with no setup.
             saved_ai_router = await self.storage.get(constants.STORAGE_AI_ROUTER_URL)
-            state.ai_router_url = saved_ai_router or constants.AI_DEFAULT_ROUTER_URL
+            state.ai_router_url = saved_ai_router or ""
 
             saved_ai_help = await self.storage.get(constants.STORAGE_AI_HELP)
             if saved_ai_help is not None:
                 state.ai_help = saved_ai_help == "true"
 
-            # Configure the provider once at startup so the assistant is ready
-            # before its first turn (and a bad saved URL cannot block boot).
-            try:
-                from services.ai_service import configure_provider
+            # Configure the provider once at startup ONLY when an override
+            # exists. Without one there is no port to point at yet — the router
+            # is probed lazily on the first turn, because paying an 11-port scan
+            # before the UI is responsive is a bad first launch. A bad saved URL
+            # must not block boot, so this stays wrapped.
+            if state.ai_router_url:
+                try:
+                    from services.ai_service import configure_provider
 
-                configure_provider(state.ai_router_url)
-            except Exception as ex:
-                logger.warning("AI provider configuration skipped: %s", ex)
+                    configure_provider(state.ai_router_url)
+                except Exception as ex:
+                    logger.warning("AI provider configuration skipped: %s", ex)
 
             saved_notify = await self.storage.get(constants.STORAGE_NOTIFY_ENABLED)
             if saved_notify is not None:
@@ -790,6 +797,13 @@ class AppController:
                 _flush_storage()
 
         atexit.register(_cleanup_sessions)
+
+        # An embedded model router is a daemon thread serving loopback; without
+        # this it can outlive the process on some platforms. Registered next to
+        # the session cleanup so the two exit paths stay together.
+        from services import router as router_service
+
+        atexit.register(router_service.shutdown)
 
         async def on_disconnect(e=None):
             # The chat's turn runs as a task on this page's loop; without this

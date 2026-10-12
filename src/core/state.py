@@ -75,8 +75,16 @@ class AppState:
     # ── Assistant (AI) ──────────────────────────────────────────────────────
     ai_mode: bool = False  # off until the user turns it on in Settings
     ai_model: str = "auto"
-    ai_router_url: str = "http://127.0.0.1:8082/v1"
+    # An ADVANCED OVERRIDE, not the normal path. Empty means the app probes
+    # 8082..8092 and embeds its own router (services/router.py), which is what
+    # makes the assistant work out of the box.
+    ai_router_url: str = ""
     ai_help: bool = True  # inject the bundled SKILL.md into the system prompt
+    # Router lifecycle, owned by services/router.py. Written only on a real
+    # change, so the 3-second status watchdog never repaints for nothing.
+    # One of: ready | stopped | unavailable | starting
+    ai_router_status: str = "starting"
+    ai_router_port: int | None = None
     # OS notifications for finished work. On by default once the user grants
     # permission (granting IS the opt-in), with a Settings switch to turn the
     # channel off without revoking the OS permission.

@@ -444,7 +444,11 @@ def test_app_state_has_ai_fields():
     assert state.ai_mode is False
     assert state.ai_model == "auto"
     assert state.ai_help is True
-    assert state.ai_router_url
+    # Empty means no override: the app probes 8082..8092 and embeds its own
+    # router. A hardcoded 8082 default would mean the app could only ever find
+    # a router the user had started by hand.
+    assert state.ai_router_url == ""
+    assert state.ai_router_status in ("ready", "stopped", "unavailable", "starting")
     assert state.is_premium is False
 
 

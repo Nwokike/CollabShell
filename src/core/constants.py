@@ -46,6 +46,8 @@ STORAGE_USAGE_UPDATED_AT = "colab_usage_updated_at"
 # is injected into the system prompt when router_help is on.
 STORAGE_AI_MODE = "colab_ai_mode"
 STORAGE_AI_MODEL = "colab_ai_model"
+# The router URL is an ADVANCED OVERRIDE. When empty the app probes 8082..8092
+# and embeds its own router, which is the normal path — see services/router.py.
 STORAGE_AI_ROUTER_URL = "colab_ai_router_url"
 STORAGE_AI_HELP = "colab_ai_help"
 STORAGE_NOTIFY_ENABLED = "colab_notify_enabled"
@@ -54,6 +56,28 @@ TIP_AI_MODE = (
     "Show the Assistant tab and the in-cell AI actions. "
     "Manual work stays exactly the same."
 )
+
+# ── The model router ─────────────────────────────────────────────────────────
+# The app owns its router: it probes for one already running before embedding
+# its own, so a router the user started by hand is reused rather than shadowed
+# (a second embed was a field bug in DDGS — ai_service.py:321). Values are
+# DDGS's, which is the shipped configuration.
+ENGINE_URL = "https://router.kiri.ng/run.py"
+ROUTER_HOST = "127.0.0.1"
+ROUTER_BASE_PORT = 8082
+ROUTER_SPAN = 10  # probe 8082..8092 before embedding
+ROUTER_PROBE_TIMEOUT = 0.5  # a closed port answers fast
+ROUTER_HEALTH_TIMEOUT = 2.0  # a port we hold may be slow but alive
+# A full-scan miss is remembered this long: the status watchdog ticks every 3s
+# and each miss would otherwise pay a serial 11-port scan of refused sockets.
+PROBE_MISS_TTL = 30.0
+# Cool-off after a router failure, so the UI stops claiming a loopback that
+# just died is ready.
+ROUTER_STICKY_COOLDOWN = 60.0
+# router.kiri.ng answers 403 to default library user-agents, so the engine
+# could never be fetched without this header.
+ENGINE_USER_AGENT = f"CollabShell/{APP_VERSION}"
+
 # One assistant step = one model call (a streamed reply, or one tool round).
 # The Settings "what credits are for" copy is generated from these, never
 # hand-typed, so it cannot drift from what is charged.

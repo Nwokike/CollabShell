@@ -41,6 +41,35 @@ class AIUnavailable(Exception):
     """The router was unreachable or returned nothing usable."""
 
 
+# The base URL the provider currently points at, so a turn only re-registers
+# when the router actually moved port. Lives at module level because
+# `configure_provider` is process-global.
+_provider_base_url: dict[str, str] = {"url": ""}
+
+
+async def _ensure_router_for_turn() -> str | None:
+    """The router's base URL for a turn, or None when there is no router.
+
+    An explicit `ai_router_url` in Settings is an advanced override and wins:
+    someone pointing the app at a remote or non-standard router means it.
+    Otherwise the app probes 8082..8092 and embeds its own, and the failure
+    cool-off lives in `router` where it belongs.
+
+    Reads the global AppState rather than taking a parameter, because
+    `run_turn`'s callers (ai_credits, the assistant, the in-cell actions) all
+    reach the same singleton through their own contexts — and threading a state
+    kwarg through three layers for one string would touch every call site.
+    """
+    from core.state import state
+
+    override = str(getattr(state, "ai_router_url", "") or "").strip()
+    if override:
+        return override
+    from services import router
+
+    return await router.router_base()
+
+
 def configure_provider(base_url: str, api_key: str = "any", scope: str = "openai/"):
     """Register the OpenAI-compatible provider for this process.
 
@@ -183,6 +212,22 @@ async def run_turn(
     candidate is exhausted.
     """
     from services import model_catalog
+
+    # The app owns its router: attach to one already running, or embed its own.
+    # This is what makes the assistant work with no setup — before it, a turn
+    # aimed at a URL nobody had started simply failed to connect. The port is
+    # remembered, so the steady state costs nothing; the cost is the first turn.
+    base_url = await _ensure_router_for_turn()
+    if base_url is None:
+        raise AIUnavailable(
+            "No local model router is running, and none could be started. "
+            "Connect to the internet so the router can be fetched, then retry."
+        )
+    # Re-point the provider only when the port actually moved, so the steady
+    # state is a string compare rather than a provider re-registration.
+    if _provider_base_url["url"] != base_url:
+        _provider_base_url["url"] = base_url
+        configure_provider(base_url)
 
     candidates = model_catalog.turn_candidates(model)
     if not candidates:

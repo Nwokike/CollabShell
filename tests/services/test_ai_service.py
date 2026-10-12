@@ -147,9 +147,16 @@ def _isolated_catalog():
 
     model_catalog.reset_circuits()
     model_catalog.apply_catalog([_catalog_row()])
+    # Every test here runs against its own fake router, which is exactly what
+    # the advanced-override seam is for: point ai_router_url at it and
+    # run_turn will not probe 8082..8092 or try to embed a real engine.
+    from core.state import state
+
+    state.ai_router_url = _BASE
     yield
     model_catalog.reset_circuits()
     model_catalog.apply_catalog([_catalog_row()])
+    state.ai_router_url = ""
 
 
 # ── the pinned contract ────────────────────────────────────────────────────

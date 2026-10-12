@@ -21,10 +21,28 @@ def resolve_storage_dir() -> str:
     if storage_env:
         storage_dir = os.path.join(storage_env, "colab-cli")
     else:
-        # __file__ …/Colab/src/core/storage_patch.py → project root
+        # __file__ …/Collab/src/core/storage_patch.py → project root
         project_root = Path(__file__).resolve().parent.parent.parent
         storage_dir = os.path.join(project_root, "storage")
     return storage_dir
+
+
+def cache_dir() -> str:
+    """Return the cache directory — the CACHE tier.
+
+    `.flet/README.md`: the OS may purge the equivalent dir on a device under
+    storage pressure, so this tier is only for things one download rebuilds.
+    That is exactly what the router engine is, which is why it belongs here
+    rather than in :func:`resolve_storage_dir` — the durable tier holds
+    notebooks, conversations and preferences.
+    """
+    cache_env = os.getenv("FLET_APP_STORAGE_CACHE")
+    if cache_env:
+        return os.path.join(cache_env, "colab-cli")
+    # Same dev fallback shape as resolve_storage_dir(): a sibling of storage.
+    project_root = Path(__file__).resolve().parent.parent.parent
+    return os.path.join(project_root, "storage", "cache")
+
 
 
 class MemoryLogHandler(logging.Handler):
