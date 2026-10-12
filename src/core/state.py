@@ -77,6 +77,10 @@ class AppState:
     ai_model: str = "auto"
     ai_router_url: str = "http://127.0.0.1:8082/v1"
     ai_help: bool = True  # inject the bundled SKILL.md into the system prompt
+    # OS notifications for finished work. On by default once the user grants
+    # permission (granting IS the opt-in), with a Settings switch to turn the
+    # channel off without revoking the OS permission.
+    notify_enabled: bool = True
     # The open conversation (single owner: conversation_service).
     active_assistant_conversation: str = ""
     # Cached list for the history dialog (refreshed by conversation_service).

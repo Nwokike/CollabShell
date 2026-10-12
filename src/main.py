@@ -265,8 +265,17 @@ class AppController:
         # tree already reads, and so permission can be asked once at boot.
         from services.notify import NotifyService
 
-        self.notify_service = NotifyService(state=state)
+        self.notify_service = NotifyService(
+            state=state,
+            # The deep-link router. Without it the payloads the service builds
+            # are dead strings: on_tap resolves them, but nothing was
+            # registered to act on the result, so every tap dropped.
+            router=self._route_notification_payload,
+        )
         page.run_task(self.notify_service.initialise)
+        # A tap that happened while the app was dead is replayed on the next
+        # start by the plugin; without this the notification looks inert.
+        page.run_task(self.notify_service.replay_launch)
         # Unlock from the cached token, then start the hourly re-check.
         page.run_task(self.premium_service.load_local)
         self.premium_service.start_reconcile_loop()
@@ -590,6 +599,10 @@ class AppController:
             except Exception as ex:
                 logger.warning("AI provider configuration skipped: %s", ex)
 
+            saved_notify = await self.storage.get(constants.STORAGE_NOTIFY_ENABLED)
+            if saved_notify is not None:
+                state.notify_enabled = saved_notify == "true"
+
             saved_logtostderr = await self.storage.get(constants.STORAGE_LOGTOSTDERR)
             if saved_logtostderr is not None:
                 state.logtostderr = saved_logtostderr == "true"
@@ -669,6 +682,38 @@ class AppController:
                 self.page.update()
             except Exception as exc:
                 logger.debug("Bootstrap page update skipped: %s", exc)
+
+    def _route_notification_payload(self, path: str, params: dict, action: str = "") -> None:
+        """Resolve a notification tap into real navigation.
+
+        The payloads are built in services/notify.py as
+        ``collabshell://<path>?k=v&k=v``; this turns them into the app's own
+        navigation, so tapping "Open" lands on the exact tab and cell that
+        finished rather than on the front door.
+
+        ``action`` is the button pressed: ``open`` (just go there) or ``fix``
+        (a failed cell — open it and hand it to the in-cell Fix).
+        """
+        import urllib.parse
+
+        try:
+            if path == "session":
+                name = params.get("name", "")
+                if not name:
+                    return
+                encoded = urllib.parse.quote(name)
+                self._navigate(f"/session?session={encoded}")
+                cell_id = params.get("cell", "")
+                tab_id = params.get("tab", "")
+                if cell_id:
+                    # Land on the cell after the tab has mounted.
+                    self._pending_reveal = (encoded, tab_id, cell_id)
+            elif path == "assistant":
+                self._open_assistant()
+            elif path == "home":
+                self._navigate("/home")
+        except Exception:
+            logger.debug("notification route failed", exc_info=True)
 
     def _register_lifecycle_handlers(self):
         page = self.page

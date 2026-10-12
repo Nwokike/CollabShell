@@ -48,6 +48,7 @@ STORAGE_AI_MODE = "colab_ai_mode"
 STORAGE_AI_MODEL = "colab_ai_model"
 STORAGE_AI_ROUTER_URL = "colab_ai_router_url"
 STORAGE_AI_HELP = "colab_ai_help"
+STORAGE_NOTIFY_ENABLED = "colab_notify_enabled"
 AI_DEFAULT_ROUTER_URL = "http://127.0.0.1:8082/v1"
 TIP_AI_MODE = (
     "Show the Assistant tab and the in-cell AI actions. "

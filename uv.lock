@@ -256,6 +256,7 @@ dependencies = [
     { name = "flet-ads" },
     { name = "flet-cli", marker = "sys_platform == 'win32'" },
     { name = "flet-desktop", marker = "sys_platform == 'win32'" },
+    { name = "flet-notifications" },
     { name = "flet-terminal" },
     { name = "google-colab-cli" },
     { name = "httpx" },
@@ -276,6 +277,7 @@ requires-dist = [
     { name = "flet-ads", specifier = "==1.0.3" },
     { name = "flet-cli", marker = "sys_platform == 'win32'", specifier = "==1.0.3" },
     { name = "flet-desktop", marker = "sys_platform == 'win32'", specifier = "==1.0.3" },
+    { name = "flet-notifications", specifier = ">=0.1.4" },
     { name = "flet-terminal", specifier = "==0.3.9" },
     { name = "google-colab-cli", specifier = "==0.7.4" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -475,6 +477,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/6d/675988e22db936e28b2d436ad167e02928ced8a9b050d554e6b510e24c19/flet_desktop-1.0.3.tar.gz", hash = "sha256:d39f0ccf8c278ff4188715dc50bc744131ed4f395e9aa0f44bd66ad0c75d662a", size = 13209, upload-time = "2026-09-30T02:13:39.74Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/44/2e143f164b64faf60cd210302a82ed3e4b4c8ecd995419012ebbb5e09fad/flet_desktop-1.0.3-py3-none-any.whl", hash = "sha256:0a62a438cf4d32b0b4752f19223f92fb2ad8356fe564582e99386a2f02bdcee6", size = 13522, upload-time = "2026-09-30T02:13:38.855Z" },
+]
+
+[[package]]
+name = "flet-notifications"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/87/35ed7831e9598ca1bf1eeae59cd601db1231d58cf7ce47bdc4a59a5b9c38/flet_notifications-0.1.4.tar.gz", hash = "sha256:627b7920e0ab16da2de4f8846051810175638e493db57caa31ff5add1372e0a1", size = 52343, upload-time = "2026-10-11T18:44:40.36Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/d7/f65c0a1abf0c413a0d99339ee099540ee8272ca17a0fb65ee887c1a3b128/flet_notifications-0.1.4-py3-none-any.whl", hash = "sha256:2166ccbfdb05859eebbc3f2c988cae5cf552fd120e877b7ce28e5877aeebae22", size = 43920, upload-time = "2026-10-11T18:44:39.144Z" },
 ]
 
 [[package]]

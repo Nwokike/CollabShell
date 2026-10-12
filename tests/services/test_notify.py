@@ -22,7 +22,31 @@ _SRC = _HERE.parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+import pytest
+
 from services import notify
+
+
+@pytest.fixture
+def plugin_absent(monkeypatch):
+    """Make ``flet_notifications`` unimportable, as under ``flet run``.
+
+    These properties used to pass by ambient luck — the package was simply not
+    installed. Now that it is a real dependency, absence has to be forced or
+    the "no Dart half" path is never exercised.
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.startswith("flet_notifications"):
+            raise ImportError(f"No module named {name!r} (simulated)")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    # _channel_types caches nothing, so the import guard is enough.
+    return lambda: pytest.raises(ImportError)
 
 
 class FakePlugin:
@@ -112,7 +136,7 @@ def test_a_tap_without_a_payload_is_ignored():
 # ── never breaking the caller ───────────────────────────────────────────────
 
 
-def test_no_plugin_means_every_call_is_a_noop():
+def test_no_plugin_means_every_call_is_a_noop(plugin_absent):
     """Under `flet run` there is no Dart half; nothing may raise."""
     svc = notify.NotifyService(state=NS())
     # _build() must not blow up when the import fails.
@@ -227,8 +251,12 @@ def test_each_subject_has_its_own_channel():
     }, channels
 
 
-def test_init_is_idempotent():
-    """Permission is asked once; re-entering does not stack dialogs."""
+def test_init_is_idempotent(plugin_absent):
+    """Permission is asked once; re-entering does not stack dialogs.
+
+    With the plugin absent `_wanted_channels` is empty, so this pins the guard
+    itself rather than the channel payload.
+    """
     plugin = FakePlugin()
     svc = notify.NotifyService(state=NS())
     svc._service = plugin
@@ -245,3 +273,80 @@ def test_the_same_id_updates_rather_than_stacks():
     for _ in range(3):
         _run(svc.turn_done(preview="again"))
     assert all(p["id"] == notify._ID_TURN_DONE for p in plugin.shown)
+
+
+# ── the user's switch ────────────────────────────────────────────────────────
+
+
+def test_the_settings_switch_silences_every_channel():
+    """Off must mean off, on every channel — a switch that only mutes one is
+    a switch that looks broken."""
+    svc = notify.NotifyService(state=NS(notify_enabled=False))
+    plugin = FakePlugin()
+    svc._service = plugin
+    _run(svc.initialise())
+    _run(svc.cell_done(session_name="s", tab_id="t", cell_id="c", ok=True))
+    _run(svc.session_ready("s"))
+    _run(svc.turn_done())
+    assert plugin.shown == [], "a muted service must post nothing"
+
+
+def test_enable_and_disable_restore_the_channel():
+    svc = notify.NotifyService(state=NS(notify_enabled=True))
+    plugin = FakePlugin()
+    svc._service = plugin
+    _run(svc.initialise())
+    _run(svc.turn_done())
+    assert plugin.shown, "with the switch on it must post"
+    svc.disable()
+    _run(svc.turn_done())
+    assert len(plugin.shown) == 1, "disable must take effect immediately"
+    svc.enable()
+    _run(svc.turn_done())
+    assert len(plugin.shown) == 2
+
+
+# ── tap routing ──────────────────────────────────────────────────────────────
+
+
+def test_a_failed_cell_notification_offers_to_ask_ai_to_fix_it():
+    """The most useful button on a failure: hand it straight to the fixer."""
+    svc = notify.NotifyService(state=NS(notify_enabled=True))
+    plugin = FakePlugin()
+    svc._service = plugin
+    _run(svc.initialise())
+    _run(svc.cell_done(
+        session_name="s", tab_id="t", cell_id="c", ok=False, detail="NameError: x"
+    ))
+    (shown,) = plugin.shown
+    titles = {getattr(a, "title", "") for a in (shown.get("actions") or [])}
+    assert "Ask AI to fix" in titles, titles
+    ids = {getattr(a, "id", "") for a in (shown.get("actions") or [])}
+    assert "fix" in ids, ids
+
+
+def test_a_payload_round_trips_to_the_same_tab_and_cell():
+    """The payload is all the tap handler gets, so it has to carry the ids."""
+    from services.notify import PAYLOAD_PREFIX
+
+    svc = notify.NotifyService(state=NS(notify_enabled=True))
+    plugin = FakePlugin()
+    svc._service = plugin
+    _run(svc.initialise())
+    _run(svc.cell_done(
+        session_name="my sess", tab_id="tab1", cell_id="cell9", ok=True
+    ))
+    (shown,) = plugin.shown
+    payload = shown["payload"]
+    assert payload.startswith(PAYLOAD_PREFIX)
+    assert "cell=cell9" in payload
+    assert "tab=tab1" in payload
+    # Parse it back the way the router does.
+    target = payload[len(PAYLOAD_PREFIX):]
+    path, _, query = target.partition("?")
+    params = dict(
+        pair.split("=", 1) for pair in query.split("&") if "=" in pair
+    )
+    assert path == "session"
+    assert params["cell"] == "cell9"
+    assert params["tab"] == "tab1"

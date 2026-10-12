@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import flet as ft
@@ -376,6 +377,9 @@ def NotebookView(
         cell.is_running = True
         cell.outputs.clear()
         cell.outputs_rev += 1
+        # Elapsed time decides whether a finished cell is worth an OS
+        # notification at all — a two-second cell must not ping anyone.
+        started = time.monotonic()
 
         def _on_output(text_or_dict):
             page.loop.call_soon_threadsafe(_append_output, cell, text_or_dict)
@@ -405,9 +409,9 @@ def NotebookView(
             _save()
             # Tell the OS. A cell can train for twenty minutes; without this the
             # only way to learn it finished is to come back and look.
-            await _notify_cell_done(cell, ok)
+            await _notify_cell_done(cell, ok, time.monotonic() - started)
 
-    async def _notify_cell_done(cell: CellData, ok: bool):
+    async def _notify_cell_done(cell: CellData, ok: bool, duration_sec: float = 0.0):
         """Post the OS notification for a finished cell. Never raises."""
         notify = getattr(services, "notify", None)
         if notify is None:
@@ -419,6 +423,7 @@ def NotebookView(
                 tab_id=tab["id"] if tab else "",
                 cell_id=cell.id,
                 ok=ok,
+                duration_sec=duration_sec,
                 detail=_first_error_line(cell) if not ok else _output_digest(cell),
             )
         except Exception as ex:

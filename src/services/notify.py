@@ -124,6 +124,7 @@ class NotifyService:
         self._service = None
         self._initialised = False
         self._unsupported = False
+        self._enabled_by_user = True
 
     # ── lifecycle ──────────────────────────────────────────────────────────
 
@@ -206,6 +207,32 @@ class NotifyService:
                 # legitimately fail if the OS already has it.
                 logger.debug("channel %s: %s", channel.id, ex)
 
+    # ── the user's switch ──────────────────────────────────────────────────
+
+    def _wanted(self) -> bool:
+        """The Settings switch: on unless the user turned it off.
+
+        Both the persisted preference and an in-session toggle have to agree —
+        `disable()`/`enable()` operate on the in-session flag, and the Settings
+        row flips the persisted one and calls them, so checking only one leaves
+        the other half of the switch dead.
+        """
+        return self._enabled_by_user and bool(
+            getattr(self.state, "notify_enabled", True)
+        )
+
+    def disable(self) -> None:
+        """Turn the channel off without revoking OS permission.
+
+        The switch is a channel control, not a permission request: the user
+        may want the app quiet without losing the grant, and re-asking on every
+        re-enable is a dialog nobody consented to.
+        """
+        self._enabled_by_user = False
+
+    def enable(self) -> None:
+        self._enabled_by_user = True
+
     # ── the calls the app makes ────────────────────────────────────────────
 
     async def cell_done(
@@ -222,6 +249,8 @@ class NotifyService:
         `ok` decides the wording; `detail` is the first line of the error for a
         failure, or a short output digest for a success.
         """
+        if not self._wanted():
+            return
         service = self._build()
         if service is None:
             return
@@ -293,6 +322,8 @@ class NotifyService:
     async def _simple(
         self, note_id: int, channel: str, title: str, body: str, payload: str
     ) -> None:
+        if not self._wanted():
+            return
         service = self._build()
         if service is None or not await initialise_guard(self):
             return

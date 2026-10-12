@@ -107,3 +107,38 @@ Build (1) live progress next — it is the highest user value per unit of work
 and needs no new permissions or Gradle changes, because the kernel stream
 already exists. Then (2) the idle-reaper warning, which prevents actual data
 loss and justifies the Gradle patch on its own.
+
+---
+
+## Update: items 1–3 built, plus the four dead entry points
+
+`flet-notifications>=0.1.4` is now a dependency. The service
+(`services/notify.py`) already had the channels, deep links, action buttons and
+`replay_launch()`, but four of its entry points were dead — the design was
+right, the wiring was not:
+
+1. **The router was never passed.** `NotifyService(state=state)` was built
+   without one, so `on_tap` parsed every payload and then dropped it. Deep
+   links were decorative. `main._route_notification_payload` now maps
+   `collabshell://session|assistant|home` onto real navigation.
+2. **`replay_launch()` was never called** — cold-start taps were lost. It runs
+   at boot now.
+3. **No on/off switch existed.** `state.notify_enabled` +
+   `STORAGE_NOTIFY_ENABLED` are new, with a Settings row under Session
+   Behavior. It is a channel switch, not a permission request: the OS grant
+   survives, so going quiet costs no dialog.
+4. **`cell_done` had no duration threshold**, so every cell would have
+   notified. It now takes `duration_sec`, measured in `_run_cell`. A channel
+   that pings on a two-second cell gets muted within a day.
+
+Two bugs the new tests caught, both introduced by this change:
+
+- `disable()` set a flag `_wanted()` never read, so the switch did nothing at
+  all. `_wanted()` now ANDs the persisted preference with the in-session flag.
+- A service was written from scratch before checking for an existing one,
+  duplicating a more complete `services/notify.py`. Same mistake as the header
+  work; deleted. **Check for the implementation before writing it.**
+
+The two tests asserting "no plugin" now force absence with a fixture rather
+than relying on the package not being installed — installing it as a real
+dependency silently invalidated them, which is the ambient-assumption trap.
