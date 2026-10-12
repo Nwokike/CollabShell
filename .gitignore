@@ -30,3 +30,7 @@ storage/
 *.keystore
 release_notes.md
 .zcode/
+# Update-config payload: written locally, never published from a dev commit.
+# The app reads version.json from a URL, so a stray 2.x entry tells every
+# installed client to update for a release that is not live yet.
+version.json
