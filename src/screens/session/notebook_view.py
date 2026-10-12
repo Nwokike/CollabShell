@@ -301,6 +301,53 @@ def NotebookView(
             set_active_tab_id(tab["id"])
             _save_index()
 
+    async def _finish_pending_reveal():
+        """Land on a cell a notification deep-linked to, once it exists.
+
+        A notification tap names the exact tab and cell that finished, but the
+        tab's cells only exist after `_load` restores them — so the reveal is
+        deferred to here. Taking the pending intent (rather than polling state)
+        means a stale tap cannot fire twice.
+        """
+        pending = getattr(controller, "consume_pending_reveal", None)
+        take = None
+        if callable(pending):
+            take = pending()
+        if take is None:
+            return
+        _encoded, tab_id, cell_id = take
+        if tab_id:
+            target = _get_tab(tab_id)
+            if target is not None and tab_id != active_tab_id:
+                _switch_tab(tab_id)
+        if cell_id:
+            _focus_cell(cell_id)
+
+    async def _finish_pending_fix():
+        """A failed cell tapped with "Ask AI to fix": reveal it, then fix it.
+
+        Without this the fix button did exactly what "Open" did — decorative,
+        which is worse than not offering it.
+        """
+        take_fn = getattr(controller, "consume_pending_fix", None)
+        take = take_fn() if callable(take_fn) else None
+        if take is None:
+            return
+        _encoded, _tab_id, cell_id = take
+        fixed = False
+        for cell in _active_cells():
+            if cell.id == cell_id:
+                await _run_cell_ai("fix", cell_id, "code")
+                fixed = True
+                break
+        if not fixed:
+            controller.show_snack("That cell is no longer in the notebook.")
+
+    async def _consume_notification_intents():
+        await _finish_pending_reveal()
+        await _finish_pending_fix()
+
+    ft.on_mounted(lambda: page.run_task(_consume_notification_intents))
     ft.on_mounted(lambda: page.run_task(_load))
 
     # ── Persistence (per active tab) ────────────────────────────────────────

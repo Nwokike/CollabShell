@@ -144,8 +144,24 @@ class NotifyService:
             logger.debug("OS notifications unavailable: %s", ex)
             self._unsupported = True
             return None
+        # The tap handler must be registered on the SERVICE, not just on this
+        # wrapper. Without it the plugin dispatches to nobody, so every deep
+        # link and every action button is dropped and the router is unreachable
+        # — the notification renders fine and silently does nothing.
+        service.on_tap = self._on_event
+        service.on_action = self._on_event
+        service.on_dismissed = self._on_event
         self._service = service
         return service
+
+    def _on_event(self, event) -> None:
+        """Route a plugin event through the same path as an explicit on_tap.
+
+        `ft.EventHandler[NotificationEvent]`, NOT `ft.ControlEventHandler` —
+        the latter double-wraps the payload type and `e.payload` stops existing
+        (flet_notifications/events.py:1-10, actions.py).
+        """
+        self.on_tap(event)
 
     async def initialise(self) -> bool:
         """Ask permission and create the channels. Safe to call repeatedly."""

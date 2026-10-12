@@ -350,3 +350,30 @@ def test_a_payload_round_trips_to_the_same_tab_and_cell():
     assert path == "session"
     assert params["cell"] == "cell9"
     assert params["tab"] == "tab1"
+
+
+# ── the tap handler must be registered on the SERVICE ───────────────────────
+
+
+def test_the_plugin_gets_the_tap_handler_registered():
+    """Without this the plugin dispatches to nobody: every notification and
+    action button drops, so the router is unreachable and the feature looks
+    broken-by-design rather than mis-wired."""
+    svc = notify.NotifyService(state=NS(notify_enabled=True))
+    service = svc._build()
+    assert service is not None, "the plugin is installed, so a service exists"
+    assert service.on_tap is not None, "on_tap must be registered on the plugin"
+    assert service.on_action is not None, "action buttons route through on_action"
+    # A real plugin event must reach the router.
+    seen = []
+    svc.router = lambda path, params, action="": seen.append((path, params, action))
+    svc._on_event(NS(payload="collabshell://home", action_id=""))
+    assert seen, "a plugin event must reach the router"
+
+
+def test_a_registered_handler_survives_a_rebuild():
+    """_build() returns the cached service, so the handler is set once."""
+    svc = notify.NotifyService(state=NS(notify_enabled=True))
+    first = svc._build()
+    second = svc._build()
+    assert first is second

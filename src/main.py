@@ -692,7 +692,9 @@ class AppController:
         finished rather than on the front door.
 
         ``action`` is the button pressed: ``open`` (just go there) or ``fix``
-        (a failed cell — open it and hand it to the in-cell Fix).
+        (a failed cell — open it and hand it to the in-cell Fix). Handling only
+        one would make the other button decorative: "Ask AI to fix" used to do
+        exactly what "Open" did, which is worse than not offering it.
         """
         import urllib.parse
 
@@ -706,14 +708,44 @@ class AppController:
                 cell_id = params.get("cell", "")
                 tab_id = params.get("tab", "")
                 if cell_id:
-                    # Land on the cell after the tab has mounted.
+                    # Land on the cell after the tab has mounted, and for the
+                    # fix action ask the assistant to repair it once it is
+                    # there — the cell is the context the fixer needs.
                     self._pending_reveal = (encoded, tab_id, cell_id)
+                    if action == "fix":
+                        self._pending_fix = (encoded, tab_id, cell_id)
             elif path == "assistant":
                 self._open_assistant()
             elif path == "home":
                 self._navigate("/home")
         except Exception:
             logger.debug("notification route failed", exc_info=True)
+
+    def consume_pending_reveal(self) -> tuple[str, str, str] | None:
+        """Take the tab+cell a notification deep-linked to, once.
+
+        Called by the notebook view after it has restored its tabs: the cells
+        do not exist before then, so revealing earlier would silently fail.
+        Cleared on take so a stale tap cannot fire twice.
+        """
+        pending = getattr(self, "_pending_reveal", None)
+        if pending is None:
+            return None
+        self._pending_reveal = None
+        return pending
+
+    def consume_pending_fix(self) -> tuple[str, str, str] | None:
+        """Take the cell the "Ask AI to fix" button named, once.
+
+        Called by the notebook view after the tab has mounted: it reveals the
+        cell and returns its coordinates so the caller can run the fix. Cleared
+        on take, so a stale tap cannot fire twice.
+        """
+        pending = getattr(self, "_pending_fix", None)
+        if pending is None:
+            return None
+        self._pending_fix = None
+        return pending
 
     def _register_lifecycle_handlers(self):
         page = self.page
