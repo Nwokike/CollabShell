@@ -431,10 +431,8 @@ def test_the_real_callbacks_open_and_close_rows_on_the_call_id(tmp_path, monkeyp
 
     # The payload exactly as kani_backend builds it, twice for the same tool.
     payloads = [
-        {"name": "read_notebook", "id": "call_1", "args": {}, "result": "first",
-         "images": [], "error": None},
-        {"name": "read_notebook", "id": "call_2", "args": {}, "result": "second",
-         "images": [], "error": None},
+        {"name": "read_notebook", "id": "call_1", "args": {}, "result": "first"},
+        {"name": "read_notebook", "id": "call_2", "args": {}, "result": "second"},
     ]
 
     emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
@@ -472,7 +470,6 @@ def test_the_real_callbacks_mark_a_failed_tool_as_an_error(tmp_path, monkeypatch
         "id": "call_1",
         "args": {},
         "result": "(the read_notebook tool failed: no session)",
-        "images": [],
         "error": "no session",
     }
     emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
@@ -507,8 +504,7 @@ def test_the_real_callbacks_survive_a_missing_call_id(tmp_path, monkeypatch):
 
     monkeypatch.setattr(session, "_emit", spy)
 
-    payload = {"name": "read_notebook", "id": "", "args": {},
-               "result": "x", "images": [], "error": None}
+    payload = {"name": "read_notebook", "id": "", "args": {}, "result": "x"}
     emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
     emit("start", payload)
     emit("done", payload)

@@ -670,7 +670,6 @@ class ChatSession:
             "name": name,
             "label": _pretty_label(name, args),
             "result": result,
-            "images": payload.get("images", []),
             # write_cells echoes the ids it inserted so this row can point
             # back at the cells and hand them over to the user.
             "refs": _cell_refs({"name": name, "result": result}),
@@ -847,7 +846,6 @@ class ChatSession:
                     "name": data.get("name", ""),
                     "state": "running",
                     "outcome": "",
-                    "images": [],
                     "error": None,
                     "refs": [],
                 }
@@ -858,7 +856,6 @@ class ChatSession:
                 if row["id"] == data.get("id"):
                     row["state"] = "error" if event == "step_error" else "done"
                     row["outcome"] = _clip_outcome(data.get("result") or "")
-                    row["images"] = list(data.get("images") or [])
                     row["error"] = data.get("error")
                     if data.get("refs"):
                         row["refs"] = list(data["refs"])

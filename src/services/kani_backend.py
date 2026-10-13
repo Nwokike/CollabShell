@@ -124,8 +124,8 @@ def tool_specs(
 
     ``on_step(event, payload)`` is how the caller's emit protocol learns about
     it; the tool body itself is untouched. The payload is
-    ``{"name", "id", "args", "result", "images", "error"}`` — ``id`` is kani's
-    own ``tool_call_id`` (see :func:`call_id`), because a step row is only
+    ``{"name", "id", "args", "result", "error"}`` — ``id`` is kani's own
+    ``tool_call_id`` (see :func:`call_id`), because a step row is only
     closed by the id that opened it.
     """
     out: list[ToolSpec] = []
@@ -138,16 +138,14 @@ def tool_specs(
                 "id": call_id(),
                 "args": dict(kwargs),
                 "result": "",
-                "images": [],
                 "error": None,
             }
             if on_step is not None:
                 on_step("start", dict(payload))
             try:
-                raw = await run(**kwargs)
-                payload["result"] = _as_text(raw)
-                payload["images"] = _as_images(raw)
-                return _as_text(raw)
+                text = await run(**kwargs)
+                payload["result"] = text
+                return text
             except Exception as ex:
                 # A tool body that raises would surface as a kani
                 # WrappedCallException and cost a retry. Our own contract is
@@ -166,26 +164,6 @@ def tool_specs(
             ToolSpec(name=spec.name, desc=spec.desc, parameters=spec.parameters, run=wrapped)
         )
     return out
-
-
-def _as_text(value) -> str:
-    """A tool body's return value, as the string the model reads.
-
-    ``ToolResult`` carries images separately from its text; kani's tool message
-    is a string, so the text goes on the wire here and the images are left for
-    the step row, which is the surface that can actually show them.
-    """
-    if hasattr(value, "text"):
-        return value.text or ""
-    return "" if value is None else str(value)
-
-
-def _as_images(value) -> list:
-    """The images a tool result carries, for the step row to render."""
-    images = getattr(value, "images", None)
-    if not images:
-        return []
-    return [(mime, data) for mime, data in images]
 
 
 def build_functions(specs: list[ToolSpec]) -> list[AIFunction]:

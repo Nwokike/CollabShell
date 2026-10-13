@@ -239,7 +239,6 @@ def _step_emitter(on_tool_start, on_tool_done):
                     "id": call_id,
                     "args": payload.get("args") or {},
                     "result": payload.get("result", ""),
-                    "images": payload.get("images", []),
                     "error": payload.get("error"),
                 },
             )

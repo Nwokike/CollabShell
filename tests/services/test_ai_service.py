@@ -2,7 +2,7 @@
 
 This used to pin mirascope's seven non-obvious behaviours. They moved with the
 loop: `test_kani_backend.py` now pins kani's facts, and this file keeps only
-what is still true of THIS module — the system prompt, the ToolResult helpers,
+what is still true of THIS module — the system prompt, the clipping helpers,
 and the fact that the turn entry point still works end to end.
 
 The seven mirascope facts, recorded here so the history is not lost:
@@ -105,51 +105,26 @@ def test_system_prompt_states_the_verified_divergences():
         assert rule in prompt, rule
 
 
-# ── rich tool results: text for the model, images for the row ───────────────
+# ── a plot is marked, never shipped ─────────────────────────────────────────
 
 
-def test_tool_result_keeps_only_the_newest_images():
-    """Over the cap, the newest figure wins — a cell's latest plot is the one
-    being asked about."""
-    from services.ai_tools import MAX_IMAGES_PER_RESULT, ToolResult
+def test_a_plot_is_marked_not_carried():
+    """The model is told a figure is there; it never receives the pixels.
 
-    result = ToolResult(text="many plots")
-    for index in range(MAX_IMAGES_PER_RESULT + 3):
-        result.add_image(f"img-{index}", "image/png")
-    assert len(result.images) == MAX_IMAGES_PER_RESULT
-    # The last one added survives.
-    assert result.images[-1][1] == f"img-{MAX_IMAGES_PER_RESULT + 2}"
-
-
-def test_tool_result_accepts_data_urls():
-    from services.ai_tools import ToolResult
-
-    result = ToolResult(text="x")
-    result.add_image("data:image/png;base64,AAAA", "image/png")
-    assert result.images == [("image/png", "AAAA")]
-
-
-def test_tool_result_rejects_oversized_images():
-    from services.ai_tools import MAX_IMAGE_BYTES, ToolResult
-
-    result = ToolResult(text="too big")
-    result.add_image("x" * (MAX_IMAGE_BYTES + 10), "image/png")
-    assert result.images == []
-
-
-def test_images_are_extracted_from_cell_outputs():
-    from services.ai_tools import _images_from_outputs
+    No multimodal: neither lm-router nor DDGS sends images to a model, and kani's
+    tool message is a string. The user looks at the figure in the notebook.
+    """
+    from services.ai_tools import _cell_has_plot
 
     outputs = [
         {"type": "stream", "text": "plain"},
         {"type": "display_data", "data": {"image/png": "AAA", "text/plain": "<Fig>"}},
-        {"type": "display_data", "data": {"image/jpeg": "BBB"}},
         {"type": "execute_result", "data": {"text/plain": "3"}},
     ]
-    found = _images_from_outputs(outputs)
-    assert ("image/png", "AAA") in found
-    assert ("image/jpeg", "BBB") in found
-    assert len(found) == 2
+    assert _cell_has_plot(outputs) is True
+    assert _cell_has_plot([{"type": "stream", "text": "plain"}]) is False
+    assert _cell_has_plot([]) is False
+    assert _cell_has_plot([{"nope": 1}]) is False
 
 
 # ── the shim still drives a turn ────────────────────────────────────────────

@@ -290,13 +290,6 @@ def test_tool_output_cap_announces_what_was_cut():
     assert "500 more characters" in out
 
 
-def test_clip_passes_tool_results_through_untouched():
-    from services.ai_tools import ToolResult
-
-    result = ToolResult(text="hello")
-    assert ai_tools._clip(result) is result
-
-
 # ── the tools must be usable by the loop ────────────────────────────────────
 # This is the regression guard for a bug the rest of the suite could not see:
 # every other test calls the tool bodies directly, so a build_tools that
@@ -359,12 +352,16 @@ def test_the_tool_docstring_is_the_description_kani_sends():
         )
 
 
-def test_a_tool_whose_tool_result_text_is_empty_reads_as_empty():
-    from services.ai_tools import ToolResult, _as_text
+def test_a_tool_whose_result_is_empty_reads_as_empty():
+    """An empty result must be the empty string, not a repr or None."""
+    specs = ai_tools.tool_specs([_empty_result_tool])
+    result = asyncio.run(specs[0].run())
+    assert result == "", repr(result)
 
-    assert _as_text(ToolResult(text="hello")) == "hello"
-    assert _as_text(ToolResult(text="")) == ""
-    assert _as_text("plain") == "plain"
+
+async def _empty_result_tool() -> str:
+    """Says nothing."""
+    return ""
 
 
 # ── prompt-injection defence independent of SKILL.md ────────────────────────

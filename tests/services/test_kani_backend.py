@@ -516,33 +516,30 @@ class _FakeState:
     auth_method = "oauth2"
 
 
-# ── 3. kani injects rich tool results ──────────────────────────────────────
+# ── 3. a tool's text is what reaches the wire ───────────────────────────────
 
 
-def test_images_travel_with_the_tool_result():
-    """A plot must reach the model as image parts, not a Python repr.
+def test_a_tools_text_is_what_the_model_reads():
+    """A tool body returns a string, and that string is the tool message.
 
-    Handing the model a repr lets it READ about a plot but never see it.
+    No multimodal: a plot is marked in words by the tool itself, and the pixels
+    never go near the model. This pins that no repr or dataclass leaks instead.
     """
     _fresh_calls()
-
-    from services.ai_tools import ToolResult
-
-    async def plot_cell() -> ToolResult:
-        """Run a cell that plots."""
-        result = ToolResult(text="Cell 4 ran and produced a figure.")
-        result.add_image("iVBORw0KGgoAAAANSUhEUg==", "image/png")
-        return result
+    _RouterState.args["read_cell"] = {"cell_id": "c7"}
 
     seen: dict[str, dict] = {}
 
     def on_step(event, payload):
         seen[event] = payload
 
-    result = _run(_turn(_specs([plot_cell], on_step=on_step)))
-    # The step row carries the images for the UI to render.
-    assert seen["done"]["images"] == [("image/png", "iVBORw0KGgoAAAANSUhEUg==")], seen
-    # And the round still works: the model read the text.
+    async def read_cell(cell_id: str) -> str:
+        """Read a cell."""
+        return "Cell 4 ran. [plot]"
+
+    result = _run(_turn(_specs([read_cell], on_step=on_step)))
+    assert seen["done"]["result"] == "Cell 4 ran. [plot]", seen
+    assert seen["done"]["error"] is None, seen
     assert result["text"], result
 
 
