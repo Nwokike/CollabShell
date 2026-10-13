@@ -114,6 +114,35 @@ def _clip_outcome(text) -> str:
     return flat[: _OUTCOME_CAP - 1].rstrip() + "…"
 
 
+_step_seq = 0
+
+
+def _unique_step_id(name: str) -> str:
+    """A row id that cannot collide, for a call with no id of its own.
+
+    kani's ``tool_call_id`` is the right key, but a call that somehow arrives
+    without one must not be re-keyed by tool name — that is the collision the
+    id exists to prevent.
+    """
+    global _step_seq
+    _step_seq += 1
+    return f"{name}#{_step_seq}"
+
+
+def _running_step_id(turn: dict | None) -> str:
+    """The oldest step row still waiting, for a done event with no id.
+
+    This is the path where a tool finished but its identity was lost, so the
+    row that opened is the row that closes.
+    """
+    if not turn:
+        return ""
+    for row in turn.get("steps_rows") or []:
+        if row.get("state") == "running":
+            return str(row.get("id") or "")
+    return ""
+
+
 def _pretty_label(name: str, args: dict | None = None) -> str:
     """The step row's label: a verb phrase, and the thing it acts on when short."""
     label = _TOOL_LABELS.get(name, f"Running {name}")
@@ -616,11 +645,14 @@ class ChatSession:
             self._current["text"] = ""
         # The row is keyed by the tool_call_id, not the name: the same tool can
         # be called twice in one turn and both rows must close on their own.
+        # A missing id would re-key the row by name and reintroduce the
+        # collision, so it is made unique instead.
+        row_id = str(payload.get("id") or "") or _unique_step_id(name)
         self._emit(
             "step_start",
             {
                 "label": _pretty_label(name, args),
-                "id": payload.get("id") or name,
+                "id": row_id,
                 "name": name,
                 "args": dict(args),
             },
@@ -631,8 +663,10 @@ class ChatSession:
         error = payload.get("error")
         args = payload.get("args") or {}
         data = {
-            # The same id the row was opened with.
-            "id": payload.get("id") or name,
+            # The same id the row was opened with. A missing one cannot fall
+            # back to the name (that is the collision the id exists to stop),
+            # so the row that is still spinning is the one being closed.
+            "id": str(payload.get("id") or "") or _running_step_id(self._current),
             "name": name,
             "label": _pretty_label(name, args),
             "result": result,
@@ -672,6 +706,13 @@ class ChatSession:
         if self._closing:
             return
         if task.cancelled():
+            # A hard cancel (the fallback path in stop(), or a teardown): the
+            # turn never got to emit its own terminal event, so the user would
+            # otherwise see a half-rendered bubble and a stuck spinner.
+            self._close_running_rows()
+            self._emit("stopped", {"text": "", "cost": 0, "steps": 0})
+            self._persist_history()
+            self._render()
             return
         exc = task.exception()
         if exc is not None:
@@ -684,14 +725,33 @@ class ChatSession:
         self._render()
 
     def stop(self) -> None:
-        """Stop now. Raises the flag, then cancels the task.
+        """Stop now: raise the flag the turn polls between tokens.
 
         The floor rule means work already shown is still billed, so stopping
-        never finishes as a free model call.
+        never finishes as a free model call. The hard cancel is a fallback for
+        a model that stopped emitting and therefore stopped polling — without a
+        deadline the Stop button could hang the session.
         """
         self._cancel.set()
         if self._task is not None and not self._task.done():
-            self._task.cancel()
+            # Give the turn one round of streaming (and the token poll that
+            # goes with it) to notice the flag and end itself gracefully. The
+            # deadline only matters for a model that stopped emitting and so
+            # stopped polling — without it the Stop button could hang.
+            from core.constants import TURN_STOP_GRACE_S
+
+            deadline = time.monotonic() + TURN_STOP_GRACE_S
+
+            async def _backstop() -> None:
+                if self._task is None or self._task.done():
+                    return
+                if time.monotonic() < deadline:
+                    return
+                self._task.cancel()
+
+            # Called, not referenced: the coroutine is what is scheduled, so
+            # the deadline inside it is the only thing that can cancel.
+            self.page.run_task(_backstop())
 
     def _set_busy_ui(self, busy: bool) -> None:
         self.send_btn.icon = ft.Icons.STOP_ROUNDED if busy else ft.Icons.SEND_ROUNDED
@@ -795,32 +855,23 @@ class ChatSession:
         elif event in ("step_done", "step_error") and self._current is not None:
             rows = self._current["steps_rows"]
             for row in rows:
-                if row["id"] != data.get("id") and row["state"] != "running":
-                    continue
-                if row["id"] != data.get("id"):
-                    # An id mismatch with a row still spinning: the loop ended
-                    # without closing it (router dead, turn cancelled), so the
-                    # oldest running row is the one this result belongs to.
-                    continue
-                row["state"] = "error" if event == "step_error" else "done"
-                row["outcome"] = _clip_outcome(data.get("result") or "")
-                row["images"] = list(data.get("images") or [])
-                row["error"] = data.get("error")
-                if data.get("refs"):
-                    row["refs"] = list(data["refs"])
-                break
+                if row["id"] == data.get("id"):
+                    row["state"] = "error" if event == "step_error" else "done"
+                    row["outcome"] = _clip_outcome(data.get("result") or "")
+                    row["images"] = list(data.get("images") or [])
+                    row["error"] = data.get("error")
+                    if data.get("refs"):
+                        row["refs"] = list(data["refs"])
+                    break
             else:
-                rows.append(
-                    {
-                        "id": data.get("id", ""),
-                        "label": data.get("label", ""),
-                        "name": data.get("name", ""),
-                        "state": "error" if event == "step_error" else "done",
-                        "outcome": _clip_outcome(data.get("result") or ""),
-                        "images": list(data.get("images") or []),
-                        "error": data.get("error"),
-                        "refs": list(data.get("refs") or []),
-                    }
+                # An id with no row for it. That is a wiring fault, not a row to
+                # invent: appending a second row would hide the bug behind a
+                # duplicate while the real one kept spinning. The row closer
+                # settles whatever was left running.
+                logger.debug(
+                    "step event for unknown id %r (tool %s)",
+                    data.get("id"),
+                    data.get("name", ""),
                 )
         elif event == "text_final" and self._current is not None:
             self._current["text"] = data.get("text", "") or self._current["text"]

@@ -338,9 +338,9 @@ def _map_failure(exc: BaseException, *, delivered: bool) -> Exception:
     whole router for 60 seconds.
     """
     from services import router as router_service
-    from services.ai_service import AIUnavailable
+    from services.ai_service import AIMidStream, AIUnavailable
 
-    if isinstance(exc, (AIUnavailable, RouterModelFailed)):
+    if isinstance(exc, (AIUnavailable, AIMidStream, RouterModelFailed)):
         return exc
     if isinstance(exc, openai.APIStatusError):
         if exc.status_code == 429:
@@ -367,6 +367,11 @@ def _map_failure(exc: BaseException, *, delivered: bool) -> Exception:
         # Refused/DNS: every candidate shares this endpoint, so switching
         # models cannot help — the router itself is gone.
         router_service._mark_router_failed()
+        if delivered:
+            # The user already read part of the answer before the connection
+            # dropped, so the turn ends with what it got rather than walking
+            # (there is nowhere to walk to) or discarding it.
+            return AIMidStream(str(exc))
         return AIUnavailable("Could not reach the Assistant.")
     if isinstance(exc, openai.APIError):
         return RouterModelFailed(
@@ -401,7 +406,7 @@ async def run_turn(
     results included), so the next model continues from what already ran
     instead of repeating it.
     """
-    from services.ai_service import AIUnavailable
+    from services.ai_service import AIMidStream, AIUnavailable
     from services.model_catalog import mark_model_failed, turn_candidates
 
     candidates = turn_candidates(_model_name())
@@ -453,6 +458,10 @@ async def run_turn(
             functions=None if at_cap else functions,
             retry_attempts=1,
         )
+        # Every candidate starts from its own answer, not from a dead one's
+        # partial text: a walk after delivery discards that text rather than
+        # splicing two models' words into one bubble.
+        collected.clear()
         round_parts.clear()
         if on_round_reset is not None:
             on_round_reset()
@@ -505,6 +514,7 @@ async def run_turn(
                 model_steps += 1
 
                 delivered = False
+                stopped_mid_stream = False
                 stream = manager.__aiter__()
                 while True:
                     try:
@@ -524,14 +534,20 @@ async def run_turn(
                     if not token:
                         continue
                     if _stopped():
-                        # A stop that lands mid-stream: this token is already
-                        # paid for, but nothing after it is.
+                        # A stop that lands mid-stream: the tokens already
+                        # delivered are billed, nothing after them is.
+                        stopped_mid_stream = True
                         break
                     delivered = True
                     collected.append(token)
                     round_parts.append(token)
                     on_token(token)
 
+                if stopped_mid_stream:
+                    # The stream is abandoned, so `manager.message()` would
+                    # wait on an event the abandoned generator never sets and
+                    # the turn would hang. The partial is the answer.
+                    break
                 message = await manager.message()
                 if not getattr(message, "tool_calls", None):
                     answer = "".join(collected)
@@ -556,9 +572,15 @@ async def run_turn(
         except asyncio.CancelledError:
             raise
         except BaseException as exc:
-            mapped = _map_failure(
-                exc, delivered=bool("".join(round_parts).strip())
-            )
+            delivered = bool("".join(round_parts).strip())
+            mapped = _map_failure(exc, delivered=delivered)
+            if isinstance(mapped, AIMidStream):
+                # The endpoint dropped after this candidate answered part of
+                # the turn. The user already read those tokens, so the partial
+                # IS the turn's answer — walking would splice two models' text
+                # into one bubble, and there is nowhere healthy to walk to.
+                logger.info("AI: %s dropped mid-answer; ending the turn", candidate)
+                break
             if isinstance(mapped, RouterModelFailed):
                 # This candidate model is the problem, not the router: skip it
                 # for the circuit TTL so the next turn does not lead with it,

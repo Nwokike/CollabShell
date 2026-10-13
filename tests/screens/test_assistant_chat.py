@@ -170,9 +170,39 @@ def test_empty_text_never_sends(tmp_path, monkeypatch):
     assert session._turns == []
 
 
-def test_stop_cancels_the_running_task(tmp_path, monkeypatch):
+def test_stop_raises_the_flag_the_turn_polls(tmp_path, monkeypatch):
+    """Stop reaches the model, it does not yank the turn out from under it.
+
+    The flag is what `kani_backend.run_turn` checks between tokens, so raising
+    it is what makes the prompt actually stop streaming. A hard cancel would
+    kill the graceful path and leave the bubble half rendered.
+    """
     session = _session(tmp_path, monkeypatch)
 
+    class FakeTask:
+        def done(self):
+            return False
+
+        def cancel(self):
+            pass
+
+    session._task = FakeTask()
+    session.stop()
+    assert session._cancel.is_set(), "stop must raise the cancel flag"
+
+
+def test_a_silent_task_still_gets_cancelled(tmp_path, monkeypatch):
+    """The hard cancel is a backstop, not the mechanism.
+
+    A model that stopped emitting has stopped polling its stop flag, so without
+    a deadline the Stop button would hang the session forever. The backstop is
+    a scheduled coroutine: it is reached by running the loop's clock past the
+    grace window.
+    """
+    from core.constants import TURN_STOP_GRACE_S
+
+    session = _session(tmp_path, monkeypatch)
+    scheduled = []
     cancelled = []
 
     class FakeTask:
@@ -183,9 +213,51 @@ def test_stop_cancels_the_running_task(tmp_path, monkeypatch):
             cancelled.append(True)
 
     session._task = FakeTask()
+
+    # Capture the backstop instead of running it, so the test can prove the
+    # deadline exists without sleeping through it.
+    class CapturingPage:
+        def __init__(self):
+            self.views = []
+            self.width = 420
+            self.updates = 0
+
+        def update(self):
+            pass
+
+        def run_task(self, coro):
+            scheduled.append(coro)
+
+    monkeypatch.setattr(session, "page", CapturingPage())
     session.stop()
-    assert cancelled, "stop must cancel the in-flight turn"
-    assert session._cancel.is_set(), "stop must also raise the cancel flag"
+    assert not cancelled, "stop must not cancel instantly"
+    assert len(scheduled) == 1, "stop must schedule a backstop"
+    assert TURN_STOP_GRACE_S > 0
+    # Run the backstop to its first suspension: inside the grace window it
+    # must return without touching the turn, which is the whole point of
+    # scheduling it rather than cancelling now.
+    try:
+        scheduled[0].send(None)
+    except StopIteration:
+        pass  # returned without suspending: the in-window branch is proof
+    assert not cancelled, "the backstop must not cancel inside the grace window"
+    scheduled[0].close()
+
+
+def test_stop_on_a_finished_task_does_nothing(tmp_path, monkeypatch):
+    """A second tap after the turn ended must not touch a dead task."""
+    session = _session(tmp_path, monkeypatch)
+
+    class FakeTask:
+        def done(self):
+            return True
+
+        def cancel(self):
+            raise AssertionError("a finished task must not be cancelled")
+
+    session._task = FakeTask()
+    session.stop()
+    assert session._cancel.is_set()
 
 
 # ── lifecycle ────────────────────────────────────────────────────────────────
@@ -334,6 +406,120 @@ def test_an_approval_survives_minimize(tmp_path, monkeypatch):
 # ── step rows: identity, failure, and the orphaned spinner ──────────────────
 
 
+def test_the_real_callbacks_open_and_close_rows_on_the_call_id(tmp_path, monkeypatch):
+    """Drive `_on_tool_start`/`_on_tool_done` themselves, not `_emit`.
+
+    Every other step test hand-feeds `_emit` with a fabricated id, so the chain
+    from kani's payload through `_step_emitter` to the row was never executed.
+    This is the test that fails if the id stops being threaded.
+    """
+    from services import ai_service
+
+    session = _session(tmp_path, monkeypatch)
+    current = assistant_view._empty_turn()
+    session._turns.append(current)
+    session._current = current
+
+    emitted: list[tuple[str, dict]] = []
+    real_emit = session._emit
+
+    def spy(event, data):
+        emitted.append((event, data))
+        real_emit(event, data)
+
+    monkeypatch.setattr(session, "_emit", spy)
+
+    # The payload exactly as kani_backend builds it, twice for the same tool.
+    payloads = [
+        {"name": "read_notebook", "id": "call_1", "args": {}, "result": "first",
+         "images": [], "error": None},
+        {"name": "read_notebook", "id": "call_2", "args": {}, "result": "second",
+         "images": [], "error": None},
+    ]
+
+    emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
+    emit("start", payloads[0])
+    emit("done", payloads[0])
+    emit("start", payloads[1])
+    emit("done", payloads[1])
+
+    rows = current["steps_rows"]
+    assert [r["id"] for r in rows] == ["call_1", "call_2"], rows
+    assert [r["outcome"] for r in rows] == ["first", "second"], rows
+    assert all(r["state"] == "done" for r in rows), rows
+
+
+def test_the_real_callbacks_mark_a_failed_tool_as_an_error(tmp_path, monkeypatch):
+    """A tool that raised must reach the user as a red row, not a green check."""
+    from services import ai_service
+
+    session = _session(tmp_path, monkeypatch)
+    current = assistant_view._empty_turn()
+    session._turns.append(current)
+    session._current = current
+
+    emitted: list[tuple[str, dict]] = []
+    real_emit = session._emit
+
+    def spy(event, data):
+        emitted.append((event, data))
+        real_emit(event, data)
+
+    monkeypatch.setattr(session, "_emit", spy)
+
+    payload = {
+        "name": "read_notebook",
+        "id": "call_1",
+        "args": {},
+        "result": "(the read_notebook tool failed: no session)",
+        "images": [],
+        "error": "no session",
+    }
+    emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
+    emit("start", payload)
+    emit("done", payload)
+
+    assert [e for e, _ in emitted] == ["step_start", "step_error"], emitted
+    row = current["steps_rows"][0]
+    assert row["state"] == "error", row
+    assert row["error"] == "no session", row
+
+
+def test_the_real_callbacks_survive_a_missing_call_id(tmp_path, monkeypatch):
+    """A call with no id must not re-key the row by tool name.
+
+    Name-keyed rows collide, so a second call to the same tool would overwrite
+    the first and leave it spinning.
+    """
+    from services import ai_service
+
+    session = _session(tmp_path, monkeypatch)
+    current = assistant_view._empty_turn()
+    session._turns.append(current)
+    session._current = current
+
+    emitted: list[tuple[str, dict]] = []
+    real_emit = session._emit
+
+    def spy(event, data):
+        emitted.append((event, data))
+        real_emit(event, data)
+
+    monkeypatch.setattr(session, "_emit", spy)
+
+    payload = {"name": "read_notebook", "id": "", "args": {},
+               "result": "x", "images": [], "error": None}
+    emit = ai_service._step_emitter(session._on_tool_start, session._on_tool_done)
+    emit("start", payload)
+    emit("done", payload)
+
+    # The row was still opened and closed — by a unique id, not the name.
+    assert len(current["steps_rows"]) == 1, current["steps_rows"]
+    row = current["steps_rows"][0]
+    assert row["state"] == "done", row
+    assert row["id"] != "read_notebook", row
+
+
 def test_two_calls_to_the_same_tool_get_two_rows(tmp_path, monkeypatch):
     """The same tool twice in one turn is two rows, each with its own id.
 
@@ -467,8 +653,12 @@ def test_write_cells_step_row_carries_its_cell_refs(tmp_path, monkeypatch):
     }
     turn = _drive(
         session,
-        [("step_done", {"label": step["name"], "id": step["id"],
-                        "result": step["result"], "refs": assistant_view._cell_refs(step)})],
+        [
+            ("step_start", {"label": "Writing cells", "id": step["id"], "name": step["name"]}),
+            ("step_done", {"label": "Writing cells", "id": step["id"],
+                           "result": step["result"],
+                           "refs": assistant_view._cell_refs(step)}),
+        ],
     )
     assert turn["steps_rows"][0]["refs"] == ["abc123", "def456"]
 
@@ -479,8 +669,11 @@ def test_non_write_cells_steps_have_no_refs(tmp_path, monkeypatch):
     assert assistant_view._cell_refs(step) == []
     turn = _drive(
         session,
-        [("step_done", {"label": "_exec", "id": "c", "result": "1",
-                        "refs": assistant_view._cell_refs(step)})],
+        [
+            ("step_start", {"label": "Running code", "id": "c", "name": "_exec"}),
+            ("step_done", {"label": "Running code", "id": "c", "result": "1",
+                           "refs": assistant_view._cell_refs(step)}),
+        ],
     )
     assert turn["steps_rows"][0]["refs"] == []
 

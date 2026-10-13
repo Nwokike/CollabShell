@@ -150,7 +150,9 @@ async def run_metered_turn(
             max_rounds=max_rounds,
         )
     except ai_service.AIUnavailable as ex:
-        # Nothing was delivered, so the hold goes back untouched.
+        # Nothing was delivered, so the hold goes back untouched. (A connection
+        # drop AFTER the model answered is not this case: run_turn returns the
+        # partial it got, and the floor rule below bills it.)
         if tx:
             await credits.rollback(tx, is_premium)
         _bump_revision(state)

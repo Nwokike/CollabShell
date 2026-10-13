@@ -52,6 +52,10 @@ STORAGE_AI_ROUTER_URL = "colab_ai_router_url"
 STORAGE_AI_HELP = "colab_ai_help"
 STORAGE_NOTIFY_ENABLED = "colab_notify_enabled"
 AI_DEFAULT_ROUTER_URL = "http://127.0.0.1:8082/v1"
+# How long a stop waits for the turn to notice its own flag before the UI
+# hard-cancels it. A model that stopped emitting has stopped polling too, so
+# the deadline is what keeps the Stop button from hanging forever.
+TURN_STOP_GRACE_S = 5.0
 TIP_AI_MODE = (
     "Show the Assistant tab and the in-cell AI actions. "
     "Manual work stays exactly the same."

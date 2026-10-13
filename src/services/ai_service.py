@@ -31,6 +31,15 @@ class AIUnavailable(Exception):
     """The router was unreachable or returned nothing usable."""
 
 
+class AIMidStream(Exception):
+    """The endpoint dropped after the model had started answering.
+
+    Not a router failure the user should retry: they already read part of the
+    answer, so the turn ends with what it got. ``ai_credits`` treats this as
+    delivered work and settles under the floor rule.
+    """
+
+
 # The base URL the provider currently points at, so a turn only re-registers
 # when the router actually moved port. Lives at module level because
 # `configure_provider` is process-global.
