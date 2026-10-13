@@ -1,29 +1,19 @@
-"""AI service — the single streaming funnel and the agent turn loop.
+"""AI service — the turn entry point, and the system prompt.
 
-The agent loop lives here and nowhere else. It is orchestration over
-mirascope's streaming (no wire code of ours: no SSE parsing, no message
-formats, no tokenizer), verified against a local OpenAI-compatible router:
+The agent loop lives in `services/kani_backend.py` (kani, not hand-rolled wire
+code) and the router it talks to is started by `services/router.py`. This
+module is the seam between them and the callers: `run_turn` keeps the
+signature `ai_credits` and the assistant already use.
 
-    provider = llm.register_provider("openai", scope="openai/", api_key=...,
-                                     base_url=<router>/v1)
-    @llm.call("<model>:completions", tools=[...])   # ':completions' forces
-    async def ask(...): ...                          # chat-completions
-
-    resp = await ask.stream(prompt)                 # NOT stream=True
-    async for chunk in resp.chunk_stream(): ...     # method, not property
-    outs = await resp.execute_tools()               # async, needs ASYNC tools
-    resp2 = await ask.stream(outs[0])               # continue via ToolOutput
-
-A ping test pins that contract so a mirascope upgrade that breaks it fails
-loudly instead of silently.
+No SSE parsing, no message formats and no tokenizer of ours — kani and the
+openai SDK own all three.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
-
-from mirascope import llm
 
 logger = logging.getLogger("ai_service")
 
@@ -70,38 +60,18 @@ async def _ensure_router_for_turn() -> str | None:
     return await router.router_base()
 
 
-def configure_provider(base_url: str, api_key: str = "any", scope: str = "openai/"):
-    """Register the OpenAI-compatible provider for this process.
+def configure_provider(base_url: str, api_key: str = "any", scope: str = "openai/") -> None:
+    """Point the model client at a router.
 
-    Idempotent: safe to call on every settings save. ``scope`` must prefix the
-    model ids we use (``openai/...``), and the ':completions' model suffix
-    forces the Chat Completions API a local router actually serves.
+    The turn path builds its own client per candidate
+    (`kani_backend._build_engine`), so this records the base URL for the
+    callers that save a Settings override. ``api_key``/``scope`` are unused by
+    the kani path — the router takes any token and kani has no provider scope —
+    and are kept only so the existing call sites keep working.
     """
-    provider = llm.register_provider(
-        "openai", scope=scope, api_key=api_key or "any", base_url=base_url
-    )
-    # The candidate walk IS the retry. The OpenAI SDK's own default of 2
-    # retries would burn three attempts on one dead model before our walk ever
-    # saw a failure — the same reason DDGS sets max_retries=0.
-    #
-    # The async client actually used for chat completions lives on the routed
-    # sub-provider (OpenAIProvider only exposes the sync `client`), so walk
-    # both rather than guessing at attribute names.
-    clients = [getattr(provider, "client", None)]
-    sub = getattr(provider, "_completions_provider", None)
-    if sub is not None:
-        clients.append(getattr(sub, "async_client", None))
-    sub_responses = getattr(provider, "_responses_provider", None)
-    if sub_responses is not None:
-        clients.append(getattr(sub_responses, "async_client", None))
-    for client in clients:
-        if client is None:
-            continue
-        try:
-            client.max_retries = 0
-        except Exception as ex:
-            logger.debug("Could not disable SDK retries: %s", ex)
-    return provider
+    global _provider_base_url
+    _provider_base_url = (base_url or "").strip()
+    logger.debug("AI router base URL set: %s", base_url)
 
 
 def _system_prompt(skill_text: str | None = None) -> str:
@@ -152,38 +122,6 @@ def system_prompt_with_skill() -> str:
         return _system_prompt(None)
 
 
-def _normalise_model_id(model: str) -> str:
-    """Build a ``provider/model:completions`` id from whatever we hold.
-
-    A configured router returns bare model names ("auto", "step-3"), which
-    mirascope rejects: it demands the ``provider/model-name`` form. The
-    ``:completions`` suffix then forces the Chat Completions API — what a local
-    OpenAI-compatible router serves — instead of the Responses API.
-    """
-    raw = (model or "").strip() or "auto"
-    if ":" in raw and "/" not in raw.split(":", 1)[0]:
-        # Already 'provider/model:api' — keep it.
-        return raw
-    if not raw.startswith("openai/"):
-        raw = f"openai/{raw}"
-    return raw if raw.endswith(":completions") else f"{raw}:completions"
-
-
-def _flatten_tool_output(output):
-    """Reduce a rich tool result to plain text, keeping the tool message shape.
-
-    ``ToolResult`` carries images separately; the ToolOutput that reaches the
-    wire must hold a string, or mirascope serialises the dataclass's repr into
-    the tool message. id/name are preserved so the tool call stays linked.
-    """
-    import dataclasses
-
-    raw = getattr(output, "result", "")
-    if not hasattr(raw, "text"):
-        return output  # already a plain string
-    return dataclasses.replace(output, result=str(getattr(raw, "text", "")))
-
-
 async def run_turn(
     *,
     model: str,
@@ -193,219 +131,110 @@ async def run_turn(
     on_token: Callable[[str], None] | None = None,
     on_tool_start: Callable[[str, dict], None] | None = None,
     on_tool_done: Callable[[str, dict], None] | None = None,
+    on_round_reset: Callable[[], None] | None = None,
     on_model_step: Callable[[], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     max_rounds: int = MAX_TOOL_ROUNDS,
 ) -> dict:
-    """Run one assistant turn: stream, call tools, continue, return the text.
+    """Run one assistant turn through kani: stream, call tools, continue.
 
     Walks the ranked model candidates (see model_catalog): an explicit pick
     first verbatim, then the tier-then-latency pool, with the router's own
-    ``auto`` last. A model that fails is marked for five minutes and the walk
-    Returns {"text", "steps", "model_steps", "cancelled", "model"} where steps
-    is a list of tool rows and ``model_steps`` counts the model calls that
-    actually produced a response (what metering bills). A candidate that fails
-    before streaming adds nothing, so the retry walk is free.
+    ``auto`` last. A model that fails to start is skipped and the walk goes on;
+    a candidate that produces nothing adds no step, so the walk is free.
+
+    Returns {"text", "model_steps", "cancelled", "model"}. ``model_steps``
+    counts the model calls that actually answered — one per streamed round —
+    which is exactly what metering bills. Step rows arrive through
+    ``on_tool_start``/``on_tool_done`` from inside kani's tool batch, matched by
+    the ``tool_call_id`` that opened each one; ``on_round_reset`` fires when a
+    new model round starts, so the caller drops the partial answer of the round
+    before it (that text never belongs to the final answer).
 
     Never raises for ordinary tool failures — a failing tool becomes text the
     model reads and recovers from. Raises AIUnavailable only when every
     candidate is exhausted.
     """
-    from services import model_catalog
+    from services import kani_backend
+    from services.ai_tools import tool_specs as build_tool_specs
+    from services.kani_backend import tool_specs as with_step_rows
 
     # The app owns its router: attach to one already running, or embed its own.
     # This is what makes the assistant work with no setup — before it, a turn
-    # aimed at a URL nobody had started simply failed to connect. The port is
-    # remembered, so the steady state costs nothing; the cost is the first turn.
+    # aimed at a URL nobody had started simply failed to connect.
     base_url = await _ensure_router_for_turn()
     if base_url is None:
         raise AIUnavailable(
             "No local model router is running, and none could be started. "
             "Connect to the internet so the router can be fetched, then retry."
         )
-    # Re-point the provider only when the port actually moved, so the steady
-    # state is a string compare rather than a provider re-registration.
-    if _provider_base_url["url"] != base_url:
-        _provider_base_url["url"] = base_url
-        configure_provider(base_url)
 
-    candidates = model_catalog.turn_candidates(model)
-    if not candidates:
-        raise AIUnavailable("No models are available from the router.")
+    cancel = asyncio.Event()
+    if should_stop is not None and should_stop():
+        cancel.set()
 
-    # mirascope builds the request from what the prompt function returns, so:
-    #   - the system prompt must be a SystemMessage (a `system=` kwarg is
-    #     silently dropped — verified against a local router);
-    #   - a completed tool round is continued by handing the ToolOutput objects
-    #     back as a message, which mirascope serialises into the tool role.
-    from mirascope.llm.content import Image, Text
-    from mirascope.llm.content.image import Base64ImageSource
-    from mirascope.llm.messages import SystemMessage, UserMessage
+    query = ""
+    history = [m for m in (messages or []) if m.get("role") != "user"]
+    for entry in reversed(messages or []):
+        if entry.get("role") == "user":
+            query = str(entry.get("content") or "")
+            break
 
-    collected: list[str] = []
-    steps: list[dict] = []
-    model_steps = 0
-    # Round 1 is the plain user text; later rounds are content-part lists.
-    pending: object = messages[-1].get("content", "") if messages else ""
+    result = await kani_backend.run_turn(
+        query,
+        history,
+        system_prompt=system or "",
+        # Two passes, one job each: the closures become specs with schemas,
+        # then each call gets its step row and its text for the wire.
+        specs=with_step_rows(
+            build_tool_specs(tools),
+            on_step=_step_emitter(on_tool_start, on_tool_done),
+        ),
+        cancel=cancel,
+        on_token=on_token or (lambda _t: None),
+        # The stop is polled per token, not sampled once: a turn whose user hit
+        # Stop mid-stream must notice between tokens, not at the next round.
+        should_stop=should_stop or (lambda: False),
+        on_model_step=(lambda: on_model_step()) if on_model_step else None,
+        on_round_reset=on_round_reset,
+        base_url=base_url,
+        max_rounds=max_rounds,
+    )
+    result["cancelled"] = cancel.is_set()
+    return result
 
-    for attempt, candidate in enumerate(candidates):
-        model_id = _normalise_model_id(candidate)
 
-        @llm.call(model_id, tools=tools)
-        async def ask(system: str, turn):
-            # Round 1 is plain text. A tool round arrives as a list of content
-            # parts (the flattened tool outputs, then an optional image turn).
-            if isinstance(turn, str):
-                body = [UserMessage(content=[Text(text=turn)])]
-            else:
-                body = [UserMessage(content=list(turn))]
-            return [SystemMessage(content=Text(text=system)), *body]
+def _step_emitter(on_tool_start, on_tool_done):
+    """The caller's two callbacks, as the payload kani_backend emits.
 
-        finished = False
-        try:
-            for _round in range(max_rounds):
-                if should_stop and should_stop():
-                    return {
-                        "text": "".join(collected),
-                        "steps": steps,
-                        "model_steps": model_steps,
-                        "cancelled": True,
-                        "model": candidate,
-                    }
-                # One step per model call that answered, before the stream is
-                # consumed — so a turn cut off mid-stream still bills the call
-                # the user was already reading. Failures inside ask.stream()
-                # raise and skip this, keeping the retry walk free.
-                model_steps += 1
-                if _round > 0 and on_model_step:
-                    on_model_step()
-                response = await ask.stream(system, pending)
+    A step row is opened with the tool name, the arguments the model chose, and
+    the ``tool_call_id`` that will close it — that id is the only way a row
+    opened inside kani's gather can be matched to the row that ends, because
+    the same tool can be called twice in one turn. It is passed as part of the
+    event dict rather than a separate argument so both callbacks get it.
+    """
+    if on_tool_start is None and on_tool_done is None:
+        return None
 
-                async for chunk in response.chunk_stream():
-                    if type(chunk).__name__ != "TextChunk":
-                        continue
-                    text = getattr(chunk, "delta", "")
-                    if not text:
-                        continue
-                    collected.append(text)
-                    if on_token:
-                        on_token(text)
-                    if should_stop and should_stop():
-                        return {
-                            "text": "".join(collected),
-                            "steps": steps,
-                            "model_steps": model_steps,
-                            "cancelled": True,
-                            "model": candidate,
-                        }
-
-                tool_calls = list(response.tool_calls)
-                if not tool_calls:
-                    finished = True
-                    break
-
-                try:
-                    outputs = await response.execute_tools()
-                except Exception as ex:
-                    logger.warning("AI tool batch failed: %s", ex)
-                    outputs = []
-
-                # Rich results carry their images here; the wire-facing result
-                # is flattened to plain text so the tool message is a string.
-                images: list[tuple[str, str]] = []
-                for call, output in zip(tool_calls, outputs):
-                    import json as _json
-
-                    try:
-                        args = _json.loads(call.args)
-                    except Exception:
-                        args = {}
-                    name = call.name
-                    raw = getattr(output, "result", "")
-                    result_text = (
-                        str(getattr(raw, "text", ""))
-                        if hasattr(raw, "text")
-                        else str(raw)
-                    )
-                    image_list = list(getattr(raw, "images", []) or [])
-                    images.extend(image_list)
-                    steps.append(
-                        {
-                            "id": call.id,
-                            "name": name,
-                            "args": args,
-                            # Text only in the step row: images are not
-                            # something to print.
-                            "result": result_text,
-                            "images": image_list,
-                            "error": bool(getattr(output, "error", None)),
-                        }
-                    )
-                    if on_tool_start:
-                        on_tool_start(name, args)
-                    if on_tool_done:
-                        on_tool_done(name, args)
-
-                if should_stop and should_stop():
-                    return {
-                        "text": "".join(collected),
-                        "steps": steps,
-                        "model_steps": model_steps,
-                        "cancelled": True,
-                        "model": candidate,
-                    }
-
-                # Continue with EVERY tool output from this round, in order —
-                # dropping any would lose a result the model is waiting on.
-                flattened = [_flatten_tool_output(o) for o in outputs]
-                if images:
-                    turn_parts: list = [
-                        Text(
-                            text=(
-                                "These images came from the tools you just ran. "
-                                "Look at them before answering."
-                            )
-                        )
-                    ]
-                    for mime, payload in images:
-                        turn_parts.append(
-                            Image(
-                                source=Base64ImageSource(
-                                    type="base64_image_source",
-                                    data=payload,
-                                    mime_type=mime,
-                                )
-                            )
-                        )
-                    pending = [*flattened, *turn_parts]
-                else:
-                    pending = flattened
-            else:
-                logger.info(
-                    "AI turn hit the %d-round tool cap on %s", max_rounds, candidate
-                )
-                finished = True
-        except Exception as ex:
-            # This candidate is unhealthy; skip it for five minutes and try
-            # the next. The transcript carries forward so nothing repeats.
-            logger.warning(
-                "AI candidate %s failed (%s): %s", candidate, type(ex).__name__, ex
+    def emit(event: str, payload: dict) -> None:
+        name = payload.get("name", "")
+        call_id = payload.get("id", "")
+        if event == "start":
+            if on_tool_start is not None:
+                on_tool_start(name, {"args": payload.get("args") or {}, "id": call_id})
+            return
+        if event == "done" and on_tool_done is not None:
+            on_tool_done(
+                name,
+                {
+                    "id": call_id,
+                    "args": payload.get("args") or {},
+                    "result": payload.get("result", ""),
+                    "images": payload.get("images", []),
+                    "error": payload.get("error"),
+                },
             )
-            model_catalog.mark_model_failed(candidate)
-            if attempt + 1 >= len(candidates):
-                raise AIUnavailable(
-                    "The Assistant could not answer right now. "
-                    "Every model from the router was unavailable."
-                ) from ex
-            continue
 
-        if finished:
-            return {
-                "text": "".join(collected),
-                "steps": steps,
-                "model_steps": model_steps,
-                "cancelled": False,
-                "model": candidate,
-            }
+    return emit
 
-    raise AIUnavailable("The Assistant could not answer right now.")
+

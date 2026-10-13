@@ -5,17 +5,17 @@ instruction**, so when-to-use and when-NOT-to-use live there, not in a schema
 built by hand — the same pattern LM Router uses (``router_tools.py``), where
 the description IS the spec.
 
-``build_tools`` returns them **decorated with ``@llm.tool``**. That decoration
-is load-bearing, not cosmetic: mirascope's ``AsyncToolkit.__init__`` reads
-``tool.name`` to build its lookup table (``llm/tools/toolkit.py:52``), and the
-``llm.call(tools=...)`` decorator only *casts* the list — it does not convert
-it (``llm/calls/decorator.py:142``). Handing it bare functions raises
-``AttributeError: 'function' object has no attribute 'name'`` on the very first
-model call, so every turn would die before a token streamed.
+``build_tools`` returns the 15 closures; ``tool_specs`` turns them into the
+`ToolSpec`s kani consumes, deriving the JSON schema from each signature so a
+docstring and its parameters can never drift apart. That is also why the
+approval gate is *bound into the closure* rather than passed as a parameter: a
+parameter would appear in the schema the model reads and let it answer its own
+approval prompt.
 
 Tool bodies never raise into the agent loop: they return a string the model
-can read. An exception is caught and returned as text so one bad call cannot
-kill a turn.
+can read. An exception is caught one layer out, in
+``kani_backend.tool_specs``, and returned as text so one bad call cannot kill a
+turn.
 """
 
 from __future__ import annotations
@@ -475,29 +475,119 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             logger.warning("AI tool delete_file failed: %s", ex)
             return f"Delete failed for {path}: {ex}"
 
-    # Decorated last, and once. The closures above are built against the real
-    # `session_name`/`services`/`state`/`ask_confirm`, and @llm.tool only
-    # wraps them for mirascope — calling a decorated tool still works because
-    # AsyncTool.__call__ forwards to the original function (tools/tools.py:120).
-    from mirascope import llm
-
+    # Every tool above is a plain async closure built against the real
+    # session_name/services/state/ask_confirm. The docstring IS the
+    # model-visible instruction (LM Router / DDGS pattern), and the parameter
+    # names and types become the JSON schema — both are written to serve the
+    # model, not the Python caller.
     return [
-        llm.tool(fn)
-        for fn in (
-            _exec,
-            read_notebook,
-            read_terminal,
-            install_package,
-            list_variables,
-            read_file,
-            list_files,
-            upload_file,
-            write_cells,
-            list_notebook_tabs,
-            get_usage,
-            get_log,
-            restart_kernel,
-            stop_session,
-            delete_file,
-        )
+        _exec,
+        read_notebook,
+        read_terminal,
+        install_package,
+        list_variables,
+        read_file,
+        list_files,
+        upload_file,
+        write_cells,
+        list_notebook_tabs,
+        get_usage,
+        get_log,
+        restart_kernel,
+        stop_session,
+        delete_file,
     ]
+
+
+_PARAM_TYPES = {
+    "code": "string",
+    "path": "string",
+    "packages": "array",
+    "remote_path": "string",
+    "local_path": "string",
+    "target": "string",
+    "lines": "integer",
+    "count": "integer",
+    "cells": "array",
+}
+
+
+def tool_specs(tools: list, *, on_step=None) -> list:
+    """kani `ToolSpec`s from the tool closures.
+
+    The schema is derived from each function's signature rather than declared a
+    second time, so a docstring and its parameters can never drift apart — the
+    drift would be invisible until the model called the tool wrong.
+
+    `on_step(event, name)` is called around each body, which is where the
+    caller's step rows are emitted (kani runs the batch in its own
+    `asyncio.gather`, so there is no outside hook that knows a call started).
+
+    Each spec's ``run`` returns the tool's own value — text, or a `ToolResult`
+    carrying images. Turning that into what the model reads is
+    `kani_backend.tool_specs`'s job, one layer out, because the one value has
+    to serve two surfaces with different needs: the wire takes the text, the
+    step row takes the images.
+    """
+    import inspect
+
+    from services.kani_backend import ToolSpec
+
+    out: list[ToolSpec] = []
+    for fn in tools or []:
+        try:
+            signature = inspect.signature(fn)
+        except (TypeError, ValueError):
+            continue
+        properties: dict[str, dict] = {}
+        required: list[str] = []
+        for name, param in signature.parameters.items():
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue
+            if name == "ask_confirm":  # bound, never schema-visible
+                continue
+            properties[name] = {
+                "type": _PARAM_TYPES.get(name, "string"),
+                "description": name.replace("_", " "),
+            }
+            if param.default is inspect.Parameter.empty:
+                required.append(name)
+                properties[name]["description"] = name.replace("_", " ")
+        parameters = {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+        desc = (inspect.getdoc(fn) or fn.__name__).strip()
+        run = fn
+
+        async def wrapped(spec_run=run, spec_name=fn.__name__, **kwargs):
+            if on_step is not None:
+                on_step("start", spec_name)
+            try:
+                # The tool's own value, untouched: kani_backend decides what
+                # the model reads and what the step row renders. A failure is
+                # NOT caught here — that would turn it into an ordinary string
+                # and the step row would lose the error it needs to show.
+                return await spec_run(**kwargs)
+            finally:
+                if on_step is not None:
+                    on_step("done", spec_name)
+
+        out.append(
+            ToolSpec(name=fn.__name__, desc=desc, parameters=parameters, run=wrapped)
+        )
+    return out
+
+
+def _as_text(value):
+    """A tool body's return value, as the string the model reads.
+
+    `ToolResult` carries images separately from its text; kani's tool message
+    is a string, so the text goes on the wire here and the images are left for
+    the richer surfaces.
+    """
+    if hasattr(value, "text"):
+        return value.text
+    return "" if value is None else str(value)

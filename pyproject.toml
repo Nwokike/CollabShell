@@ -19,8 +19,8 @@ dependencies = [
     # unpinned 1.x there fails the whole build with ResolutionImpossible.
     "jupyter-kernel-client<1.0",
     "rich>=15.0.0",
-    "mirascope[openai]>=2.5.0",
     "flet-notifications>=0.1.4",
+    "kani[openai]>=1.10.0",
 ]
 
 [tool.flet]

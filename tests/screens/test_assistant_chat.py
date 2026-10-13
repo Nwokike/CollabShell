@@ -22,7 +22,10 @@ _SRC = _HERE.parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from kani import AIFunction
+
 from screens import assistant_view
+from services import ai_tools, kani_backend
 
 
 class FakeEvent:
@@ -328,6 +331,130 @@ def test_an_approval_survives_minimize(tmp_path, monkeypatch):
     assert _run_async(_scenario()) is True
 
 
+# ── step rows: identity, failure, and the orphaned spinner ──────────────────
+
+
+def test_two_calls_to_the_same_tool_get_two_rows(tmp_path, monkeypatch):
+    """The same tool twice in one turn is two rows, each with its own id.
+
+    Rows keyed by tool name collide: the second call overwrites the first row's
+    output and leaves a ProgressRing the user waits on forever.
+    """
+    session = _session(tmp_path, monkeypatch)
+    _drive(
+        session,
+        [
+            ("step_start", {"label": "Running code", "id": "call_1", "name": "_exec"}),
+            ("step_done", {"label": "Running code", "id": "call_1", "result": "first"}),
+            ("step_start", {"label": "Running code", "id": "call_2", "name": "_exec"}),
+            ("step_done", {"label": "Running code", "id": "call_2", "result": "second"}),
+        ],
+    )
+    rows = session._turns[-1]["steps_rows"]
+    assert len(rows) == 2, rows
+    assert [r["id"] for r in rows] == ["call_1", "call_2"], rows
+    assert [r["outcome"] for r in rows] == ["first", "second"], rows
+    assert all(r["state"] == "done" for r in rows), rows
+
+
+def test_a_failed_tool_row_is_an_error_not_a_green_check(tmp_path, monkeypatch):
+    """A tool that raised must render red, or a failure reads as success."""
+    session = _session(tmp_path, monkeypatch)
+    _drive(
+        session,
+        [
+            ("step_start", {"label": "Running code", "id": "call_1", "name": "_exec"}),
+            (
+                "step_error",
+                {
+                    "label": "Running code",
+                    "id": "call_1",
+                    "result": "(the _exec tool failed: kernel gone)",
+                    "error": "kernel gone",
+                },
+            ),
+        ],
+    )
+    row = session._turns[-1]["steps_rows"][0]
+    assert row["state"] == "error", row
+    assert row["error"] == "kernel gone", row
+    assert "kernel gone" in row["outcome"], row
+
+
+def test_a_row_left_spinning_is_closed_when_the_turn_ends(tmp_path, monkeypatch):
+    """A tool that opened a row and then the turn died gets settled.
+
+    Otherwise the user stares at a spinner for a row that will never finish.
+    """
+    session = _session(tmp_path, monkeypatch)
+    _drive(
+        session,
+        [
+            ("step_start", {"label": "Reading the notebook", "id": "c1", "name": "read_notebook"}),
+            ("error", {"kind": "unavailable", "message": "Could not reach the Assistant."}),
+        ],
+    )
+    row = session._turns[-1]["steps_rows"][0]
+    assert row["state"] == "error", row
+    assert row["error"], row
+
+
+def test_a_stopped_turn_keeps_its_cost_and_text(tmp_path, monkeypatch):
+    """The work before the stop was billed, so the turn must show its price."""
+    session = _session(tmp_path, monkeypatch)
+    _drive(
+        session,
+        [
+            ("text_partial", {"text": "Here"}),
+            ("stopped", {"text": "Here", "cost": 1, "steps": 1}),
+        ],
+    )
+    turn = session._turns[-1]
+    assert turn["stopped"] is True, turn
+    assert turn["partial"] is False, turn
+    assert turn["text"] == "Here", turn
+    assert turn["cost"] == 1, turn
+
+
+def test_a_stopped_turn_is_not_also_rendered_finished(tmp_path, monkeypatch):
+    """One terminal event: a stopped bubble must not also show an answer.
+
+    This is the shape of the bug: emitting stopped and then text_final made a
+    cancelled turn look like a completed one.
+    """
+    events: list[str] = []
+    session = _session(tmp_path, monkeypatch)
+    original = session._emit
+
+    def spy(event, data):
+        events.append(event)
+        original(event, data)
+
+    monkeypatch.setattr(session, "_emit", spy)
+    _drive(
+        session,
+        [
+            ("stopped", {"text": "partial", "cost": 1, "steps": 1}),
+        ],
+    )
+    assert "text_final" not in events, events
+
+
+def test_a_long_tool_output_does_not_become_a_long_label(tmp_path, monkeypatch):
+    """The row shows what the tool did, not a paste of everything it printed."""
+    session = _session(tmp_path, monkeypatch)
+    _drive(
+        session,
+        [
+            ("step_start", {"label": "Running code", "id": "call_1", "name": "_exec"}),
+            ("step_done", {"label": "Running code", "id": "call_1", "result": "x" * 5000}),
+        ],
+    )
+    row = session._turns[-1]["steps_rows"][0]
+    assert len(row["outcome"]) <= 121, len(row["outcome"])
+    assert row["outcome"].endswith("…"), row["outcome"][-5:]
+
+
 # ── step → cell tap-through ──────────────────────────────────────────────────
 
 
@@ -531,19 +658,23 @@ def test_the_gate_the_chat_binds_really_asks(tmp_path, monkeypatch):
 
 
 def test_the_chats_real_tools_are_executable(tmp_path, monkeypatch):
-    """The chat must build tools that mirascope can actually register.
+    """The chat must build tools that kani can actually register.
 
     The gate tests above mock build_tools, so without this the chat could hand
     run_turn bare functions — which crashes the first turn — and every other
     test would stay green.
     """
-    from mirascope.llm.tools.toolkit import AsyncToolkit
-
     session = _session(tmp_path, monkeypatch)
     tools = session._build_tools()
     assert tools, "the chat must contribute tools"
     # The exact construction ai_service performs.
-    toolkit = AsyncToolkit(tools=tools)
-    assert len(toolkit.tools_dict) == len(tools)
-    for tool in tools:
-        assert hasattr(tool, "name"), f"{tool} is not a decorated tool"
+    specs = ai_tools.tool_specs(tools)
+    assert len(specs) == len(tools)
+    functions = kani_backend.build_functions(specs)
+    assert len(functions) == len(specs)
+    for fn in functions:
+        assert isinstance(fn, AIFunction), f"{type(fn).__name__} is not an AIFunction"
+    # A bare function would raise here, which is what kani's do_function_call
+    # does when it looks a call up in self.functions by name.
+    names = {f.name for f in functions}
+    assert names == {t.__name__ for t in tools}

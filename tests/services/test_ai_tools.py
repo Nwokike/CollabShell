@@ -297,54 +297,74 @@ def test_clip_passes_tool_results_through_untouched():
     assert ai_tools._clip(result) is result
 
 
-# ── the tools must actually be mirascope tools ───────────────────────────────
+# ── the tools must be usable by the loop ────────────────────────────────────
 # This is the regression guard for a bug the rest of the suite could not see:
-# every other test hand-decorates its own @llm.tool stub, so a build_tools
-# that returned bare functions passed the whole suite and crashed on the first
-# real turn ("AttributeError: 'function' object has no attribute 'name'").
+# every other test calls the tool bodies directly, so a build_tools that
+# returned something kani could not consume passed the whole suite and crashed
+# on the first real turn.
 
 
-def test_build_tools_returns_decorated_tools():
-    """mirascope's AsyncToolkit reads `tool.name` to build its lookup table,
-    and llm.call(tools=...) only *casts* — it never converts. Bare functions
-    raise on the first model call."""
-    from mirascope import llm
+def test_the_real_tools_build_kani_functions():
+    """build_tools -> tool_specs -> build_functions must all work on the real
+    set. A break here is invisible until a user opens the chat."""
+    from kani import AIFunction
 
-    tools, _, _ = _tools()
-    for tool in tools:
-        assert isinstance(tool, llm.tool.__class__) or hasattr(tool, "name"), (
-            f"{getattr(tool, '__name__', tool)} is not a decorated tool"
-        )
-
-
-def test_build_tools_output_builds_a_toolkit_without_raising():
-    """The exact construction ai_service performs, using the real tools."""
-    from mirascope.llm.tools.toolkit import AsyncToolkit
+    from services import kani_backend
+    from services.ai_tools import tool_specs as build_tool_specs
 
     tools, _, _ = _tools()
-    toolkit = AsyncToolkit(tools=tools)  # raises on bare functions
-    assert len(toolkit.tools_dict) == len(tools)
-    for tool in tools:
-        assert tool.name in toolkit.tools_dict
+    specs = build_tool_specs(tools)
+    assert len(specs) == len(tools), "every tool must become a spec"
+    functions = kani_backend.build_functions(specs)
+    assert len(functions) == len(specs)
+    for fn in functions:
+        assert isinstance(fn, AIFunction), f"{type(fn).__name__} is not an AIFunction"
+    # kani looks a call up by name in its function dict, so the names must
+    # survive the whole way through.
+    assert {f.name for f in functions} == {t.__name__ for t in tools}
+
+
+def test_tool_specs_build_kani_functions():
+    """The exact construction the turn path performs, using the real tools."""
+    from kani import AIFunction
+
+    from services import kani_backend
+
+    tools, _, _ = _tools()
+    specs = ai_tools.tool_specs(tools)
+    assert len(specs) == len(tools)
+    functions = kani_backend.build_functions(specs)
+    assert len(functions) == len(specs)
+    for fn in functions:
+        assert isinstance(fn, AIFunction)
 
 
 def test_ask_confirm_is_absent_from_every_tool_schema():
     """A gate parameter would appear in the JSON schema the model reads."""
     tools, _, _ = _tools()
-    for tool in tools:
-        schema = str(tool.parameters)
-        assert "ask_confirm" not in schema, f"{tool.name} exposes ask_confirm"
+    for spec in ai_tools.tool_specs(tools):
+        schema = str(spec.parameters)
+        assert "ask_confirm" not in schema, f"{spec.name} exposes ask_confirm"
 
 
-def test_the_tool_docstring_is_the_description_mirascope_sends():
-    """mirascope sends `tool.description` as the model-visible spec, so it must
-    be built from the docstring and not silently fall back to the name."""
+def test_the_tool_docstring_is_the_description_kani_sends():
+    """kani sends `ToolSpec.desc` as the model-visible spec, so it must be built
+    from the docstring and not silently fall back to the name."""
     tools, _, _ = _tools()
-    for tool in tools:
-        assert tool.description, f"{tool.name} has no description"
-        assert (tool.__doc__ or "").strip(), (
-            f"{tool.name}: description must come from a real docstring, not the name"
+    for spec in ai_tools.tool_specs(tools):
+        assert spec.desc, f"{spec.name} has no desc"
+        body = next(t for t in tools if t.__name__ == spec.name)
+        assert (body.__doc__ or "").strip(), (
+            f"{spec.name}: desc must come from a real docstring, not the name"
         )
+
+
+def test_a_tool_whose_tool_result_text_is_empty_reads_as_empty():
+    from services.ai_tools import ToolResult, _as_text
+
+    assert _as_text(ToolResult(text="hello")) == "hello"
+    assert _as_text(ToolResult(text="")) == ""
+    assert _as_text("plain") == "plain"
 
 
 # ── prompt-injection defence independent of SKILL.md ────────────────────────

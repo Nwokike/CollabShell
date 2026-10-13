@@ -72,11 +72,57 @@ def _empty_turn() -> dict:
         "error_message": "",
         "stopped": False,
         "cost": 0,
+        "steps": 0,
         "model": "",
     }
 
 
 _CELL_REF_PREFIX = "Cells: "
+
+# A step row's consequence, kept short: the renderer appends it to the label,
+# and a tool that printed 2 KB must not become a 2 KB label. DDGS shows a
+# short outcome or a count instead.
+_OUTCOME_CAP = 120
+
+# A user-legible label per tool, verb first, the way DDGS renders step rows
+# (chat_agent.py:210-246). The renderer shows these verbatim, so there is no
+# decoration for it to strip back off later.
+_TOOL_LABELS = {
+    "_exec": "Running code",
+    "read_notebook": "Reading the notebook",
+    "read_terminal": "Reading the terminal",
+    "install_package": "Installing a package",
+    "list_variables": "Listing variables",
+    "read_file": "Reading a file",
+    "list_files": "Listing files",
+    "upload_file": "Uploading a file",
+    "write_cells": "Writing cells",
+    "list_notebook_tabs": "Listing notebook tabs",
+    "get_usage": "Checking resource usage",
+    "get_log": "Reading the session log",
+    "restart_kernel": "Restarting the kernel",
+    "stop_session": "Stopping the session",
+    "delete_file": "Deleting a file",
+}
+
+
+def _clip_outcome(text) -> str:
+    """A step row's consequence, one line and bounded."""
+    flat = " ".join(str(text or "").split())
+    if len(flat) <= _OUTCOME_CAP:
+        return flat
+    return flat[: _OUTCOME_CAP - 1].rstrip() + "…"
+
+
+def _pretty_label(name: str, args: dict | None = None) -> str:
+    """The step row's label: a verb phrase, and the thing it acts on when short."""
+    label = _TOOL_LABELS.get(name, f"Running {name}")
+    args = args or {}
+    detail = str(args.get("path") or args.get("package") or args.get("target") or "")
+    detail = " ".join(detail.split())
+    if detail and len(detail) <= 60:
+        return f"{label}: {detail}"
+    return label
 
 
 def _cell_refs(step: dict) -> list[str]:
@@ -536,22 +582,18 @@ class ChatSession:
             self._emit("error", {"kind": kind, "message": result.get("error", "")})
             return
 
-        for step in result.get("steps", []):
+        if result.get("cancelled"):
+            # One terminal event only: a stopped turn must not also render a
+            # finished answer with a cost line.
             self._emit(
-                "step_done",
+                "stopped",
                 {
-                    "label": step.get("name", ""),
-                    "id": step.get("id", ""),
-                    "result": step.get("result", ""),
-                    "error": step.get("error"),
-                    # write_cells echoes the ids it inserted so this row can
-                    # point back at the cells and hand them over to the user.
-                    "refs": _cell_refs(step),
+                    "text": result.get("text", ""),
+                    "cost": result.get("cost", 0),
+                    "steps": result.get("model_steps", 0),
                 },
             )
-
-        if result.get("cancelled"):
-            self._emit("stopped", {})
+            return
         self._emit(
             "text_final",
             {
@@ -564,11 +606,42 @@ class ChatSession:
     def _on_token(self, token: str) -> None:
         self._emit("text_partial", {"text": token})
 
-    def _on_tool_start(self, name: str, args: dict) -> None:
-        self._emit("step_start", {"label": name, "id": name})
+    def _on_tool_start(self, name: str, payload: dict) -> None:
+        args = payload.get("args") or {}
+        # A tool call means a new model round is about to start. Anything this
+        # round already said before the call ("let me check that…") is a
+        # preamble, not the answer, so it is dropped — the same thing DDGS does
+        # in its on_round_reset.
+        if self._current is not None:
+            self._current["text"] = ""
+        # The row is keyed by the tool_call_id, not the name: the same tool can
+        # be called twice in one turn and both rows must close on their own.
+        self._emit(
+            "step_start",
+            {
+                "label": _pretty_label(name, args),
+                "id": payload.get("id") or name,
+                "name": name,
+                "args": dict(args),
+            },
+        )
 
-    def _on_tool_done(self, name: str, args: dict) -> None:
-        pass
+    def _on_tool_done(self, name: str, payload: dict) -> None:
+        result = payload.get("result", "")
+        error = payload.get("error")
+        args = payload.get("args") or {}
+        data = {
+            # The same id the row was opened with.
+            "id": payload.get("id") or name,
+            "name": name,
+            "label": _pretty_label(name, args),
+            "result": result,
+            "images": payload.get("images", []),
+            # write_cells echoes the ids it inserted so this row can point
+            # back at the cells and hand them over to the user.
+            "refs": _cell_refs({"name": name, "result": result}),
+        }
+        self._emit("step_error" if error else "step_done", {**data, "error": error})
 
     def _build_tools(self) -> list:
         from services.ai_tools import build_tools
@@ -657,6 +730,20 @@ class ChatSession:
             self._confirm[1]["decision"] = decision
             self._confirm[0].set()
 
+    def _close_running_rows(self) -> None:
+        """Settle any step row still spinning, so no row is stuck forever.
+
+        A tool can open a row and then the turn ends before it closes — the
+        router dies, the user stops, the turn is cancelled. Leaving those
+        running is a ProgressRing the user waits on for nothing.
+        """
+        if self._current is None:
+            return
+        for row in self._current["steps_rows"]:
+            if row.get("state") == "running":
+                row["state"] = "error"
+                row["error"] = "did not finish"
+
     def _reveal_cell(self, cell_id: str) -> None:
         """Hand an assistant-written cell over to the user.
 
@@ -697,8 +784,10 @@ class ChatSession:
                 {
                     "id": data.get("id", ""),
                     "label": data.get("label", ""),
+                    "name": data.get("name", ""),
                     "state": "running",
                     "outcome": "",
+                    "images": [],
                     "error": None,
                     "refs": [],
                 }
@@ -706,20 +795,29 @@ class ChatSession:
         elif event in ("step_done", "step_error") and self._current is not None:
             rows = self._current["steps_rows"]
             for row in rows:
-                if row["id"] == data.get("id"):
-                    row["state"] = "error" if event == "step_error" else "done"
-                    row["outcome"] = str(data.get("result") or "")
-                    row["error"] = data.get("error")
-                    if data.get("refs"):
-                        row["refs"] = list(data["refs"])
-                    break
+                if row["id"] != data.get("id") and row["state"] != "running":
+                    continue
+                if row["id"] != data.get("id"):
+                    # An id mismatch with a row still spinning: the loop ended
+                    # without closing it (router dead, turn cancelled), so the
+                    # oldest running row is the one this result belongs to.
+                    continue
+                row["state"] = "error" if event == "step_error" else "done"
+                row["outcome"] = _clip_outcome(data.get("result") or "")
+                row["images"] = list(data.get("images") or [])
+                row["error"] = data.get("error")
+                if data.get("refs"):
+                    row["refs"] = list(data["refs"])
+                break
             else:
                 rows.append(
                     {
                         "id": data.get("id", ""),
                         "label": data.get("label", ""),
+                        "name": data.get("name", ""),
                         "state": "error" if event == "step_error" else "done",
-                        "outcome": str(data.get("result") or ""),
+                        "outcome": _clip_outcome(data.get("result") or ""),
+                        "images": list(data.get("images") or []),
                         "error": data.get("error"),
                         "refs": list(data.get("refs") or []),
                     }
@@ -729,14 +827,23 @@ class ChatSession:
             self._current["model"] = data.get("model", "")
             self._current["cost"] = data.get("cost", 0)
             self._current["partial"] = False
+            self._close_running_rows()
             self._persist_history()
         elif event == "stopped" and self._current is not None:
             self._current["stopped"] = True
             self._current["partial"] = False
+            # The work before the stop was still billed, so the turn carries
+            # its cost and step count instead of looking unanswered.
+            if data.get("text"):
+                self._current["text"] = str(data["text"])
+            self._current["cost"] = data.get("cost", 0)
+            self._current["steps"] = data.get("steps", 0)
+            self._close_running_rows()
         elif event == "error" and self._current is not None:
             self._current["error"] = data.get("kind", "unavailable")
             self._current["error_message"] = str(data.get("message") or "")
             self._current["partial"] = False
+            self._close_running_rows()
 
         if event in _TERMINAL_EVENTS:
             self._refresh_credits()

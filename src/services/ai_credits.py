@@ -4,7 +4,9 @@ Policy lives here so `ai_service.run_turn` stays a pure transport loop. The
 semantics are ported from DDGS's chat_agent (verified at
 DDGS/src/services/chat_agent.py:394-416 and :537-589):
 
-* **One credit per model step** — a streamed reply, or one tool round.
+* **One credit per model step** — one streamed model reply. A tool round is
+  NOT a step: kani yields a result message for those, and counting it would
+  bill two credits for a single model call.
 * **Soft metering.** A low balance never kills a running turn; the balance
   clamps at zero and the turn finishes. Only a zero balance blocks *starting*.
   The hold is best-effort and, once taken, may grow past the balance — that is
@@ -52,9 +54,10 @@ def credits_are_for_copy() -> str:
     run_metered_turn actually charges.
     """
     return (
-        f"Each Assistant model step costs {credit_word(COST_STEP)}. "
-        "A reply or a tool call both count as one step. Search, uploading "
-        "files, and everything else in the app is free."
+        f"Each Assistant reply costs {credit_word(COST_STEP)}. A reply that "
+        "calls a tool is still one step — the tool runs as part of the same "
+        "reply. Search, uploading files, and everything else in the app is "
+        "free."
     )
 
 
