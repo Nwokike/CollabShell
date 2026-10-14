@@ -62,6 +62,23 @@ def _publish_status(status: str, port: int | None) -> None:
     ):
         state.ai_router_status = status
         state.ai_router_port = port
+        _wake_watchdog()
+
+
+def _wake_watchdog() -> None:
+    """Nudge the status loop so a transition shows up now, not in 3 seconds.
+
+    Imported lazily and guarded: the loop is optional, and the router must never
+    depend on the UI being up.
+    """
+    try:
+        from services.router_watchdog import current_watchdog
+
+        watchdog = current_watchdog()
+    except Exception:
+        return
+    if watchdog is not None:
+        watchdog.wake()
 
 
 async def _probe_existing_router() -> int | None:
@@ -157,6 +174,16 @@ def stop_router() -> None:
     except Exception:
         pass
     _publish_status("stopped", None)
+
+
+def owns_embedded() -> bool:
+    """Whether the router currently running was embedded by this app.
+
+    Only an embedded router may be stopped or restarted by the user; one the
+    user started by hand is attached to, and must be left alone.
+    """
+    with _router_lock:
+        return _router_server is not None
 
 
 def _mark_router_failed() -> None:

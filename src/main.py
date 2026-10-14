@@ -279,6 +279,13 @@ class AppController:
         # Unlock from the cached token, then start the hourly re-check.
         page.run_task(self.premium_service.load_local)
         self.premium_service.start_reconcile_loop()
+        # The router status loop. Without it `ai_router_status` is written and
+        # nothing reads it: the header pill is built once and would say
+        # "Loading models…" forever, however the router's health changed.
+        from services.router_watchdog import RouterStatusWatchdog
+
+        self.router_watchdog = RouterStatusWatchdog(page)
+        self.router_watchdog.start()
 
         async def _init_cli():
             try:
@@ -804,6 +811,8 @@ class AppController:
         from services import router as router_service
 
         atexit.register(router_service.shutdown)
+        # The status loop rides the same exit path as the router it watches.
+        atexit.register(self.router_watchdog.stop)
 
         async def on_disconnect(e=None):
             # The chat's turn runs as a task on this page's loop; without this

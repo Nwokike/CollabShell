@@ -42,6 +42,32 @@ _model_failed_until: dict[str, float] = {}
 # ── tier ──────────────────────────────────────────────────���────────────────
 
 
+def router_url_for_read() -> str:
+    """The base URL a catalog read should use, in priority order.
+
+    1. the user's explicit override, when there is one;
+    2. the port the app actually attached to;
+    3. the documented default.
+
+    This precedence is why a saved override beats the app's own router: someone
+    pointing the app at a remote router means it. It also fixes a live bug — the
+    pill's Refresh passed the raw override, which is empty whenever the router
+    auto-started, so the refresh afterwards aimed at nothing.
+    """
+    from core import constants
+    from core.state import state
+
+    override = str(getattr(state, "ai_router_url", "") or "").strip()
+    if override:
+        return override
+    from services import router
+
+    live = router.current_url()
+    if live:
+        return live
+    return constants.AI_DEFAULT_ROUTER_URL
+
+
 def tier_of(entry: dict) -> str:
     """The gateway's published tier for a row. Missing means "low".
 

@@ -551,3 +551,62 @@ def test_premium_render_takes_the_recovery_id_as_an_argument():
     )
     assert "storage.data" not in src, "StorageService has no .data — read via the service"
     assert "recovery" in src, "the recovery id must still be surfaced"
+
+
+# ── the live router row ─────────────────────────────────────────────────────
+
+
+def test_ai_section_lists_the_router_row():
+    from screens.settings.ai_section import build_ai_section
+
+    page, state, services, _ = _stubs()
+    column = build_ai_section(page, state, services)
+    texts = _flatten_texts(column)
+    assert "Router" in texts, texts
+    assert "Start router" in texts, texts
+
+
+def test_router_status_ready_names_its_port():
+    from screens.settings.ai_section import _router_status_line
+
+    class _S:
+        ai_router_status = "ready"
+        ai_router_port = 8083
+
+    line = _router_status_line(_S())
+    assert "8083" in line, line
+    assert "Running" in line, line
+
+
+def test_router_status_unavailable_says_what_start_does():
+    from screens.settings.ai_section import _router_status_line
+
+    class _S:
+        ai_router_status = "unavailable"
+        ai_router_port = None
+
+    line = _router_status_line(_S())
+    assert "Start it" in line, line
+    assert "unavailable" not in line.lower(), line
+
+
+def test_router_status_stopped_is_honest():
+    from screens.settings.ai_section import _router_is_up, _router_status_line
+
+    class _S:
+        ai_router_status = "stopped"
+        ai_router_port = None
+
+    assert "stopped" in _router_status_line(_S()).lower()
+    assert "Start it" in _router_status_line(_S())
+    assert _router_is_up(_S()) is False
+
+
+def test_router_is_up_only_while_ready():
+    from screens.settings.ai_section import _router_is_up
+
+    class _S:
+        ai_router_status = "ready"
+        ai_router_port = 8082
+
+    assert _router_is_up(_S()) is True

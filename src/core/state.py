@@ -80,8 +80,9 @@ class AppState:
     # makes the assistant work out of the box.
     ai_router_url: str = ""
     ai_help: bool = True  # inject the bundled SKILL.md into the system prompt
-    # Router lifecycle, owned by services/router.py. Written only on a real
-    # change, so the 3-second status watchdog never repaints for nothing.
+    # Router lifecycle, owned by services/router.py and carried to the UI by
+    # services/router_watchdog.py. Written only on a real change, so the status
+    # loop never repaints for nothing.
     # One of: ready | stopped | unavailable | starting
     ai_router_status: str = "starting"
     ai_router_port: int | None = None

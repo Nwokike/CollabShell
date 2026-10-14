@@ -239,6 +239,12 @@ def test_picking_a_model_persists_it(tmp_path, monkeypatch):
 
 
 def test_the_empty_model_menu_explains_itself(tmp_path, monkeypatch):
+    """An empty catalog still says what is happening and offers real help.
+
+    The default router status is `starting`, so the copy is the "still finding
+    out" one — and the action is Start router, which is the only thing that
+    unblocks a router that is not up yet.
+    """
     from services import model_catalog
 
     monkeypatch.setattr(model_catalog, "pickable_models", list)
@@ -246,8 +252,8 @@ def test_the_empty_model_menu_explains_itself(tmp_path, monkeypatch):
     pill = _find(session.view, ft.PopupMenuButton)
     assert pill.items, "an empty catalog must still offer something"
     text = " ".join(_texts(pill))
-    assert "No models reported by the router" in text, text
-    assert "Refresh" in text, "the empty state must offer the action that helps"
+    assert "Looking for available models" in text, text
+    assert "Start router" in text, "the empty state must offer the action that helps"
 
 
 # ── the FAB recipe ───────────────────────────────────────────────────────────

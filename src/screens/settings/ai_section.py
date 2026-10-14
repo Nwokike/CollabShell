@@ -61,6 +61,34 @@ def _effective_router_url(state) -> str:
     return router.current_url()
 
 
+def _router_is_up(state) -> bool:
+    """Whether the app believes a router is answering, without probing.
+
+    The watchdog owns liveness (`services/router_watchdog`); this only reads
+    what it published, so opening Settings costs no socket of its own.
+    """
+    return str(getattr(state, "ai_router_status", "") or "") == "ready"
+
+
+def _router_status_line(state) -> str:
+    """One honest line about the router: where it is, or why it isn't.
+
+    Never a bare state name — "unavailable" means nothing to a user, while
+    "No local model router is running" tells them what the Start button does.
+    """
+    status = str(getattr(state, "ai_router_status", "") or "")
+    port = getattr(state, "ai_router_port", None)
+    if status == "ready" and port:
+        return f"Running on 127.0.0.1:{port} — replies are being served."
+    if status == "stopped":
+        return "The local model router stopped. Start it to use the assistant."
+    if status == "unavailable":
+        return "No local model router is running. Start it to use the assistant."
+    if status == "starting":
+        return "Looking for a local model router…"
+    return "Router status unknown."
+
+
 def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     """The ASSISTANT settings block."""
     credits = getattr(services, "credits", None)
@@ -134,6 +162,48 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             )
         page.update()
 
+    # The live router row: what the app is actually talking to, and the one
+    # action that makes it talk to something. A user request must be verified
+    # (ensure_router(verify=True)), because a remembered dead port would
+    # otherwise make this button look inert.
+    router_status_text = ft.Text(
+        _router_status_line(state),
+        size=tokens.FONT_SM,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+    )
+
+    async def _start_router(ev=None):
+        """Start (or re-attach), then re-read the status.
+
+        `verify=True` because this is a user's tap: a port the app still holds
+        but nothing answers on must be re-checked, or the button looks inert.
+        """
+        from services import router
+
+        start_router_button.disabled = True
+        router_status_text.value = "Starting router…"
+        router_status_text.color = ft.Colors.ON_SURFACE_VARIANT
+        page.update()
+        try:
+            await router.ensure_router(verify=True)
+        except Exception as ex:
+            logger.warning("Start router failed: %s", ex)
+        await _reload_router_status()
+
+    start_router_button = ft.TextButton(
+        "Start router",
+        on_click=lambda ev: page.run_task(_start_router),
+    )
+
+    async def _reload_router_status():
+        """Re-read the router's own state and repaint the row."""
+        start_router_button.disabled = _router_is_up(state)
+        router_status_text.value = _router_status_line(state)
+        try:
+            page.update()
+        except Exception:
+            pass
+
     # The override field: what is shown is what the app is actually using right
     # now — either the saved override, or the port the router landed on. An
     # empty field means "no override", which is the normal path (the app probes
@@ -162,7 +232,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                 configure_provider(url)
             except Exception as ex:
                 logger.warning("Provider reconfiguration failed: %s", ex)
-        page.update()
+        await _reload_router_status()
 
     router_field.on_submit = lambda ev: page.run_task(_save_router)
 
@@ -236,6 +306,16 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                              trailing=None),
                         ft.Container(
                             content=router_field,
+                            padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        _row(
+                            "Router",
+                            "The local model router that answers the assistant.",
+                            trailing=start_router_button,
+                        ),
+                        ft.Container(
+                            content=router_status_text,
                             padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
                         ),
                         ft.Divider(height=tokens.SPACE_SM),

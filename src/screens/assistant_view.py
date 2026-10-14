@@ -444,12 +444,45 @@ class ChatSession:
         except Exception:
             logger.debug("model pick failed", exc_info=True)
 
+    def refresh_model_chip(self) -> None:
+        """Rebuild the header pill, but only when it actually changed.
+
+        The pill is a static control inside an imperative View, so nothing
+        re-renders it when the router's status moves. Rebuilding it per token
+        would construct a whole control tree for a label that almost never
+        moves, so this short-circuits on a signature first.
+
+        Ported from DDGS's `chat_screen.py` refresh_model_chip.
+        """
+        from components.model_pill import build_model_pill, pill_state
+
+        try:
+            state = pill_state()
+            signature = (
+                state.label,
+                state.active,
+                state.status,
+                state.selected,
+            )
+            if signature == getattr(self, "_pill_signature", None):
+                return
+            self._pill_signature = signature
+            new_chip = build_model_pill(self.page, on_pick=self._pick_model)
+            self.model_chip.content = new_chip.content
+            self.model_chip.bgcolor = new_chip.bgcolor
+            self.model_chip.items = new_chip.items
+            self.model_chip.tooltip = new_chip.tooltip
+            self.model_chip.update()
+        except Exception:
+            logger.debug("model chip refresh failed", exc_info=True)
+
     def _rebuild_header_controls(self) -> None:
         """Swap the credits chip and model pill for freshly-built ones.
 
-        The pill's label is derived from the catalog, so after a pick (or a
-        balance change) it has to be rebuilt rather than mutated in place.
+        The pill's label is derived from the router's status, so after a pick
+        (or a status change) it has to be rebuilt rather than mutated in place.
         """
+        self.refresh_model_chip()
         try:
             self.credits_chip.bgcolor = ft.Colors.with_opacity(
                 0.1, self._credit_color()

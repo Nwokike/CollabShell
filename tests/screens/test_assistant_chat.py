@@ -867,3 +867,57 @@ def test_the_chats_real_tools_are_executable(tmp_path, monkeypatch):
     # does when it looks a call up in self.functions by name.
     names = {f.name for f in functions}
     assert names == {t.__name__ for t in tools}
+
+
+# ── the pill's refresh hook ─────────────────────────────────────────────────
+
+
+def test_refresh_model_chip_short_circuits_on_an_unchanged_signature(
+    tmp_path, monkeypatch
+):
+    """A status tick must not rebuild the header pill.
+
+    The pill is a static control in an imperative View, and rebuilding it on
+    every token would construct a whole control tree for a label that almost
+    never moves.
+    """
+    from components import model_pill
+
+    session = _session(tmp_path, monkeypatch)
+    rebuilt = []
+    monkeypatch.setattr(session, "model_chip", _ChipSpy(rebuilt))
+
+    # Seed the signature from the current state, so the first call matches it.
+    state = model_pill.pill_state()
+    session._pill_signature = (
+        state.label,
+        state.active,
+        state.status,
+        state.selected,
+    )
+
+    session.refresh_model_chip()
+    assert rebuilt == [], "an unchanged signature must not rebuild"
+
+    # A different label must rebuild.
+    session._pill_signature = ("Offline", False, "unavailable", "auto")
+    session.refresh_model_chip()
+    assert rebuilt == ["built"], rebuilt
+
+
+class _ChipSpy:
+    """Stands in for the pill: records that a rebuild happened, nothing else."""
+
+    def __init__(self, rebuilt):
+        self._rebuilt = rebuilt
+
+    @property
+    def content(self):
+        return None
+
+    @content.setter
+    def content(self, value):
+        self._rebuilt.append("built")
+
+    def update(self):
+        pass

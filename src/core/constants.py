@@ -72,12 +72,21 @@ ROUTER_BASE_PORT = 8082
 ROUTER_SPAN = 10  # probe 8082..8092 before embedding
 ROUTER_PROBE_TIMEOUT = 0.5  # a closed port answers fast
 ROUTER_HEALTH_TIMEOUT = 2.0  # a port we hold may be slow but alive
-# A full-scan miss is remembered this long: the status watchdog ticks every 3s
-# and each miss would otherwise pay a serial 11-port scan of refused sockets.
+# A full-scan miss is remembered this long: the status watchdog ticks every
+# few seconds and each miss would otherwise pay a serial 11-port scan of
+# refused sockets.
 PROBE_MISS_TTL = 30.0
 # Cool-off after a router failure, so the UI stops claiming a loopback that
 # just died is ready.
 ROUTER_STICKY_COOLDOWN = 60.0
+# The status loop that keeps the header pill and Settings honest. Foreground
+# ticks are short because that is where a turning point is visible; a
+# backgrounded window's state is re-read on resume via the wake event.
+ROUTER_STATUS_INTERVAL_S = 3.0
+ROUTER_STATUS_INTERVAL_BG_S = 30.0
+# How long a "start the router" request may take before the UI says it failed.
+# Embedding downloads the engine on a cold cache, which is the slow path.
+ROUTER_START_TIMEOUT_S = 60.0
 # router.kiri.ng answers 403 to default library user-agents, so the engine
 # could never be fetched without this header.
 ENGINE_USER_AGENT = f"CollabShell/{APP_VERSION}"
