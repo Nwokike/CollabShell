@@ -485,6 +485,52 @@ def test_a_failing_tool_body_becomes_an_error_payload():
     assert result["text"], result
 
 
+def test_a_failing_tool_bills_two_steps():
+    """A tool that fails costs one call to make it and one to answer from it.
+
+    The number is the user-visible contract, so it is pinned. It also guards
+    the `retry_attempts=1` choice: kani's own failure path
+    (`handle_function_call_exception`, `kani/kani.py:618-651`) forces another
+    model turn on an error, gated by `attempt < retry_attempts`. At
+    `retry_attempts=1` the first error is already at attempt 1, so no extra
+    round is spent and the two paths cost the same — raise it and this test
+    starts failing, which is the point.
+
+    The reason we catch the exception inside `tool_specs` rather than letting
+    kani do it is NOT billing: it is that our step row needs the error, and
+    kani's path would hand the model a bare `str(original)` while the row
+    closed with no error at all. That is pinned separately by
+    `test_a_failing_tool_body_becomes_an_error_payload`.
+    """
+    _fresh_calls()
+
+    async def broken_tool() -> str:
+        """Always fails."""
+        raise RuntimeError("kernel gone")
+
+    result = _run(_turn(_specs([broken_tool])))
+    assert result["model_steps"] == 2, result
+    assert len(_RouterState.calls) == 2, _RouterState.calls
+
+
+def test_a_tool_that_fails_repeatedly_bills_one_step_per_round():
+    """Two tool rounds that both fail: one call to make each, one to answer.
+
+    The same rule applied per round, so the arithmetic has to hold when the
+    failure repeats rather than only on the first one.
+    """
+    _fresh_calls()
+    _RouterState.args["read_cell"] = {"cell_id": "c7"}
+
+    async def broken_tool(cell_id: str) -> str:
+        """Always fails."""
+        raise RuntimeError("kernel gone")
+
+    result = _run(_turn(_specs([broken_tool])))
+    assert result["model_steps"] == 2, result
+    assert result["text"], result
+
+
 def test_the_gate_is_not_in_the_schema():
     """ask_confirm is bound into the closure, never a parameter.
 

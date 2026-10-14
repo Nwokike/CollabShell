@@ -147,10 +147,14 @@ def tool_specs(
                 payload["result"] = text
                 return text
             except Exception as ex:
-                # A tool body that raises would surface as a kani
-                # WrappedCallException and cost a retry. Our own contract is
-                # an error payload the model reads instead — the same text goes
-                # to the step row, so the UI shows what the model was told.
+                # A tool body that raises would reach kani as a
+                # WrappedCallException, and kani would put its own error text
+                # in the transcript and force another model turn
+                # (`handle_function_call_exception`, kani/kani.py:618-651,
+                # gated by `attempt < retry_attempts`, so at the 1 we pass it
+                # costs no extra round). We catch it here for the step row:
+                # our payload's `error` is what turns the row red, and kani's
+                # path would close it with none.
                 logger.debug("tool %s raised: %r", spec.name, ex)
                 text = f"(the {spec.name} tool failed: {ex})"
                 payload["result"] = text
@@ -179,8 +183,13 @@ def build_functions(specs: list[ToolSpec]) -> list[AIFunction]:
     matching a step row that is opened here to the row that closes when the
     batch finishes.
 
-    `auto_truncate` is paragraph-aware in kani — a blind slice used to cut tool
-    JSON mid-token.
+    `auto_truncate` is kani's own, and it is only PARTLY paragraph-aware: kani
+    tries dividers in order `"\n\n"`, `"\n"`, `". "`, `", "`, `" "`
+    (`kani/kani.py:706`) and falls back to a hard chop of `max_len - 3` chars
+    plus `"..."` (`kani/kani.py:727-731`). So it can still cut tool JSON at a
+    comma, and a very long single chunk mid-token. It is still better than our
+    old blind slice, which had no dividers at all — but the guarantee is "cuts
+    sooner at a natural boundary", not "never cuts a payload".
     """
     from services.ai_tools import TOOL_OUTPUT_CAP
 
@@ -434,6 +443,9 @@ async def run_turn(
             system_prompt=system_prompt or None,
             chat_history=list(history_msgs),
             functions=None if at_cap else functions,
+            # One attempt only. A higher number lets kani spend another model
+            # round re-asking after a tool error, which is a billable step the
+            # user did not choose to buy for a bad argument.
             retry_attempts=1,
         )
         # Every candidate starts from its own answer, not from a dead one's

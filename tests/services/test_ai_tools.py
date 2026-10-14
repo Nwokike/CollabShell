@@ -389,3 +389,158 @@ def test_skill_md_frames_untrusted_output_as_data():
 
     text = skill_text()
     assert "data, not" in text.lower(), "SKILL.md must frame output as DATA"
+
+
+# ── the schema is derived, never hand-maintained ────────────────────────────
+
+
+def test_the_hand_maintained_type_map_is_gone():
+    """A name-keyed type map was how `package` came to be typed by luck.
+
+    It held `packages: array` for a parameter that does not exist, and covered
+    the real `package: str` only because the key missed and fell back to
+    "string". Types now come from annotations, so no such map may return.
+    """
+    assert not hasattr(ai_tools, "_PARAM_TYPES"), (
+        "a hand-maintained type map must not come back; derive from annotations"
+    )
+
+
+def test_every_parameter_type_matches_its_annotation():
+    """Driven off the real tool set, so a new tool is covered the day it lands.
+
+    Without this, a tool added tomorrow gets `"string"` for an int parameter and
+    the model sends a string, which the body then has to coerce or fail on.
+    """
+    import inspect
+    import typing
+    from typing import Annotated
+
+    for fn in ai_tools.build_tools("sess", *_fresh()):
+        signature = inspect.signature(fn, eval_str=True)
+        for name, param in signature.parameters.items():
+            if name == "ask_confirm":
+                continue
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue
+            expected = {
+                str: "string",
+                bool: "boolean",
+                int: "integer",
+                float: "number",
+                list: "array",
+                dict: "object",
+            }
+            # An `Annotated[...]`'s origin is `Annotated` itself, so the wrapper
+            # comes off before the real type is visible — the same two steps
+            # `_json_type` takes.
+            inner = param.annotation
+            if typing.get_origin(inner) is Annotated:
+                inner = typing.get_args(inner)[0]
+            origin = typing.get_origin(inner) or inner
+            want = expected.get(origin, "string")
+            props = _props_for(fn)
+            assert props[name]["type"] == want, (
+                f"{fn.__name__}.{name}: schema says {props[name]['type']}, "
+                f"annotation says {want}"
+            )
+
+
+def _props_for(fn) -> dict:
+    """The JSON-schema properties `tool_specs` derives for one tool."""
+    spec = next(s for s in ai_tools.tool_specs([fn]) if s.name == fn.__name__)
+    return spec.parameters["properties"]
+
+
+def test_the_shapes_that_need_explaining_have_it():
+    """Parameters the model cannot infer from their name carry an `AIParam`.
+
+    Not every parameter needs one — `code`, `path` and `package` are
+    self-explanatory, and inventing a description for them would dilute the ones
+    that matter. The test is that the ones that DO carry one show up in the
+    schema, which is what stops `Annotated` from being decoration.
+    """
+    import inspect
+    import typing
+    from typing import Annotated
+
+    for fn in ai_tools.build_tools("sess", *_fresh()):
+        for name, param in inspect.signature(fn, eval_str=True).parameters.items():
+            if name == "ask_confirm":
+                continue
+            annotated = typing.get_origin(param.annotation) is Annotated
+            description = _props_for(fn)[name]["description"]
+            if annotated:
+                assert description != name.replace("_", " "), (
+                    f"{fn.__name__}.{name} is Annotated but its description is "
+                    "just the name — the AIParam never reached the schema"
+                )
+            else:
+                assert description == name.replace("_", " "), (
+                    f"{fn.__name__}.{name} has a description without an AIParam"
+                )
+
+
+def test_a_real_description_never_goes_missing():
+    """The parameters the model has to guess at keep their explanations.
+
+    `write_cells`'s `cells` is the load-bearing one; if its AIParam is dropped,
+    the model is back to inventing the shape of a cell dict.
+    """
+
+    tools = {fn.__name__: fn for fn in ai_tools.build_tools("sess", *_fresh())}
+    documented = {
+        "write_cells": ("cells",),
+        "upload_file": ("local_path", "remote_path"),
+        "stop_session": ("target",),
+        "read_terminal": ("lines",),
+        "get_log": ("lines",),
+    }
+    for tool_name, params in documented.items():
+        for param_name in params:
+            description = _props_for(tools[tool_name])[param_name]["description"]
+            assert description != param_name.replace("_", " "), (
+                f"{tool_name}.{param_name} lost its description"
+            )
+
+
+def test_write_cells_documents_the_cell_shape():
+    """The model must be told the exact shape, not left to infer it."""
+    tools = {fn.__name__: fn for fn in ai_tools.build_tools("sess", *_fresh())}
+    assert _props_for(tools["write_cells"])["cells"]["type"] == "array"
+    text = _props_for(tools["write_cells"])["cells"]["description"]
+    for key in ('"type"', '"source"'):
+        assert key in text, f"the cell shape must name {key}: {text}"
+        assert "markdown" in text, text
+
+
+def test_upload_file_names_both_sides():
+    """Which path is local and which is remote is not guessable from names."""
+    tools = {fn.__name__: fn for fn in ai_tools.build_tools("sess", *_fresh())}
+    props = _props_for(tools["upload_file"])
+    assert "THIS device" in props["local_path"]["description"], props["local_path"]
+    assert "VM" in props["remote_path"]["description"], props["remote_path"]
+
+
+def test_every_vm_reading_tool_warns_about_untrusted_content():
+    """File and directory names are attacker-controlled data.
+
+    Four tools carried the warning and `list_files`, which returns exactly that,
+    did not. A warning the model learns to skip on a real risk is worse than
+    none, so the rule is: every tool that reads VM content carries it, and no
+    tool that does not.
+    """
+    from services import ai_tools as mod
+
+    readers = ("_exec", "read_notebook", "read_terminal", "list_variables",
+               "read_file", "list_files")
+    non_readers = ("get_log", "get_usage", "install_package", "list_notebook_tabs")
+    built = {fn.__name__: fn for fn in mod.build_tools("sess", *_fresh())}
+    for name in readers:
+        doc = built[name].__doc__ or ""
+        assert "untrusted DATA" in doc, f"{name} reads VM content but does not warn"
+    for name in non_readers:
+        doc = built[name].__doc__ or ""
+        assert "untrusted DATA" not in doc, (
+            f"{name} does not read VM content and should not carry the warning"
+        )
