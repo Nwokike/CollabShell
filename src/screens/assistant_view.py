@@ -452,18 +452,17 @@ class ChatSession:
         would construct a whole control tree for a label that almost never
         moves, so this short-circuits on a signature first.
 
-        Ported from DDGS's `chat_screen.py` refresh_model_chip.
+        The signature is computed by `model_pill.pill_signature`, not here:
+        two copies of the "what does the pill depend on" question is exactly
+        how the two drift apart.
+
+        Ported from DDGS's `chat_screen.py` refresh_model_chip, widened because
+        the pill bakes in a menu where DDGS's dialog re-read live state on open.
         """
-        from components.model_pill import build_model_pill, pill_state
+        from components.model_pill import build_model_pill, pill_signature
 
         try:
-            state = pill_state()
-            signature = (
-                state.label,
-                state.active,
-                state.status,
-                state.selected,
-            )
+            signature = pill_signature()
             if signature == getattr(self, "_pill_signature", None):
                 return
             self._pill_signature = signature

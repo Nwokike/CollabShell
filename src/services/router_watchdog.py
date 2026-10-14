@@ -61,30 +61,58 @@ class RouterStatusWatchdog:
     # ── lifecycle ───────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Begin observing. Safe to call twice: the running loop is kept."""
+        """Begin observing. Safe to call twice: the running loop is kept.
+
+        Starting a second instance would otherwise orphan the first loop —
+        still ticking, no longer reachable through `current_watchdog()`, and
+        still holding a page. The previous one is stopped first.
+        """
         global _active
         if self._task is not None and not self._task.done():
             return
+        previous = _active
+        if previous is not None and previous is not self:
+            previous.stop()
         self._wake = asyncio.Event()
         self._task = asyncio.ensure_future(self._loop())
         _active = self
         logger.debug("Router status watchdog started")
 
     def stop(self) -> None:
+        """Stop observing and drop the page.
+
+        The page is released explicitly: the loop holds it strongly, and a
+        reference kept after the view is closed is exactly the kind of leak
+        that keeps a whole screen tree alive. `task.cancel()` is best-effort —
+        from atexit the loop may already be closed, in which case there is
+        nothing left to cancel and that is not an error.
+        """
         global _active
         if _active is self:
             _active = None
         task, self._task = self._task, None
+        self._page = None
         if task is not None and not task.done():
-            task.cancel()
+            try:
+                task.cancel()
+            except Exception:
+                logger.debug("watchdog cancel failed", exc_info=True)
 
     def wake(self) -> None:
         """Re-read now instead of at the next tick.
 
         A turn that just embedded a router should not wait up to 3 seconds for
         its own header to notice.
+
+        Callable from any thread, and guarded: `router._publish_status` reaches
+        this from `stop_router()`, which is also an atexit handler, and
+        `asyncio.Event.set` is only safe on the loop that owns it.
         """
-        self._wake.set()
+        event = self._wake
+        try:
+            event.set()
+        except Exception:
+            logger.debug("watchdog wake failed", exc_info=True)
 
     def set_background(self, background: bool) -> None:
         """Backgrounded windows tick slowly; the resume path wakes the loop."""
@@ -96,9 +124,47 @@ class RouterStatusWatchdog:
     # ── the loop ────────────────────────────────────────────────────────────
 
     async def _loop(self) -> None:
+        from core.state import state
         from services import router
 
         while True:
+            # Probe first, then wait: waiting first delays the very first
+            # observation by a full interval, which is exactly the window in
+            # which the user is looking at a pill that says nothing.
+            try:
+                status, port = await router.probe_router()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # A probe that raises is a probe that learned nothing: the
+                # previous answer stands until the next tick.
+                logger.debug("Router status probe failed: %r", exc)
+                status = port = None
+            else:
+                current = (status, port)
+                if self._last is None:
+                    # The first observation is compared against what the app
+                    # believes right now, not against nothing: the boot default
+                    # is "starting", and a router that is already up must
+                    # correct it rather than wait for the app to notice.
+                    believed = (
+                        str(getattr(state, "ai_router_status", "") or ""),
+                        getattr(state, "ai_router_port", None),
+                    )
+                else:
+                    believed = self._last
+                if current != believed:
+                    logger.info("AI router status: %s (port %s)", status, port)
+                    self._last = current
+                    # Publishing IS the point: without it a router killed by
+                    # something other than this app never moves the screens,
+                    # because nothing else writes the state.
+                    try:
+                        router._publish_status(status, port)
+                    except Exception:
+                        logger.debug("status publish failed", exc_info=True)
+                    self._notify()
+
             interval = (
                 constants.ROUTER_STATUS_INTERVAL_BG_S
                 if self._background
@@ -109,27 +175,6 @@ class RouterStatusWatchdog:
             except TimeoutError:
                 pass
             self._wake.clear()
-
-            try:
-                status, port = await router.probe_router()
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                # A probe that raises is a probe that learned nothing: the
-                # previous answer stands until the next tick.
-                logger.debug("Router status probe failed: %r", exc)
-                continue
-
-            if (status, port) == self._last:
-                continue
-            changed = self._last is not None
-            self._last = (status, port)
-            if not changed:
-                # The first tick only seeds the baseline: publishing here would
-                # paint a state the user never watched change.
-                continue
-            logger.info("AI router status: %s (port %s)", status, port)
-            self._notify()
 
     def _notify(self) -> None:
         """Tell the visible pill to re-read. No page, no nudge, no error."""

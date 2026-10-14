@@ -169,10 +169,24 @@ def test_the_model_selector_is_a_dropdown_menu_not_a_dialog(tmp_path, monkeypatc
     assert pill.menu_position == ft.PopupMenuPosition.UNDER
 
 
+def _router_ready(monkeypatch):
+    """Make the pill believe a router is serving.
+
+    The pill reads the real `core.state` singleton, not the session's own state
+    object — so a session built over a fake state would still see "starting"
+    and correctly refuse to list models.
+    """
+    from core.state import state
+
+    monkeypatch.setattr(state, "ai_router_status", "ready")
+    monkeypatch.setattr(state, "ai_router_port", 8083)
+
+
 def test_the_model_dropdown_lists_the_routers_models(tmp_path, monkeypatch):
     """Items come from the catalog, with auto first — nothing hardcoded."""
     from services import model_catalog
 
+    _router_ready(monkeypatch)
     monkeypatch.setattr(
         model_catalog,
         "pickable_models",
@@ -207,6 +221,7 @@ def test_model_rows_carry_their_tier(tmp_path, monkeypatch):
     information when you cannot see it."""
     from services import model_catalog
 
+    _router_ready(monkeypatch)
     monkeypatch.setattr(
         model_catalog,
         "pickable_models",

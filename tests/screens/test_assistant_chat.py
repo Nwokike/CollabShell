@@ -887,22 +887,57 @@ def test_refresh_model_chip_short_circuits_on_an_unchanged_signature(
     rebuilt = []
     monkeypatch.setattr(session, "model_chip", _ChipSpy(rebuilt))
 
-    # Seed the signature from the current state, so the first call matches it.
-    state = model_pill.pill_state()
-    session._pill_signature = (
-        state.label,
-        state.active,
-        state.status,
-        state.selected,
-    )
+    # Seed from the pill's own signature, so the first call matches it exactly.
+    session._pill_signature = model_pill.pill_signature()
 
     session.refresh_model_chip()
     assert rebuilt == [], "an unchanged signature must not rebuild"
 
-    # A different label must rebuild.
-    session._pill_signature = ("Offline", False, "unavailable", "auto")
+    # A different one must rebuild.
+    session._pill_signature = ("Offline", False, "unavailable", "auto", "", "Start router", ())
     session.refresh_model_chip()
     assert rebuilt == ["built"], rebuilt
+
+
+def test_refresh_model_chip_rebuilds_when_only_the_menu_changed(
+    tmp_path, monkeypatch
+):
+    """A catalog change with an unchanged label must still rebuild the items.
+
+    The pill bakes its menu in, so a label-only signature would leave a stale
+    dropdown: the rows shown would be from before the catalog moved.
+    """
+    from components import model_pill
+    from core.state import state
+    from services import model_catalog
+
+    # The pill reads the real singleton, and only a serving router's rows are
+    # baked into the menu.
+    monkeypatch.setattr(state, "ai_router_status", "ready")
+    monkeypatch.setattr(state, "ai_router_port", 8083)
+
+    session = _session(tmp_path, monkeypatch)
+    rebuilt = []
+    monkeypatch.setattr(session, "model_chip", _ChipSpy(rebuilt))
+
+    rows = [
+        {
+            "id": "auto",
+            "status": "active",
+            "latency_ms": 10,
+            "endpoint_type": "chat.completion",
+            "rate_hint": {"tier": "high", "label": "high tier"},
+        }
+    ]
+    model_catalog._catalog = []
+    model_catalog._catalog_fetched_at = 1.0
+    session._pill_signature = model_pill.pill_signature()
+    rebuilt.clear()
+
+    # Same label (Auto, ready), different rows.
+    model_catalog._catalog = model_catalog._normalise(rows)
+    session.refresh_model_chip()
+    assert rebuilt == ["built"], "a changed menu must rebuild even if the label did not"
 
 
 class _ChipSpy:

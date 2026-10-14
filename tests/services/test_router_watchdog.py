@@ -112,7 +112,21 @@ def _run_ticks(
 # ── the loop's own rules ────────────────────────────────────────────────────
 
 
-def test_a_transition_notifies_open_session(monkeypatch, probe, instant_event):
+def _seed_state(status="starting", port=None):
+    """Put the app's belief where each test expects it.
+
+    The loop compares its first probe against what the app currently believes,
+    so the belief is part of the test's setup — not something a previous test
+    should be allowed to decide.
+    """
+    from core.state import state
+
+    state.ai_router_status = status
+    state.ai_router_port = port
+
+
+def test_a_transition_notifies_open_session(monkeypatch, probe, instant_event, clean_router_state):
+    _seed_state()
     probe(("starting", None), ("ready", 8083))
     session = _FakeSession()
     watchdog = wd.RouterStatusWatchdog(_FakePage(session))
@@ -121,16 +135,33 @@ def test_a_transition_notifies_open_session(monkeypatch, probe, instant_event):
     assert watchdog._last == ("ready", 8083), watchdog._last
 
 
-def test_the_first_tick_only_seeds_the_baseline(monkeypatch, probe, instant_event):
-    """Publishing on the first tick would paint a state nobody watched change."""
+def test_the_first_probe_corrects_the_boot_guess(monkeypatch, probe, instant_event, clean_router_state):
+    """The app boots guessing "starting"; the first probe replaces the guess.
+
+    Seeding a private baseline instead would leave a router that was already up
+    showing "Starting router…" until the app itself did something.
+    """
+    _seed_state()
     probe(("unavailable", None))
+    session = _FakeSession()
+    watchdog = wd.RouterStatusWatchdog(_FakePage(session))
+    _run_ticks(watchdog, probe, 1)
+    assert session.nudges == 1, session.nudges
+    assert watchdog._last == ("unavailable", None), watchdog._last
+
+
+def test_a_first_probe_matching_the_boot_guess_is_silent(monkeypatch, probe, instant_event, clean_router_state):
+    """Nothing changed, so nothing is painted."""
+    _seed_state("starting", None)
+    probe(("starting", None))
     session = _FakeSession()
     watchdog = wd.RouterStatusWatchdog(_FakePage(session))
     _run_ticks(watchdog, probe, 1)
     assert session.nudges == 0, session.nudges
 
 
-def test_a_repeated_status_is_not_a_transition(monkeypatch, probe, instant_event):
+def test_a_repeated_status_is_not_a_transition(monkeypatch, probe, instant_event, clean_router_state):
+    _seed_state()
     probe(("starting", None), ("ready", 8083), ("ready", 8083))
     session = _FakeSession()
     watchdog = wd.RouterStatusWatchdog(_FakePage(session))
@@ -138,7 +169,10 @@ def test_a_repeated_status_is_not_a_transition(monkeypatch, probe, instant_event
     assert session.nudges == 1, session.nudges
 
 
-def test_a_router_coming_back_is_a_transition(monkeypatch, probe, instant_event):
+def test_a_router_coming_back_is_a_transition(monkeypatch, probe, instant_event, clean_router_state):
+    # The app already knows there is no router, so every nudge below is a real
+    # transition rather than the correction of a boot-time guess.
+    _seed_state("unavailable", None)
     probe(("unavailable", None), ("ready", 8083), ("stopped", None), ("ready", 8084))
     session = _FakeSession()
     watchdog = wd.RouterStatusWatchdog(_FakePage(session))
@@ -207,8 +241,12 @@ def clean_router_state():
 
 def test_a_published_status_wakes_the_watchdog(clean_router_state):
     """A turn that just embedded a router must not wait a full interval."""
+    from core.state import state
     from services import router
 
+    # A different starting value, so the first publish really is a change.
+    state.ai_router_status = "starting"
+    state.ai_router_port = None
     wd._active = None
     try:
         woken = []
@@ -237,3 +275,78 @@ def test_no_watchdog_is_not_an_error(clean_router_state):
         assert state.ai_router_status == "starting"
     finally:
         wd._active = None
+
+
+def test_the_watchdog_publishes_a_passive_transition(
+    monkeypatch, probe, instant_event, clean_router_state
+):
+    """A router killed by something other than this app must still move the UI.
+
+    The loop owns liveness: if it only compared a private baseline and nudged,
+    a status the app did not itself publish would be dropped on the floor and
+    every screen would keep showing the state from before the router died.
+    """
+    from core.state import state
+
+    _seed_state("ready", 8083)
+    probe(("ready", 8083), ("unavailable", None), ("unavailable", None))
+
+    watchdog = wd.RouterStatusWatchdog()
+    _run_ticks(watchdog, probe, 3)
+    # The private baseline moved AND the observable state moved with it.
+    assert watchdog._last == ("unavailable", None), watchdog._last
+    assert state.ai_router_status == "unavailable", state.ai_router_status
+
+
+def test_the_first_tick_publishes_the_state_it_reads(monkeypatch, probe, instant_event, clean_router_state):
+    """The first observation must reach state, not only a private baseline.
+
+    The app boots guessing "starting" whether or not a router is already up;
+    the first probe is what replaces that guess with the truth.
+    """
+    _seed_state("starting", 8082)
+    probe(("unavailable", None))
+    watchdog = wd.RouterStatusWatchdog()
+    _run_ticks(watchdog, probe, 1)
+    from core.state import state
+
+    assert state.ai_router_status == "unavailable", state.ai_router_status
+    assert state.ai_router_port is None, state.ai_router_port
+
+
+def test_stop_releases_the_page():
+    """The loop holds the page strongly; a release must drop it.
+
+    Otherwise a closed assistant keeps a whole screen tree alive.
+    """
+    watchdog = wd.RouterStatusWatchdog(_FakePage())
+    assert watchdog._page is not None
+    watchdog.stop()
+    assert watchdog._page is None, "stop must release the page"
+
+
+def test_a_second_start_stops_the_orphan():
+    """Two watchdogs would both tick, and only one is reachable."""
+    wd._active = None
+    try:
+        asyncio.run(_drive_two_starts())
+    finally:
+        wd._active = None
+
+
+async def _drive_two_starts():
+    first = wd.RouterStatusWatchdog()
+    first.start()
+    second = wd.RouterStatusWatchdog()
+    second.start()
+    try:
+        # The first loop is cancelled, not left running unseen.
+        assert first is not second
+        assert wd.current_watchdog() is second, "the newest start is the active one"
+        first.stop()
+        assert wd.current_watchdog() is second
+        second.stop()
+        assert wd.current_watchdog() is None
+    finally:
+        first.stop()
+        second.stop()

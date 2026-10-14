@@ -171,9 +171,16 @@ def pill_state() -> PillState:
         (e for e in rows if str(e.get("id") or "").lower() == selected.lower()),
         None,
     )
-    # `auto` is always servable while a router answers, even if the catalog
-    # published no row for it — `turn_candidates` keeps it as the last resort.
-    if current is None and selected.lower() == AUTO_MODEL_ID and status == "ready":
+    # `auto` counts as servable only while the router is both ready AND has
+    # published something: without a row, an empty catalog is no evidence the
+    # gateway serves `model=auto` at all, and `has_auto()` in model_catalog
+    # says exactly that — absence means "may not exist".
+    if (
+        current is None
+        and selected.lower() == AUTO_MODEL_ID
+        and status == "ready"
+        and rows
+    ):
         current = {"id": AUTO_MODEL_ID}
 
     message = ""
@@ -194,21 +201,26 @@ def pill_state() -> PillState:
         # a lone Refresh on a router that is not up yet does nothing.
         message = "Looking for available models…"
         action = "Start router"
-    elif current is not None:
+    elif current is not None and rows:
         label = "Auto" if selected.lower() == AUTO_MODEL_ID else selected
         active = True
-        if not rows:
-            # Up, but nothing to choose from: the turn still runs on the
-            # gateway's rotation, and re-reading is the one thing that helps.
-            message = "No models reported by the router."
-            action = "Refresh"
-    else:
-        # Ready and the pick is not in the catalog: fall back to the ranked best.
+    elif rows:
+        # Ready with a catalog, but the pick is not in it. The turn tries the
+        # stale name first anyway (an explicit pick leads the walk verbatim),
+        # and the circuit breaker will skip it after one failure — so the label
+        # names what the router can actually serve, and the pill never claims
+        # health for a model the router stopped offering.
         label = "Auto"
         active = True
-        if not rows:
-            message = "No models reported by the router."
-            action = "Refresh"
+    else:
+        # Answers `/health`, published nothing. The turn will still attempt the
+        # gateway's own rotation, so "Auto" names what happens — but `active`
+        # stays False, because a green pill promising a working assistant on a
+        # router that has offered nothing is the one lie a user pays for.
+        label = "Auto"
+        active = False
+        message = "No models reported by the router."
+        action = "Refresh"
 
     return PillState(
         label=label,
@@ -218,6 +230,21 @@ def pill_state() -> PillState:
         selected=selected,
         message=message,
         action=action,
+    )
+
+
+def _tier_caption(entry: dict) -> str:
+    """The row's caption text, for the pill's change signature."""
+    from services import model_catalog
+
+    tier = model_catalog.tier_of(entry)
+    return " · ".join(
+        part
+        for part in (
+            {"high": "high tier", "medium": "medium tier"}.get(tier, ""),
+            model_catalog.model_hint(entry),
+        )
+        if part
     )
 
 
@@ -297,6 +324,30 @@ def _menu_item(entry: dict, selected: bool, on_pick) -> ft.PopupMenuItem:
     )
 
 
+def pill_signature(state: PillState | None = None) -> tuple:
+    """Everything the pill renders, as a comparable value.
+
+    One source of truth for the "did anything change" question, so the pill's
+    rebuild hook cannot drift from the pill itself. It covers more than the
+    label because this app's pill is a real dropdown with baked-in items:
+    a catalog change with an unchanged label must still rebuild the menu, and
+    a Hint that changes must still rebuild that row.
+    """
+    state = state or pill_state()
+    from services import model_catalog
+
+    rows = model_catalog.pickable_models() if state.status == "ready" else []
+    return (
+        state.label,
+        state.active,
+        state.status,
+        state.selected,
+        state.message,
+        state.action,
+        tuple((str(e.get("id") or ""), _tier_caption(e)) for e in rows),
+    )
+
+
 def build_model_pill(page: ft.Page, *, on_pick=None) -> ft.PopupMenuButton:
     """The chat-header model dropdown.
 
@@ -305,11 +356,20 @@ def build_model_pill(page: ft.Page, *, on_pick=None) -> ft.PopupMenuButton:
 
     The label, the colour and the menu all come from `pill_state`, so the three
     can never disagree about whether the router is up.
+
+    Rows are only listed while the router is actually serving. A dead or
+    still-starting router's catalog is a snapshot from a session that no longer
+    exists: offering those models would let the user tap something that cannot
+    answer, and would hide the one action that helps (Start router).
     """
     from services import model_catalog
 
     state = pill_state()
-    rows = model_catalog.pickable_models()
+    rows = (
+        model_catalog.pickable_models()
+        if state.status == "ready"
+        else []
+    )
     chosen = state.selected
 
     def _pick(model_id: str) -> None:
@@ -355,15 +415,21 @@ def build_model_pill(page: ft.Page, *, on_pick=None) -> ft.PopupMenuButton:
         )
 
     label = state.label
+    offline = label == "Offline"
+    # The colour comes from the state, not from the displayed string: a model
+    # literally named "Offline" must not turn the pill red, and an unknown
+    # status must not get a healthy green.
     pill_color = (
         ft.Colors.ERROR
-        if label == "Offline"
+        if offline
         else (brand_color() if state.active else ft.Colors.ON_SURFACE_VARIANT)
     )
     lead_icon = (
         _ICON_OFFLINE
-        if label == "Offline"
-        else (_ICON_AUTO if chosen.lower() == "auto" else _ICON_MODEL)
+        if offline
+        # The icon names what the label names: "Auto" when the router is
+        # rotating, a model only when a specific model is on the pill.
+        else (_ICON_AUTO if label == "Auto" else _ICON_MODEL)
     )
     return ft.PopupMenuButton(
         content=ft.Container(

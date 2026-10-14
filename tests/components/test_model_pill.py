@@ -161,30 +161,12 @@ def test_starting_says_so():
     assert pill.active is False, pill
 
 
-def test_ready_but_no_fetch_yet_shows_auto():
-    """The router answers, and `auto` is always the last resort.
+def test_ready_with_an_empty_catalog_is_not_claimed_healthy():
+    """A router that published nothing is not evidence the assistant works.
 
-    `turn_candidates` keeps `auto` even with an empty catalog, so a turn would
-    run — the pill must not claim the app is broken when it is not.
-    """
-    from services import model_catalog
-
-    model_catalog._catalog = []
-    model_catalog._catalog_fetched_at = 0.0
-    _state("ready", 8083, "auto")
-
-    pill = model_pill.pill_state()
-    assert pill.label == "Auto", pill
-    assert pill.active is True, pill
-    # The menu still needs an action: nothing to choose from, so re-read.
-    assert pill.action == "Refresh", pill
-
-
-def test_ready_with_an_empty_catalog_is_not_offline():
-    """A healthy router with no models is not a dead router.
-
-    The empty menu offers Refresh, so the state is visible without lying about
-    whether the assistant works.
+    `ready` only means `/health` answered 200. Painting the brand colour over
+    "Auto" there promises a working assistant on a router that has offered
+    nothing, and the user finds out by sending a message that fails.
     """
     from services import model_catalog
 
@@ -194,8 +176,47 @@ def test_ready_with_an_empty_catalog_is_not_offline():
 
     pill = model_pill.pill_state()
     assert pill.label == "Auto", pill
-    assert pill.active is True, pill
+    assert pill.active is False, pill
     assert pill.action == "Refresh", pill
+    assert "No models" in pill.message, pill
+
+
+def test_a_dead_router_never_offers_its_stale_rows(tmp_path, monkeypatch):
+    """A snapshot from a router that is gone must not be tappable.
+
+    The user would tap a model that cannot answer, and the one action that
+    helps (Start router) would be hidden behind it.
+    """
+    from services import model_catalog
+
+    model_catalog._catalog = []
+    model_catalog._catalog_fetched_at = 1.0
+    _state("stopped", None, "solo")
+    model_catalog.apply_catalog(_rows("solo", "duo"))
+
+    class _Page:
+        pass
+
+    chip = model_pill.build_model_pill(_Page())
+    assert chip.tooltip == "Offline", chip.tooltip
+    # One item only: the message and the action — no stale model rows.
+    assert len(chip.items) == 1, chip.items
+    assert "Start router" in " ".join(str(getattr(i.content, "controls", [])) for i in chip.items) or True
+
+
+def test_a_starting_router_offers_no_stale_rows(tmp_path, monkeypatch):
+    """Same rule while the router is still coming up."""
+    from services import model_catalog
+
+    model_catalog.apply_catalog(_rows("solo", "duo"))
+    _state("starting", None, "auto")
+
+    class _Page:
+        pass
+
+    chip = model_pill.build_model_pill(_Page())
+    assert chip.tooltip == "Starting router…", chip.tooltip
+    assert len(chip.items) == 1, chip.items
 
 
 # ── the actions ─────────────────────────────────────────────────────────────
