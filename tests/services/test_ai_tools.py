@@ -544,3 +544,39 @@ def test_every_vm_reading_tool_warns_about_untrusted_content():
         assert "untrusted DATA" not in doc, (
             f"{name} does not read VM content and should not carry the warning"
         )
+
+
+def test_every_array_parameter_declares_its_items():
+    """kani renders a TypeScript view of our tools to size the prompt, and its
+    renderer indexes `param_spec["items"]` unconditionally for arrays
+    (`kani/engines/openai/function_calling.py:47-48`).
+
+    A schema with `type: "array"` and no `items` raises KeyError there, which
+    happens while sizing the prompt — before any request goes out, so the turn
+    dies before the first token. Found by running a real turn in
+    `tests/e2e/test_turn_ledger.py`, which is the only place kani's renderer is
+    reached.
+    """
+    from kani.engines.openai import function_calling
+
+    specs = ai_tools.tool_specs(ai_tools.build_tools("sess", *_fresh()))
+    arrays = [
+        (s.name, p)
+        for s in specs
+        for p, schema in (s.parameters.get("properties") or {}).items()
+        if schema.get("type") == "array"
+    ]
+    assert arrays, "the tools must have array parameters for this to test anything"
+    for name, param in arrays:
+        schema = next(s for s in specs if s.name == name)
+        items = schema.parameters["properties"][param].get("items")
+        assert items and items.get("type"), (
+            f"{name}.{param} is an array without an items schema"
+        )
+
+    # kani's own renderer is the proof: it is what crashed.
+    tools = [
+        {"function": {"name": s.name, "description": s.desc, "parameters": s.parameters}}
+        for s in specs
+    ]
+    assert function_calling.render_tool_namespace("functions", tools)

@@ -522,6 +522,26 @@ def _json_type(annotation) -> str:
     return _ANNOTATION_TYPES.get(origin, "string")
 
 
+def _param_schema(annotation) -> dict:
+    """The full JSON-schema fragment for one parameter's type.
+
+    An `array` needs an `items` schema, not just `type: "array"`: kani renders a
+    TypeScript view of the tools for its own token reserve, and its renderer
+    indexes `param_spec["items"]` unconditionally for arrays
+    (`kani/engines/openai/function_calling.py:47-48`). A missing `items` raises
+    KeyError, which took down the first turn that offered `write_cells` — it
+    crashed while sizing the prompt, before any request went out.
+    """
+    schema_type = _json_type(annotation)
+    if schema_type != "array":
+        return {"type": schema_type}
+    inner = _unwrap(annotation)
+    if inner in (list, tuple):  # a bare `list` — nothing says what is inside
+        return {"type": "array", "items": {"type": "string"}}
+    args = typing.get_args(inner)
+    return {"type": "array", "items": _param_schema(args[0]) if args else {"type": "string"}}
+
+
 def _param_description(name: str, param) -> str:
     """The model-visible description of one parameter.
 
@@ -578,7 +598,7 @@ def tool_specs(tools: list, *, on_step=None) -> list:
             if name == "ask_confirm":  # bound, never schema-visible
                 continue
             properties[name] = {
-                "type": _json_type(param.annotation),
+                **_param_schema(param.annotation),
                 "description": _param_description(name, param),
             }
             if param.default is inspect.Parameter.empty:
