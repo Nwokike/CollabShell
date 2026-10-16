@@ -80,6 +80,10 @@ class AppState:
     # makes the assistant work out of the box.
     ai_router_url: str = ""
     ai_help: bool = True  # inject the bundled SKILL.md into the system prompt
+    # How hard the model thinks before answering: one of `THINKING_DEPTHS`.
+    # "auto" is stored by name but sends nothing, leaving the router's own
+    # default in force — the same rule both reference apps use.
+    ai_thinking: str = "auto"
     # Router lifecycle, owned by services/router.py and carried to the UI by
     # services/router_watchdog.py. Written only on a real change, so the status
     # loop never repaints for nothing.

@@ -162,6 +162,42 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             )
         page.update()
 
+    # How hard the model thinks before answering. Both DDGS and lm-router expose
+    # this dropdown with these exact options; "auto" sends no `reasoning_effort`
+    # at all, so the gateway's own default applies.
+    thinking_dropdown = ft.Dropdown(
+        value=str(getattr(state, "ai_thinking", "auto") or "auto"),
+        options=[
+            ft.DropdownOption(
+                key=depth,
+                text={
+                    "auto": "Auto (the router decides)",
+                    "minimal": "Minimal",
+                    "low": "Low",
+                    "medium": "Medium",
+                    "high": "High",
+                }[depth],
+            )
+            for depth in constants.THINKING_DEPTHS
+        ],
+        width=220,
+        text_size=tokens.FONT_SM,
+        border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
+        # `on_select`, not `on_change`: flet 1.0's Dropdown renamed it
+        # (`controls/material/dropdown.py:226`).
+        on_select=lambda e: page.run_task(_save_thinking, e.control.value),
+    )
+
+    async def _save_thinking(value: str):
+        depth = str(value or "auto").strip().lower()
+        if depth not in constants.THINKING_DEPTHS:
+            depth = "auto"
+        state.ai_thinking = depth
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(constants.STORAGE_AI_THINKING, depth)
+        page.update()
+
     # The live router row: what the app is actually talking to, and the one
     # action that makes it talk to something. A user request must be verified
     # (ensure_router(verify=True)), because a remembered dead port would
@@ -300,6 +336,14 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                             "Teach the assistant how this app works so it "
                             "does not run code that fails here.",
                             trailing=help_switch,
+                        ),
+                        ft.Divider(height=tokens.SPACE_SM),
+                        _row(
+                            "Thinking",
+                            "How hard the model thinks before it answers. "
+                            "Deeper thinking takes longer and shows more in the "
+                            "chat.",
+                            trailing=thinking_dropdown,
                         ),
                         ft.Divider(height=tokens.SPACE_SM),
                         _row("Router URL", "OpenAI-compatible endpoint",

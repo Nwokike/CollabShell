@@ -1222,3 +1222,40 @@ def test_two_batches_report_different_call_ids():
     assert seen == "call_a", seen
     # After the reset, the outside value is what remains.
     assert kani_backend.call_id() == "", kani_backend.call_id()
+
+
+# ── thinking depth ──────────────────────────────────────────────────────────
+
+
+def test_auto_sends_no_reasoning_effort_at_all():
+    """`auto` must leave the gateway's own default in force, not pick for it.
+
+    Both references do the same (`DDGS/src/services/chat_agent.py:512-515`):
+    the depth is a hint the gateway understands better than we do, so "auto"
+    means the parameter is absent rather than a value we invented.
+    """
+    from core.state import state
+    from services.kani_backend import _thinking_depth
+
+    for value in ("auto", "", "AUTO", "  auto  "):
+        state.ai_thinking = value
+        assert _thinking_depth() is None, value
+
+
+def test_a_real_depth_is_passed_through():
+    from core.state import state
+    from services.kani_backend import _thinking_depth
+
+    for value in ("minimal", "low", "medium", "high"):
+        state.ai_thinking = value
+        assert _thinking_depth() == value
+
+
+def test_an_unknown_depth_is_ignored_rather_than_sent():
+    """A saved value from a newer build must not reach a router that may reject it."""
+    from core.state import state
+    from services.kani_backend import _thinking_depth
+
+    for value in ("xhigh", "deep", "42", "high;rm -rf"):
+        state.ai_thinking = value
+        assert _thinking_depth() is None, value

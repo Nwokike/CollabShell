@@ -46,6 +46,10 @@ STORAGE_USAGE_UPDATED_AT = "colab_usage_updated_at"
 # is injected into the system prompt when router_help is on.
 STORAGE_AI_MODE = "colab_ai_mode"
 STORAGE_AI_MODEL = "colab_ai_model"
+# How hard the model thinks before answering. Both DDGS and lm-router expose
+# this; "auto" sends nothing, so the router's own default applies.
+STORAGE_AI_THINKING = "colab_ai_thinking"
+THINKING_DEPTHS = ("auto", "minimal", "low", "medium", "high")
 # The router URL is an ADVANCED OVERRIDE. When empty the app probes 8082..8092
 # and embeds its own router, which is the normal path — see services/router.py.
 STORAGE_AI_ROUTER_URL = "colab_ai_router_url"

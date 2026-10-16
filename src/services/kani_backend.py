@@ -489,6 +489,13 @@ async def run_turn(
                 # answer.
                 max_function_rounds=max_rounds,
                 max_tokens=max_tokens,
+                # Absent under "auto", so the gateway decides. A depth the
+                # router does not know is ignored upstream rather than fatal.
+                **(
+                    {"reasoning_effort": _thinking_depth()}
+                    if _thinking_depth()
+                    else {}
+                ),
             ):
                 if _stopped():
                     break
@@ -628,3 +635,23 @@ def _model_name() -> str:
     from core.state import state
 
     return str(getattr(state, "ai_model", "auto") or "auto")
+
+
+def _thinking_depth() -> str | None:
+    """The reading depth to ask for, or None to leave the router's own.
+
+    Read live, like the model name, so a Settings change applies to the next
+    turn without threading another parameter through three layers.
+
+    "auto" returns None on purpose: the request then carries no
+    `reasoning_effort` at all and the gateway decides, which is what both
+    reference apps do (`DDGS/src/services/chat_agent.py:512-515`).
+    """
+    from core.state import state
+
+    depth = str(getattr(state, "ai_thinking", "auto") or "auto").strip().lower()
+    if depth in ("", "auto"):
+        return None
+    from core.constants import THINKING_DEPTHS
+
+    return depth if depth in THINKING_DEPTHS else None

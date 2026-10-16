@@ -604,6 +604,10 @@ class AppController:
             if saved_ai_help is not None:
                 state.ai_help = saved_ai_help == "true"
 
+            saved_thinking = await self.storage.get(constants.STORAGE_AI_THINKING)
+            if saved_thinking in constants.THINKING_DEPTHS:
+                state.ai_thinking = saved_thinking
+
             # Configure the provider once at startup ONLY when an override
             # exists. Without one there is no port to point at yet — the router
             # is probed lazily on the first turn, because paying an 11-port scan
