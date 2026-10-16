@@ -267,7 +267,7 @@ def test_the_empty_model_menu_explains_itself(tmp_path, monkeypatch):
     pill = _find(session.view, ft.PopupMenuButton)
     assert pill.items, "an empty catalog must still offer something"
     text = " ".join(_texts(pill))
-    assert "Looking for available models" in text, text
+    assert "Discovering available models" in text, text
     assert "Start router" in text, "the empty state must offer the action that helps"
 
 

@@ -64,6 +64,10 @@ class PillState:
     # True only while the app is genuinely still finding out. Once a fetch has
     # completed, an empty catalog is a real answer, not a wait.
     discovering: bool
+    # A spinner instead of an icon, while the gateway is coming up. LM Router's
+    # `ft.ProgressRing` in the same slot (`chat_controls.py:228`): a wait with
+    # no movement looks like a frozen app.
+    spinning: bool
     status: str
     selected: str
     # Empty-state copy for the menu, plus the action that helps.
@@ -149,39 +153,23 @@ def pill_state() -> PillState:
 
     1. **A dead router outranks everything.** The catalog is a snapshot; once
        the router is down it proves nothing, so "Offline" beats a model name.
-    2. **`ready` means answers are being served**, even with an empty catalog:
-       `turn_candidates` keeps `auto` as the final resort, so a turn would run.
-       Saying "Offline" there would be a lie, and the empty menu offers Refresh
-       so the user can re-read the catalog.
-    3. **`starting` is the only label that implies a wait.**
-    4. **The chosen name counts only while it is servable** — present in the
-       catalog, or `auto`. A saved preference cannot outlive the router itself.
-    5. **A live catalog with a stale pick falls back to Auto**, because the
-       router's ranked best is real and the assistant would work.
+    2. **While the gateway is coming up the pill waits, with a spinner.** LM
+       Router's "Starting gateway…" plus `ft.ProgressRing`
+       (`chat_controls.py:112,228`) — a wait with no movement reads as a frozen
+       app.
+    3. **The pill names the model that will answer**, never the word "Auto".
+       "Auto" tells a user nothing; the model actually serving is a fact they
+       can act on. `model_catalog.serving_model()` resolves it: the saved pick
+       while the router still offers it, else the ranked head of the pool —
+       tier first, then gateway latency, i.e. the fastest active medium/high.
+    4. **The chosen name counts only while it is servable.** A saved preference
+       cannot outlive the router that offered it.
     """
     from services import model_catalog
     from services.model_catalog import AUTO_MODEL_ID
 
-    rows = model_catalog.pickable_models()
     status = str(getattr(_app_state(), "ai_router_status", "starting") or "starting")
-    fetched = bool(model_catalog._catalog_fetched_at)
     selected = str(getattr(_app_state(), "ai_model", "") or "")
-
-    current = next(
-        (e for e in rows if str(e.get("id") or "").lower() == selected.lower()),
-        None,
-    )
-    # `auto` counts as servable only while the router is both ready AND has
-    # published something: without a row, an empty catalog is no evidence the
-    # gateway serves `model=auto` at all, and `has_auto()` in model_catalog
-    # says exactly that — absence means "may not exist".
-    if (
-        current is None
-        and selected.lower() == AUTO_MODEL_ID
-        and status == "ready"
-        and rows
-    ):
-        current = {"id": AUTO_MODEL_ID}
 
     message = ""
     action = ""
@@ -194,38 +182,36 @@ def pill_state() -> PillState:
             else "No local model router is running. Replies wait for it."
         )
         action = "Start router"
+        spinning = False
     elif status == "starting":
-        label = "Starting router…"
+        label = "Starting gateway…"
         active = False
-        # Still finding out, but a start is the one thing that unblocks it —
-        # a lone Refresh on a router that is not up yet does nothing.
-        message = "Looking for available models…"
+        # A start is the one thing that unblocks a gateway that is not up yet.
+        message = "Discovering available models…"
         action = "Start router"
-    elif current is not None and rows:
-        label = "Auto" if selected.lower() == AUTO_MODEL_ID else selected
-        active = True
-    elif rows:
-        # Ready with a catalog, but the pick is not in it. The turn tries the
-        # stale name first anyway (an explicit pick leads the walk verbatim),
-        # and the circuit breaker will skip it after one failure — so the label
-        # names what the router can actually serve, and the pill never claims
-        # health for a model the router stopped offering.
-        label = "Auto"
-        active = True
+        spinning = True
     else:
-        # Answers `/health`, published nothing. The turn will still attempt the
-        # gateway's own rotation, so "Auto" names what happens — but `active`
-        # stays False, because a green pill promising a working assistant on a
-        # router that has offered nothing is the one lie a user pays for.
-        label = "Auto"
-        active = False
-        message = "No models reported by the router."
-        action = "Refresh"
+        # Ready: name what will serve. `serving_model()` never returns "auto"
+        # while the pool has anything in it, and it never returns a name the
+        # router is not offering.
+        label = model_catalog.serving_model()
+        active = True
+        spinning = False
+        if label.lower() == AUTO_MODEL_ID and not model_catalog.pickable_models():
+            # Answers `/health` and published nothing we can rank. The turn
+            # still attempts the gateway's own rotation, so the name is honest,
+            # but the pill stays muted: a green pill promising a working
+            # assistant on a router that offered nothing is the lie a user pays
+            # for by sending a message that fails.
+            active = False
+            message = "No models reported by the router."
+            action = "Refresh"
 
     return PillState(
         label=label,
         active=active,
-        discovering=status == "starting" and not fetched,
+        discovering=status == "starting",
+        spinning=spinning,
         status=status,
         selected=selected,
         message=message,
@@ -424,22 +410,27 @@ def build_model_pill(page: ft.Page, *, on_pick=None) -> ft.PopupMenuButton:
         if offline
         else (brand_color() if state.active else ft.Colors.ON_SURFACE_VARIANT)
     )
-    lead_icon = (
-        _ICON_OFFLINE
-        if offline
-        # The icon names what the label names: "Auto" when the router is
-        # rotating, a model only when a specific model is on the pill.
-        else (_ICON_AUTO if label == "Auto" else _ICON_MODEL)
-    )
+    # While the gateway comes up the slot holds a spinner rather than an icon:
+    # a wait with no movement reads as a frozen app (LM Router does the same,
+    # `chat_controls.py:228`).
+    if state.spinning:
+        lead = ft.ProgressRing(
+            width=tokens.ICON_SM,
+            height=tokens.ICON_SM,
+            stroke_width=2,
+            color=pill_color,
+        )
+    else:
+        lead = ft.Icon(
+            _ICON_OFFLINE if offline else _ICON_MODEL,
+            size=tokens.ICON_SM,
+            color=pill_color,
+        )
     return ft.PopupMenuButton(
         content=ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(
-                        lead_icon,
-                        size=tokens.ICON_SM,
-                        color=pill_color,
-                    ),
+                    lead,
                     ft.Text(
                         _elide(label),
                         size=tokens.FONT_XS,

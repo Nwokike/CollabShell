@@ -68,6 +68,56 @@ def router_url_for_read() -> str:
     return constants.AI_DEFAULT_ROUTER_URL
 
 
+def serving_model() -> str:
+    """The model that will actually answer right now.
+
+    Not ``state.ai_model`` — that can be ``"auto"`` or a name the router stopped
+    offering, and neither tells the user anything. This is the concrete id the
+    turn will lead with:
+
+    1. the chosen model, when the router is still offering it;
+    2. otherwise the ranked head of the pool — tier first, then gateway latency,
+       which is the fastest active medium/high model (`candidate_models`);
+    3. otherwise ``"auto"``, the gateway's own rotation, as the last resort.
+
+    This is what the header pill names, so "Auto" never appears as a label for
+    someone who has not chosen anything.
+    """
+    from core.state import state
+
+    chosen = str(getattr(state, "ai_model", "") or "").strip()
+    pool = candidate_models()
+    if (
+        chosen
+        and chosen.lower() != AUTO_MODEL_ID
+        and any(m.lower() == chosen.lower() for m in pool)
+    ):
+        return chosen
+    # The saved pick is gone (or was never made). Fall through to the ranked
+    # head rather than showing a name the router no longer serves.
+    if pool:
+        return pool[0]
+    return chosen or AUTO_MODEL_ID
+
+
+def adopt_default_model() -> str:
+    """Make `serving_model()` the saved pick when nothing valid is saved.
+
+    Mirrors LM Router's `_apply_models` (`src/main.py:744-757`): after a catalog
+    fetch, if the saved model is not in what the router offers, the app picks
+    the ranked best and persists it. Without this the app keeps a name that
+    cannot serve, and the pill has to guess what to show.
+
+    Returns the id now in force.
+    """
+    from core.state import state
+
+    model = serving_model()
+    if model and model != str(getattr(state, "ai_model", "") or ""):
+        state.ai_model = model
+    return model
+
+
 def tier_of(entry: dict) -> str:
     """The gateway's published tier for a row. Missing means "low".
 
@@ -259,12 +309,21 @@ async def refresh_catalog(router_url: str, timeout: float = 30.0) -> list[dict]:
 
     Two attempts with a short sleep, because a router mid-startup often
     refuses the first request. Returns the pickable rows.
+
+    An empty or protocol-less URL is a caller bug, not a network failure: it
+    returns the catalog we already hold and says so at debug level instead of
+    letting httpx raise "Request URL is missing an 'http://' or 'https://'
+    protocol" into the log on every model pick. Callers should pass
+    `router_url_for_read()`.
     """
     import asyncio
 
     from components.model_picker import _http_client
 
-    base = (router_url or "").rstrip("/")
+    base = (router_url or "").strip().rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        logger.debug("catalog refresh skipped: no usable router URL (%r)", base)
+        return pickable_models()
     last_error: Exception | None = None
     for attempt in range(2):
         try:
@@ -285,6 +344,10 @@ async def refresh_catalog(router_url: str, timeout: float = 30.0) -> list[dict]:
                                 if model_id in hints and "rate_hint" not in row:
                                     row["rate_hint"] = hints[model_id]
                     apply_catalog(rows)
+                    # With rows in hand, resolve the saved pick against them:
+                    # a name the router no longer offers is replaced by the
+                    # ranked head, so nothing downstream has to guess.
+                    adopt_default_model()
                     return pickable_models()
                 last_error = RuntimeError("empty catalog")
         except Exception as ex:

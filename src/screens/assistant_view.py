@@ -431,8 +431,13 @@ class ChatSession:
                 except Exception:
                     logger.debug("model save failed", exc_info=True)
             try:
+                # The live port when the app attached to one, the override when
+                # the user set one. Passing `state.ai_router_url` raw sent an
+                # empty string whenever the router auto-started, which is the
+                # "Request URL is missing an 'http://'… protocol" failure in the
+                # log: every model pick logged it and then refreshed nothing.
                 await model_catalog.refresh_catalog(
-                    str(getattr(self.state, "ai_router_url", "") or "")
+                    model_catalog.router_url_for_read()
                 )
             except Exception:
                 pass

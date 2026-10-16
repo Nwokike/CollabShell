@@ -262,7 +262,6 @@ dependencies = [
     { name = "httpx" },
     { name = "jupyter-kernel-client" },
     { name = "kani", extra = ["openai"] },
-    { name = "mirascope", extra = ["openai"] },
     { name = "rich" },
 ]
 
@@ -284,7 +283,6 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jupyter-kernel-client", specifier = "<1.0" },
     { name = "kani", extras = ["openai"], specifier = ">=1.10.0" },
-    { name = "mirascope", extras = ["openai"], specifier = ">=2.5.0" },
     { name = "rich", specifier = ">=15.0.0" },
 ]
 
@@ -392,15 +390,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
-]
-
-[[package]]
-name = "docstring-parser"
-version = "0.18.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e0/4d/f332313098c1de1b2d2ff91cf2674415cc7cddab2ca1b01ae29774bd5fdf/docstring_parser-0.18.0.tar.gz", hash = "sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015", size = 29341, upload-time = "2026-04-14T04:09:19.867Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/5f/ed01f9a3cdffbd5a008556fc7b2a08ddb1cc6ace7effa7340604b1d16699/docstring_parser-0.18.0-py3-none-any.whl", hash = "sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b", size = 22484, upload-time = "2026-04-14T04:09:18.638Z" },
 ]
 
 [[package]]
@@ -858,27 +847,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
-]
-
-[[package]]
-name = "mirascope"
-version = "2.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "docstring-parser" },
-    { name = "httpx" },
-    { name = "jiter" },
-    { name = "pydantic" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/98/9fde99c0d8f28506f02bfa1db7de92f9ccf7bdec45aeebc3d1ada7093636/mirascope-2.5.0.tar.gz", hash = "sha256:bf4a24838a9717eb03ec4cf1d69b211d30fd7f48a774491f000ee81d0b636968", size = 3367934, upload-time = "2026-06-24T03:48:13.1Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/49/b81e08fad3206dc6ff870d327afbf849e8cea741f873e66b4d54f80b8218/mirascope-2.5.0-py3-none-any.whl", hash = "sha256:4aee8148ce48254a02bf016b9a494ca0ce701d3cb351baff3c1207e0484962c1", size = 275135, upload-time = "2026-06-24T03:48:11.183Z" },
-]
-
-[package.optional-dependencies]
-openai = [
-    { name = "openai" },
 ]
 
 [[package]]

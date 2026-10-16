@@ -105,8 +105,12 @@ logging.getLogger("flet_controls").setLevel(logging.WARNING)
 
 logger = logging.getLogger("colab")
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# No Windows event-loop policy is set, deliberately. Both DDGS and lm-router run
+# on Windows without one, and nothing here needs `add_reader` — the only API
+# that requires the Selector loop. Stdin is a Flet dialog
+# (`core/stdin_hook.py`), not an OS reader. The policy this replaced was
+# deprecated in 3.14 and is removed in 3.16, so it was a warning now and a crash
+# later.
 
 
 class AppController:

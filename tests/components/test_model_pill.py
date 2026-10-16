@@ -61,6 +61,23 @@ def _state(status="starting", port=None, model="auto"):
     return state
 
 
+def _app_model() -> str:
+    from core.state import state
+
+    return state.ai_model
+
+
+def _row(model_id, tier="high", latency=10):
+    """One gateway-shaped catalog row."""
+    return {
+        "id": model_id,
+        "status": "active",
+        "endpoint_type": "chat.completion",
+        "latency_ms": latency,
+        "rate_hint": {"tier": tier, "label": f"{tier} tier"},
+    }
+
+
 def _rows(*ids, tier="high", latency=10):
     return [
         {
@@ -96,21 +113,59 @@ def test_ready_with_a_catalog_names_the_chosen_model():
     assert pill.status == "ready"
 
 
-def test_ready_shows_auto_when_nothing_is_chosen():
+def test_the_pill_names_the_fastest_active_model_when_nothing_is_chosen():
+    """The owner's rule: never show the word "Auto", show the model that serves.
+
+    "Auto" tells a user nothing they can act on. The pill names the fastest
+    active medium/high model — tier first, then gateway latency — which is the
+    model a turn will actually lead with, and the name they can change.
+    """
     from services import model_catalog
 
-    model_catalog.apply_catalog(_rows("solo", "duo"))
+    model_catalog.apply_catalog(
+        [
+            _row("slow-high", tier="high", latency=900),
+            _row("fast-high", tier="high", latency=10),
+            _row("faster-medium", tier="medium", latency=5),
+            _row("fastest-but-low", tier="low", latency=1),
+        ]
+    )
     _fetched()
     _state("ready", 8083, "auto")
 
-    assert model_pill.pill_state().label == "Auto"
+    pill = model_pill.pill_state()
+    assert pill.label == "fast-high", pill
+    assert "Auto" not in pill.label, pill
+    assert pill.active is True, pill
+    # The low tier is never pickable, however fast it is.
+    assert "low" not in pill.label
 
 
-def test_a_saved_model_the_router_no_longer_offers_shows_auto():
+def test_the_resolved_model_becomes_the_saved_pick():
+    """LM Router persists what it resolved, so the choice stops being a guess.
+
+    Without `adopt_default_model` the app keeps "auto" forever and every screen
+    has to re-derive the answer.
+    """
+    from services import model_catalog
+
+    # Distinct latencies on purpose: with equal ones the tie-break is the id,
+    # which makes the expected winner an accident of spelling.
+    model_catalog.apply_catalog(
+        [_row("slow-high", latency=900), _row("fast-high", latency=10)]
+    )
+    _fetched()
+    _state("ready", 8083, "auto")
+
+    assert model_catalog.adopt_default_model() == "fast-high"
+    assert _app_model() == "fast-high", _app_model()
+
+
+def test_a_saved_model_the_router_no_longer_offers_falls_back_to_the_serving_one():
     """A stored preference must not outlive the router that offered it.
 
     Showing the name anyway is a lie the user only discovers by sending a
-    message that fails.
+    message that fails — and showing "Auto" instead tells them nothing at all.
     """
     from services import model_catalog
 
@@ -119,7 +174,7 @@ def test_a_saved_model_the_router_no_longer_offers_shows_auto():
     _state("ready", 8083, "retired-model")
 
     pill = model_pill.pill_state()
-    assert pill.label == "Auto", pill
+    assert pill.label == "solo", pill
     assert pill.active is True, pill
 
 
@@ -150,23 +205,26 @@ def test_stopped_is_also_offline():
     assert pill.action == "Start router", pill
 
 
-def test_starting_says_so():
+def test_starting_says_so_and_spins():
+    """A wait must look like a wait. LM Router uses a ProgressRing here
+    (`chat_controls.py:112,228`); text alone reads as a frozen app."""
     from services import model_catalog
 
     model_catalog.apply_catalog([])
     _state("starting", None, "auto")
 
     pill = model_pill.pill_state()
-    assert pill.label == "Starting router…", pill
+    assert pill.label == "Starting gateway…", pill
     assert pill.active is False, pill
+    assert pill.spinning is True, "a starting gateway must show movement"
 
 
 def test_ready_with_an_empty_catalog_is_not_claimed_healthy():
     """A router that published nothing is not evidence the assistant works.
 
-    `ready` only means `/health` answered 200. Painting the brand colour over
-    "Auto" there promises a working assistant on a router that has offered
-    nothing, and the user finds out by sending a message that fails.
+    `ready` only means `/health` answered 200. Painting the brand colour there
+    promises a working assistant on a router that has offered nothing, and the
+    user finds out by sending a message that fails.
     """
     from services import model_catalog
 
@@ -175,10 +233,13 @@ def test_ready_with_an_empty_catalog_is_not_claimed_healthy():
     _state("ready", 8083, "auto")
 
     pill = model_pill.pill_state()
-    assert pill.label == "Auto", pill
     assert pill.active is False, pill
+    assert pill.spinning is False, pill
     assert pill.action == "Refresh", pill
     assert "No models" in pill.message, pill
+    # With no pool there is nothing real to name, so the gateway's own rotation
+    # is all that is left — and it is named in the menu, not dressed up.
+    assert pill.label.lower() == "auto", pill
 
 
 def test_a_dead_router_never_offers_its_stale_rows(tmp_path, monkeypatch):
@@ -215,7 +276,7 @@ def test_a_starting_router_offers_no_stale_rows(tmp_path, monkeypatch):
         pass
 
     chip = model_pill.build_model_pill(_Page())
-    assert chip.tooltip == "Starting router…", chip.tooltip
+    assert chip.tooltip == "Starting gateway…", chip.tooltip
     assert len(chip.items) == 1, chip.items
 
 
