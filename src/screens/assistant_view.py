@@ -66,6 +66,11 @@ def _empty_turn() -> dict:
         "role": "assistant",
         "text": "",
         "thought": "",
+        # When the reasoning began, for the "Thought for Ns" receipt, and
+        # whether the block is expanded. `None` means it never reasoned.
+        "thought_started_at": None,
+        "thought_seconds": 0,
+        "thought_open": True,
         "steps_rows": [],
         "partial": True,
         "error": None,
@@ -638,6 +643,7 @@ class ChatSession:
             messages=self._model_history() + [{"role": "user", "content": text}],
             system=self._system_prompt(),
             on_token=self._on_token,
+            on_thought=self._on_thought,
             on_tool_start=self._on_tool_start,
             on_tool_done=self._on_tool_done,
             should_stop=self._cancel.is_set,
@@ -671,6 +677,15 @@ class ChatSession:
 
     def _on_token(self, token: str) -> None:
         self._emit("text_partial", {"text": token})
+
+    def _on_thought(self, text: str) -> None:
+        """The model's reasoning, straight off the tapped SSE stream.
+
+        kani discards these deltas (`services/reasoning.py` explains how the
+        bytes are teed instead). Without this the user watches an answer appear
+        from nowhere, which is the whole reason both reference apps surface it.
+        """
+        self._emit("thought", {"text": text})
 
     def _on_tool_start(self, name: str, payload: dict) -> None:
         args = payload.get("args") or {}
@@ -826,6 +841,15 @@ class ChatSession:
             self._confirm[1]["decision"] = decision
             self._confirm[0].set()
 
+    def _toggle_thought(self, turn: dict) -> None:
+        """Expand or collapse one turn's reasoning, and repaint.
+
+        The state lives on the turn so a reopened chat and a re-render both
+        agree, rather than on a widget the renderer throws away.
+        """
+        turn["thought_open"] = not turn.get("thought_open", False)
+        self._render()
+
     def _close_running_rows(self) -> None:
         """Settle any step row still spinning, so no row is stuck forever.
 
@@ -907,11 +931,29 @@ class ChatSession:
                     data.get("id"),
                     data.get("name", ""),
                 )
+        elif event == "thought" and self._current is not None:
+            if self._current.get("thought_started_at") is None:
+                self._current["thought_started_at"] = now
+            buf = (self._current.get("thought") or "") + data.get("text", "")
+            self._current["thought"] = buf[-_THOUGHT_CAP:]
+            force = False
+            if now - self._last_thought_flush < THOUGHT_FLUSH_SEC:
+                return
+            self._last_thought_flush = now
         elif event == "text_final" and self._current is not None:
             self._current["text"] = data.get("text", "") or self._current["text"]
             self._current["model"] = data.get("model", "")
             self._current["cost"] = data.get("cost", 0)
             self._current["partial"] = False
+            # Freeze the receipt: how long it thought, and collapse the block
+            # now that the answer is here. Both references do exactly this
+            # (`thinking.py:41-45`) — the reasoning stops being the subject the
+            # moment there is an answer.
+            if self._current.get("thought"):
+                started = self._current.get("thought_started_at")
+                if started is not None:
+                    self._current["thought_seconds"] = max(1, int(now - started))
+                self._current["thought_open"] = False
             self._close_running_rows()
             self._persist_history()
         elif event == "stopped" and self._current is not None:
@@ -983,24 +1025,79 @@ class ChatSession:
     def _render_assistant(self, turn: dict) -> ft.Control:
         kids: list[ft.Control] = []
 
-        if turn.get("thought", "").strip():
+        thought = str(turn.get("thought") or "").strip()
+        if thought:
+            # Open while it streams so the user watches the model think, then
+            # collapsed to a one-line receipt. DDGS and lm-router both land on
+            # exactly this: "Thinking…" while it runs, "Thought for Ns" after
+            # (`chat_screen.py:1998-2059` and `components/thinking.py:32-45`).
+            still_thinking = bool(turn.get("partial")) and not turn.get("text")
+            open_ = bool(turn.get("thought_open", still_thinking))
+            if still_thinking:
+                header = "Thinking…"
+            elif turn.get("thought_seconds"):
+                header = f"Thought for {turn['thought_seconds']}s"
+            else:
+                header = "Thought it through"
+            body: list[ft.Control] = []
+            if open_:
+                body.append(
+                    ft.Container(
+                        content=ft.Text(
+                            thought,
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            selectable=True,
+                        ),
+                        padding=ft.Padding.only(
+                            left=tokens.SPACE_MD, top=tokens.SPACE_XS
+                        ),
+                        border=ft.Border(
+                            left=ft.BorderSide(2, ft.Colors.with_opacity(
+                                0.3, ft.Colors.ON_SURFACE_VARIANT
+                            ))
+                        ),
+                    )
+                )
             kids.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=ft.Column(
                         [
-                            ft.Icon(
-                                ft.Icons.PSYCHOLOGY_OUTLINED,
-                                size=tokens.ICON_SM,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ft.Row(
+                                [
+                                    ft.Icon(
+                                        ft.Icons.PSYCHOLOGY_OUTLINED,
+                                        size=tokens.ICON_SM,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                    ft.Text(
+                                        header,
+                                        size=tokens.FONT_XS,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                    ft.Icon(
+                                        ft.Icons.EXPAND_LESS_ROUNDED
+                                        if open_
+                                        else ft.Icons.EXPAND_MORE_ROUNDED,
+                                        size=12,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_SM,
+                                tight=True,
                             ),
-                            ft.Text(
-                                "Thought it through",
-                                size=tokens.FONT_XS,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                            ),
+                            *body,
                         ],
-                        spacing=tokens.SPACE_SM,
-                    )
+                        spacing=tokens.SPACE_XS,
+                        tight=True,
+                    ),
+                    padding=ft.Padding.symmetric(
+                        horizontal=tokens.SPACE_SM, vertical=tokens.SPACE_XS
+                    ),
+                    border_radius=tokens.RADIUS_MD,
+                    ink=True,
+                    tooltip="Tap to expand or collapse",
+                    on_click=lambda e, t=turn: self._toggle_thought(t),
                 )
             )
 

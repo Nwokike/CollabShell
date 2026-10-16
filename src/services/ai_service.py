@@ -138,6 +138,7 @@ async def run_turn(
     messages: list,
     system: str = "",
     on_token: Callable[[str], None] | None = None,
+    on_thought: Callable[[str], None] | None = None,
     on_tool_start: Callable[[str, dict], None] | None = None,
     on_tool_done: Callable[[str, dict], None] | None = None,
     on_round_reset: Callable[[], None] | None = None,
@@ -201,6 +202,7 @@ async def run_turn(
         ),
         cancel=cancel,
         on_token=on_token or (lambda _t: None),
+        on_thought=on_thought,
         # The stop is polled per token, not sampled once: a turn whose user hit
         # Stop mid-stream must notice between tokens, not at the next round.
         should_stop=should_stop or (lambda: False),

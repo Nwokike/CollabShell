@@ -280,12 +280,25 @@ def _chat_messages(items: list[dict], *, limit: int | None = None) -> list[ChatM
     return out
 
 
-async def _build_engine(model: str, base_url: str | None = None) -> OpenAIEngine:
+async def _build_engine(
+    model: str,
+    base_url: str | None = None,
+    *,
+    on_thought: Callable[[str], None] | None = None,
+) -> OpenAIEngine:
     """One engine per candidate: router base, bounded timeouts, no SDK retries.
 
     ``base_url`` is the router the caller already resolved — a Settings
     override, or the app's own attach/embed decision. Passing it keeps the
     router decision in one place instead of re-running the attach path here.
+
+    ``on_thought`` receives the model's reasoning as it streams. kani throws
+    those deltas away (it reads `delta.content` only), so the capture has to
+    happen on the SSE bytes: the client is built over a transport that tees
+    `text/event-stream` frames and passes the originals through untouched
+    (`services/reasoning.py`, the same file DDGS and lm-router ship). Without
+    it the Thinking block goes dark and the user sees an answer appear from
+    nowhere.
 
     `max_retries=0` on the SDK because the candidate walk IS the retry for HTTP
     misses — the SDK's own backoff delayed every walk by retrying the same dead
@@ -294,23 +307,31 @@ async def _build_engine(model: str, base_url: str | None = None) -> OpenAIEngine
     """
     from services import router
     from services.ai_service import AIUnavailable
+    from services.reasoning import ReasoningEngine, ThoughtTap, build_thought_client
 
     base = base_url or await router.router_base()
     if base is None:
         raise AIUnavailable("No local model router is running, and none could be started.")
     timeout = httpx.Timeout(CANDIDATE_READ_S, connect=4.0)
+    tap = ThoughtTap(on_thought)
     client = openai.AsyncOpenAI(
         api_key="any",
         base_url=base,
         max_retries=0,
         timeout=timeout,
+        # The tapping client replaces the SDK's default one; max_retries is not
+        # forwarded because httpx has no such option and the SDK owns it.
+        http_client=build_thought_client(
+            timeout=timeout, max_retries=0, tap=tap
+        ),
     )
-    return OpenAIEngine(
+    return ReasoningEngine(
         client=client,
         model=model,
         api_type="chat_completions",
         max_context_size=DEFAULT_CONTEXT,
         tokenizer=_CountingTokenizer(),
+        tap=tap,
     )
 
 
@@ -375,6 +396,7 @@ async def run_turn(
     specs: list[ToolSpec],
     cancel: asyncio.Event,
     on_token: Callable[[str], None],
+    on_thought: Callable[[str], None] | None = None,
     on_round_reset: Callable[[], None] | None = None,
     on_model_step: Callable[[], Awaitable[None]] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -424,7 +446,7 @@ async def run_turn(
             break
         last_model = candidate
         try:
-            engine = await _build_engine(candidate, base_url)
+            engine = await _build_engine(candidate, base_url, on_thought=on_thought)
         except AIUnavailable:
             raise
         except Exception as exc:
@@ -576,7 +598,18 @@ async def run_turn(
                 # for the circuit TTL so the next turn does not lead with it,
                 # and walk on to the next candidate.
                 mark_model_failed(candidate)
-                logger.info("AI: %s failed for this turn; trying next", candidate)
+                # The reasoning tap keeps the upstream's own words from an error
+                # frame, which is the difference between "glm-5.3-flash failed"
+                # and why. A dead upstream arrives as HTTP 200 with the error
+                # inside the stream, so the SDK's own message would be generic.
+                upstream = getattr(getattr(engine, "tap", None), "last_error", None)
+                served = getattr(getattr(engine, "tap", None), "last_model", "")
+                logger.info(
+                    "AI: %s failed for this turn; trying next%s%s",
+                    candidate,
+                    f" (served as {served})" if served else "",
+                    f": {upstream.get('message') or upstream}" if upstream else "",
+                )
                 continue
             raise mapped from exc
 
