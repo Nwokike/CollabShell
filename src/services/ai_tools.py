@@ -91,16 +91,28 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         "user to open or create a session first.)"
     )
 
+    def _live_session() -> str:
+        """The session to act on, read NOW rather than captured at build time.
+
+        Capturing was a real bug once the assistant could create a session:
+        `build_tools` runs before the turn, so a tool set built with no session
+        open kept an empty name for the whole turn and every tool stayed
+        guarded even after `create_session` had made one. Reading live means the
+        same tool set works before and after.
+        """
+        live = str(getattr(state, "active_session_name", "") or "").strip()
+        return live or str(session_name or "").strip()
+
     def _has_session() -> bool:
         """Whether there is a session for a session-bound tool to act on.
 
         Without this every such tool called the service with an empty name and
         came back as `Session '' not found`, logged at WARNING once per call —
-        a wall of noise for what is really "nothing is open". The tool now
-        answers the model in one clear line, the way the notebook tools already
+        a wall of noise for what is really "nothing is open". The tool answers
+        the model in one clear line instead, the way the notebook tools already
         say "(no notebook is open for this session)".
         """
-        return bool(str(session_name or "").strip())
+        return bool(_live_session())
 
     async def _exec(code: str) -> str:
         """Run Python on the session's kernel and return its output.
@@ -135,7 +147,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             # failed". Call it as the method it is.
             await services.colab.exec_code(
                 code,
-                session_name,
+                _live_session(),
                 timeout=float(getattr(state, "default_timeout", 30.0)),
                 auth_method=state.auth_method,
                 on_output=_on_output,
@@ -162,7 +174,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         try:
             from screens.session import notebook_view
 
-            bridges = notebook_view._bridges(session_name)
+            bridges = notebook_view._bridges(_live_session())
             if not bridges:
                 return "(no notebook is open for this session)"
             cells = bridges["read_cells"]()
@@ -203,7 +215,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         try:
             from screens.session.terminal_panel import read_terminal_scrollback
 
-            text = read_terminal_scrollback(session_name, lines)
+            text = read_terminal_scrollback(_live_session(), lines)
             return _clip_text(text) if text.strip() else "(terminal is empty)"
         except Exception as ex:
             logger.warning("AI tool read_terminal failed: %s", ex)
@@ -223,7 +235,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
 
             ok = await install_packages_impl(
                 services.colab,
-                session_name,
+                _live_session(),
                 [package],
                 state.auth_method,
             )
@@ -269,7 +281,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             os.close(fd)
             try:
                 ok = await services.colab.download(
-                    path, session_name=session_name, auth_method=state.auth_method
+                    path, session_name=_live_session(), auth_method=state.auth_method
                 )
                 if not ok:
                     return f"Could not read {path}."
@@ -298,7 +310,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return NO_SESSION
         try:
             entries = await services.colab.ls(
-                path, session_name=session_name, auth_method=state.auth_method
+                path, session_name=_live_session(), auth_method=state.auth_method
             )
             if not entries:
                 return f"(nothing in {path})"
@@ -323,7 +335,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             ok = await services.colab.upload(
                 local_path,
                 remote_path,
-                session_name=session_name,
+                session_name=_live_session(),
                 auth_method=state.auth_method,
             )
             return (
@@ -356,7 +368,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         try:
             from screens.session.notebook_view import write_cells_to_active_tab
 
-            inserted = write_cells_to_active_tab(session_name, cells)
+            inserted = write_cells_to_active_tab(_live_session(), cells)
             if not inserted:
                 return "(no notebook tab is open to write into)"
             # The ids matter twice: the user can be pointed at the exact cell,
@@ -374,7 +386,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         try:
             from screens.session.notebook_view import list_tab_summaries
 
-            return _clip_text(list_tab_summaries(session_name) or "(no tabs)")
+            return _clip_text(list_tab_summaries(_live_session()) or "(no tabs)")
         except Exception as ex:
             logger.warning("AI tool list_notebook_tabs failed: %s", ex)
             return f"Could not list tabs: {ex}"
@@ -403,13 +415,118 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         if not _has_session():
             return NO_SESSION
         try:
-            events = await services.colab.get_log(session_name)
+            events = await services.colab.get_log(_live_session())
             if not events:
                 return "(log is empty)"
             return _clip("\n".join(str(e) for e in events[-lines:]))
         except Exception as ex:
             logger.warning("AI tool get_log failed: %s", ex)
             return f"Could not read the log: {ex}"
+
+    # ── sessions ───────────────────────────────────────────────────────────
+    # `colab new` and `colab sessions`. Deliberately NOT behind `_has_session`:
+    # these are the tools that make a session exist, so a guard here would be
+    # circular. The assistant could do everything the app can do except the one
+    # thing a user most often wants first.
+
+    async def list_sessions() -> str:
+        """List every session on this account, active or not.
+
+        Use BEFORE assuming which sessions exist, and before creating one — a
+        user who already has a session does not want a second VM. Read-only.
+        """
+        try:
+            sessions = await services.colab.list_sessions(
+                auth_method=state.auth_method
+            )
+        except Exception as ex:
+            logger.warning("AI tool list_sessions failed: %s", ex)
+            return f"Could not list sessions: {ex}"
+        if not sessions:
+            return "(no sessions — create one with create_session)"
+        lines = []
+        for entry in sessions:
+            if isinstance(entry, dict):
+                name = entry.get("name") or entry.get("id") or "?"
+                kind = entry.get("accelerator") or entry.get("gpu") or "CPU"
+                status = entry.get("status") or ""
+                lines.append(f"- {name} ({kind}) {status}".rstrip())
+            else:
+                lines.append(f"- {entry}")
+        return _clip("\n".join(lines))
+
+    async def create_session(
+        name: str = "",
+        gpu: str = "",
+        tpu: str = "",
+        high_mem: bool = False,
+    ) -> str:
+        """Create a new session: a fresh VM with its own kernel.
+
+        Use when the user asks for a new session, a new notebook, a fresh VM, a
+        GPU or a TPU, or when there is no session to work in. `name` is the
+        label the user will see; leave it blank and Colab names it. `gpu` and
+        `tpu` take the accelerator id exactly as the app's own picker shows it
+        (e.g. "T4", "A100", "v5e1"). `high_mem` asks for the high-RAM shape.
+
+        Accelerators and high-RAM need a paid plan and cost compute units, so
+        the user is asked to approve those before the VM is created. A plain CPU
+        session is created without asking.
+
+        Creating a session does NOT open it in the UI — tell the user it exists
+        and what it is called.
+        """
+        paid = bool(high_mem) or bool(str(gpu).strip()) or bool(str(tpu).strip())
+        if paid:
+            detail = " ".join(
+                part
+                for part in (
+                    f"gpu={gpu}" if gpu else "",
+                    f"tpu={tpu}" if tpu else "",
+                    "high memory" if high_mem else "",
+                )
+                if part
+            )
+            # The same rule the app's own sheet applies: a paid accelerator is a
+            # spend decision, so it is the user's to make, not the model's.
+            if not await _approved(
+                "Create session",
+                f"'{name or 'a new session'}' with {detail}. Accelerators and "
+                "high-RAM need a paid plan and use compute units.",
+            ):
+                return "(declined — no session was created)"
+        try:
+            result = await services.colab.new_session(
+                name=str(name).strip() or None,
+                gpu=str(gpu).strip() or None,
+                tpu=str(tpu).strip() or None,
+                auth_method=state.auth_method,
+                high_mem=bool(high_mem),
+            )
+        except Exception as ex:
+            logger.warning("AI tool create_session failed: %s", ex)
+            return f"Could not create the session: {ex}"
+        created = ""
+        if isinstance(result, dict):
+            created = str(result.get("name") or result.get("id") or "")
+        # Refresh the app's own list so the UI and the assistant agree, and make
+        # the new session the active one when nothing was open — the other tools
+        # read `active_session_name` live for exactly this reason.
+        try:
+            state.active_sessions = (
+                await services.colab.list_sessions(auth_method=state.auth_method)
+            ) or []
+        except Exception:
+            logger.debug("session list refresh after create failed", exc_info=True)
+        if created:
+            if not str(getattr(state, "active_session_name", "") or "").strip():
+                state.active_session_name = created
+            return (
+                f"Created the session '{created}'. It is not open in the UI — "
+                "tell the user the name so they can open it, and you can run "
+                "code in it now."
+            )
+        return f"Created the session. {result}"
 
     # ── destructive (approval-gated) ───────────────────────────────────────
     # These can destroy work, so each returns a refusal unless the caller
@@ -433,14 +550,14 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         and nothing else can recover it. The user is asked to approve first.
         """
         if not await _approved(
-            "Restart kernel", f"Session '{session_name}' — all variables are lost."
+            "Restart kernel", f"Session '{_live_session()}' — all variables are lost."
         ):
             return "(declined — the kernel was not restarted)"
         if not _has_session():
             return NO_SESSION
         try:
             ok = await services.colab.restart_kernel(
-                session_name, state.auth_method
+                _live_session(), state.auth_method
             )
             return (
                 "Kernel restarted. Variables are gone; cells are intact."
@@ -489,7 +606,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return NO_SESSION
         try:
             ok = await services.colab.rm(
-                path, session_name=session_name, auth_method=state.auth_method
+                path, session_name=_live_session(), auth_method=state.auth_method
             )
             return f"Deleted {path}." if ok else f"Could not delete {path}."
         except Exception as ex:
@@ -497,11 +614,14 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return f"Delete failed for {path}: {ex}"
 
     # Every tool above is a plain async closure built against the real
-    # session_name/services/state/ask_confirm. The docstring IS the
+    # _live_session()/services/state/ask_confirm. The docstring IS the
     # model-visible instruction (LM Router / DDGS pattern), and the parameter
     # names and types become the JSON schema — both are written to serve the
     # model, not the Python caller.
     return [
+        # Sessions first: these are what make everything below usable.
+        list_sessions,
+        create_session,
         _exec,
         read_notebook,
         read_terminal,

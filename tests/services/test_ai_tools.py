@@ -67,12 +67,119 @@ def test_full_tool_set_is_exposed():
     tools, _, _ = _tools()
     names = {t.__name__ for t in tools}
     for expected in (
+        # Sessions first: without these the rest are unreachable on a fresh app.
+        "list_sessions", "create_session",
         "_exec", "read_notebook", "read_terminal", "install_package",
         "list_variables", "read_file", "list_files", "upload_file",
         "write_cells", "list_notebook_tabs", "get_usage", "get_log",
         "restart_kernel", "stop_session", "delete_file",
     ):
         assert expected in names, f"missing tool: {expected}"
+
+
+def test_create_session_is_not_behind_the_session_guard():
+    """It is the tool that MAKES a session exist, so guarding it is circular.
+
+    The guard stops session-bound tools calling the service with an empty name.
+    Applied here it would make the one tool that fixes that impossible to call.
+    """
+    services, state = _fresh()
+    state.active_session_name = ""  # nothing open
+    created = []
+
+    async def new_session(**kw):
+        created.append(kw)
+        return {"name": kw.get("name") or "auto-named"}
+
+    async def list_sessions(**kw):
+        return [{"name": "auto-named"}]
+
+    services.colab.new_session = new_session
+    services.colab.list_sessions = list_sessions
+    tools = _by_name(ai_tools.build_tools("", services, state))
+    out = _run(tools["create_session"](name="lab"))
+    assert created, "the service was never asked to create anything"
+    assert "lab" in out, out
+
+
+def test_the_new_session_becomes_active_so_the_next_tool_can_use_it():
+    """The tools read the session LIVE.
+
+    Captured at build time, a tool set built with nothing open would stay
+    guarded for the whole turn — so `create_session` would appear to work and
+    then every following call would say "no session is open".
+    """
+    services, state = _fresh()
+    state.active_session_name = ""
+
+    async def new_session(**kw):
+        return {"name": "fresh-vm"}
+
+    async def list_sessions(**kw):
+        return [{"name": "fresh-vm"}]
+
+    async def exec_code(*a, **kw):
+        return True
+
+    services.colab.new_session = new_session
+    services.colab.list_sessions = list_sessions
+    services.colab.exec_code = exec_code
+    tools = _by_name(ai_tools.build_tools("", services, state))
+
+    _run(tools["create_session"](name="fresh-vm"))
+    assert state.active_session_name == "fresh-vm", state.active_session_name
+    # And a session-bound tool from the SAME tool set now works.
+    out = _run(tools["_exec"](code="print(1)"))
+    assert "no session is open" not in out, out
+
+
+def test_a_paid_accelerator_is_the_users_decision():
+    """GPUs and TPUs spend compute units, so they go through the gate.
+
+    The app's own sheet warns before a paid runtime; the assistant must not be
+    able to spend the user's money without the same approval.
+    """
+    services, state = _fresh()
+    asked = []
+
+    async def deny(label, detail):
+        asked.append((label, detail))
+        return False
+
+    async def new_session(**kw):
+        raise AssertionError("a denied create must not reach the service")
+
+    services.colab.new_session = new_session
+    tools = _by_name(ai_tools.build_tools("sess", services, state, ask_confirm=deny))
+
+    out = _run(tools["create_session"](name="gpu-box", gpu="A100"))
+    assert "declined" in out, out
+    assert asked, "the gate was never asked"
+    assert "A100" in asked[0][1], asked
+
+
+def test_a_plain_cpu_session_is_not_gated():
+    """Free work must not nag for approval, or the gate trains people to tap yes."""
+    services, state = _fresh()
+    asked = []
+
+    async def confirm(label, detail):
+        asked.append(label)
+        return True
+
+    async def new_session(**kw):
+        return {"name": "cpu"}
+
+    async def list_sessions(**kw):
+        return []
+
+    services.colab.new_session = new_session
+    services.colab.list_sessions = list_sessions
+    tools = _by_name(ai_tools.build_tools("", services, state, ask_confirm=confirm))
+
+    out = _run(tools["create_session"](name="cpu"))
+    assert asked == [], asked
+    assert "cpu" in out, out
 
 
 def test_interactive_flows_are_not_tools():

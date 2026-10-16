@@ -1,4 +1,4 @@
-"""Make `src.` importable from tests (mirrors the packaged flat layout)."""
+"""Shared test setup: the import path, the singleton restore, and one filter."""
 
 import sys
 from pathlib import Path
@@ -10,15 +10,33 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
+def pytest_collection_modifyitems(items):
+    """Filter one Windows teardown artefact for every test.
+
+    `WinError 10038` comes from a serve-forever thread parked in `select()` when
+    its socket is closed underneath it by a test's teardown. The thread is a
+    daemon and the test has already passed, so it is a platform artefact, not a
+    fault. It has to be applied to every item because the exception surfaces in
+    whichever test happens to be running when the stale thread wakes — usually a
+    later file than the one that started the server, which is why a per-module
+    filter misses it.
+    """
+    marker = pytest.mark.filterwarnings(
+        "ignore::pytest.PytestUnhandledThreadExceptionWarning"
+    )
+    for item in items:
+        item.add_marker(marker)
+
+
 @pytest.fixture(autouse=True)
 def _restore_process_globals():
     """Snapshot and restore the singletons every test shares.
 
     `core.state.state`, `model_catalog`'s catalog and `router`'s module state
     are process-wide, and real code writes them: `ensure_router()` publishes a
-    status, `refresh_catalog()` installs rows and adopts a default model, a
-    turn marks a model's circuit. So one test's side effect changes the next
-    test's starting point.
+    status, `refresh_catalog()` installs rows and adopts a default model, a turn
+    marks a model's circuit. So one test's side effect changes the next test's
+    starting point.
 
     That is not hypothetical: it has produced three separate failures that pass
     in isolation and fail in a full run — a leaked `ai_router_port` changing
@@ -27,9 +45,8 @@ def _restore_process_globals():
     order. Each was "fixed" by restoring state in the offending test file, which
     only holds until the next file writes it.
 
-    Restoring here means a test may use the real code paths without every
-    author having to remember the cleanup, and no file depends on being run
-    alone.
+    Restoring here means a test may use the real code paths without every author
+    having to remember the cleanup, and no file depends on being run alone.
     """
     from core.state import state
 

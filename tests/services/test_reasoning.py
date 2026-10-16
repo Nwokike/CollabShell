@@ -25,13 +25,6 @@ from services.reasoning import (
     build_thought_client,
 )
 
-# Windows raises WinError 10038 from a serve-forever thread parked in select()
-# when its socket is closed underneath it. It surfaces during teardown, after the
-# test has passed, and is a platform artefact rather than a fault.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::pytest.PytestUnhandledThreadExceptionWarning"
-)
-
 # ── the frame shapes providers actually send ────────────────────────────────
 
 
