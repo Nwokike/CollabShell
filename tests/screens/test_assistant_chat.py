@@ -956,3 +956,73 @@ class _ChipSpy:
 
     def update(self):
         pass
+
+
+# ── the capability list on the empty chat ───────────────────────────────────
+
+
+# Which starter exercises which tool. Every tool the assistant has must appear
+# here, so a capability cannot become discoverable only by guessing — that is
+# the whole point of the "What I can do" list (DDGS gives every ability a
+# sample: `chat_screen.py:1705-1709`).
+_STARTER_TOOL_MAP = {
+    "list_sessions": "List my Colab sessions",
+    "create_session": "Create a new session named",
+    "_exec": "Run this and tell me what happened",
+    "list_variables": "What variables are in my kernel",
+    "install_package": "Install pandas and confirm",
+    "restart_kernel": "Restart the kernel",
+    "read_notebook": "Read my active notebook and explain",
+    "write_cells": "Write a cell that loads my data",
+    "list_notebook_tabs": "List the notebook tabs I have open",
+    "list_files": "List the files in my session",
+    "read_file": "Read /content/data.csv",
+    "upload_file": "Upload ~/data.csv",
+    "read_terminal": "Show me the recent terminal output",
+    "delete_file": "Delete /content/old.csv",
+    "get_usage": "How many compute units do I have left",
+    "get_log": "Show me the session activity log",
+    "stop_session": "Stop my session when you're done",
+}
+
+
+def test_every_tool_is_reachable_from_a_starter():
+    """A capability nobody can see is a capability nobody uses.
+
+    The assistant gained session creation and the empty chat said nothing about
+    it — the owner's "why don't I see an example of creating session?". This
+    fails the moment a tool is added without a sample.
+    """
+    from services import ai_tools
+
+    starters = {prompt for _icon, _label, prompt in assistant_view._starter_rows()}
+    tools = {
+        t.__name__
+        for t in ai_tools.build_tools(
+            "sess", NS(colab=NS(), storage=None),
+            NS(auth_method="oauth2", default_timeout=30.0),
+        )
+    }
+
+    missing = tools - set(_STARTER_TOOL_MAP)
+    assert not missing, f"tools with no starter prompt: {sorted(missing)}"
+
+    for tool_name, needle in _STARTER_TOOL_MAP.items():
+        assert any(needle in prompt for prompt in starters), (
+            f"no starter covers {tool_name} (looked for {needle!r})"
+        )
+
+
+def test_the_starters_are_prompts_not_tool_names():
+    """A row is a sentence a user would say. The tool is the model's business."""
+    from services import ai_tools
+
+    tool_names = {t.__name__ for t in ai_tools.build_tools(
+        "sess", NS(colab=NS(), storage=None),
+        NS(auth_method="oauth2", default_timeout=30.0),
+    )}
+    for _icon, label, prompt in assistant_view._starter_rows():
+        for name in tool_names:
+            assert name not in prompt, f"starter leaks the tool name {name!r}: {prompt!r}"
+        assert label and prompt, (label, prompt)
+        assert not prompt.endswith("."), f"prompts are sentences, not instructions: {prompt!r}"

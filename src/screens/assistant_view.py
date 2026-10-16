@@ -52,12 +52,35 @@ def _starter_rows():
 
     Kept here so what the starters promise is always what the tools do.
     """
+    # Every capability gets a sample, the way DDGS's "What I can do" list works:
+    # one row per thing the assistant can do, so nothing it is able to do is
+    # discoverable only by guessing. A row is a full sentence a user would say,
+    # not a tool name — the tool is the model's business, not theirs.
     return [
+        # ── sessions ──
+        (ft.Icons.DNS_ROUNDED, "What sessions do I have?", "List my Colab sessions"),
+        (ft.Icons.ADD_BOX_ROUNDED, "Create a session", "Create a new session named 'my-lab'"),
+        # ── running code ──
         (ft.Icons.PLAY_ARROW_ROUNDED, "Run code on my session", "Run this and tell me what happened: print(1+1)"),
+        (ft.Icons.MEMORY_ROUNDED, "What variables are in my kernel?", "What variables are in my kernel right now?"),
+        (ft.Icons.TABLE_CHART_ROUNDED, "Install a package", "Install pandas and confirm it worked"),
+        (ft.Icons.RESTART_ALT_ROUNDED, "Restart the kernel", "Restart the kernel — my memory is full"),
+        # ── the notebook ──
         (ft.Icons.DESCRIPTION_ROUNDED, "Explain my notebook", "Read my active notebook and explain what it does, cell by cell"),
         (ft.Icons.BUG_REPORT_ROUNDED, "Fix the error", "Read my active notebook, find the last error, and fix it"),
-        (ft.Icons.LIST_ALT_ROUNDED, "What's in my session?", "List the files and variables in my active session"),
+        (ft.Icons.EDIT_NOTE_ROUNDED, "Write a cell for me", "Write a cell that loads my data and cleans it"),
+        (ft.Icons.TAB_ROUNDED, "What notebook tabs are open?", "List the notebook tabs I have open"),
+        # ── files ──
+        (ft.Icons.FOLDER_OPEN_ROUNDED, "What files are on my session?", "List the files in my session"),
+        (ft.Icons.DOWNLOAD_ROUNDED, "Read a file for me", "Read /content/data.csv and show me the first few rows"),
+        (ft.Icons.UPLOAD_FILE_ROUNDED, "Upload a file to my session", "Upload ~/data.csv to my session as /content/data.csv"),
         (ft.Icons.TERMINAL_ROUNDED, "Check the terminal", "Show me the recent terminal output and flag anything concerning"),
+        (ft.Icons.DELETE_OUTLINE_ROUNDED, "Delete a file", "Delete /content/old.csv from my session"),
+        # ── the account ──
+        (ft.Icons.SPEED_ROUNDED, "How many compute units are left?", "How many compute units do I have left?"),
+        (ft.Icons.HISTORY_ROUNDED, "What has the session been doing?", "Show me the session activity log"),
+        # ── teardown ──
+        (ft.Icons.POWER_SETTINGS_NEW_ROUNDED, "Stop the session", "Stop my session when you're done"),
     ]
 
 
