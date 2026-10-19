@@ -34,3 +34,11 @@ release_notes.md
 # The app reads version.json from a URL, so a stray 2.x entry tells every
 # installed client to update for a release that is not live yet.
 version.json
+
+# Throwaway harnesses and probes. These are scratch files written while
+# reproducing a bug headlessly; they are never meant to be committed, and 1700
+# lines of them had accumulated once. Anything matching these names is garbage.
+debug_*.py
+harness_*.py
+probe_*.py
+scratch_*.py
