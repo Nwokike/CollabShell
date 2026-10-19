@@ -15,7 +15,7 @@ import flet as ft
 
 from components.env_dialog import show_env_override_dialog
 from core import constants, tokens
-from core.styles import glass_card, section_header, tip_text
+from core.styles import after_render, glass_card, section_header, tip_text
 
 
 def build_execution_section(page: ft.Page, state, services) -> ft.Column:
@@ -88,7 +88,12 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
         # the summary optimistically from current state.
         _refresh_env_summary()
 
-    _refresh_env_summary()
+    # NOT `_refresh_env_summary()` in the body: `build_execution_section` runs
+    # inside SettingsScreen's `@ft.component` body, and its `page.update()` would
+    # push a competing patch mid-render — the screen comes back blank with no
+    # traceback (`flet/components/component.py:145-167`). It runs from an effect
+    # after the body patch instead (the precedent at `app_shell.py:169`).
+    after_render(lambda: _refresh_env_summary())
 
     return ft.Column(
         controls=[

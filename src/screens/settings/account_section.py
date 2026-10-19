@@ -23,7 +23,7 @@ import logging
 import flet as ft
 
 from core import constants, tokens
-from core.styles import glass_card, section_header, tip_text
+from core.styles import after_render, glass_card, section_header, tip_text
 from core.theme import AppColors
 
 logger = logging.getLogger("AccountSection")
@@ -439,11 +439,15 @@ def build_account_section(page: ft.Page, state, services) -> ft.Column:
     )
 
     # Auto-load once per signed-in identity. A rebuild with the same identity
-    # keeps the stored values (no refetch, no loading flash).
+    # keeps the stored values (no refetch, no loading flash). Deliberately from
+    # an effect, not the body: `build_account_section` runs inside
+    # SettingsScreen's `@ft.component` body, and a `page.run_task` that mutates
+    # controls mid-render races the component's own patch — the screen comes
+    # back blank with no traceback (`flet/components/component.py:145-167`).
     identity = _usage_autoload_identity(state)
     if _USAGE_AUTOLOAD_KEY != identity:
         _USAGE_AUTOLOAD_KEY = identity
-        page_run_task(_load_usage)
+        after_render(lambda: page_run_task(_load_usage))
 
     return ft.Column(
         controls=[

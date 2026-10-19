@@ -1,6 +1,7 @@
 """Reusable widget factories."""
 
 import logging
+from typing import Any, Callable
 
 import flet as ft
 
@@ -229,3 +230,29 @@ def tip_text(text: str) -> ft.Text:
         color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
         italic=True,
     )
+
+
+def after_render(work: Callable[[], Any]) -> None:
+    """Run a side effect once the enclosing component has finished rendering.
+
+    Settings sections are plain builders called from inside `SettingsScreen`'s
+    `@ft.component` body. flet 1.0 forbids touching the page from there: a
+    `page.update()`, or a `page.run_task()` that mutates controls, mid-render
+    pushes a competing patch before the component's own, so the subtree never
+    reaches the client — the screen comes back blank with no traceback
+    (`flet/components/component.py:145-167`: the body renders, the patch is
+    emitted, and only then do the render effects run).
+
+    So: inside a component, register the work as an effect, which flet runs
+    after the patch. Outside one — a test, or any plain caller — run it now,
+    because ``use_effect`` raises "No current renderer" there and would
+    otherwise turn this helper into a landmine for every non-component caller.
+    """
+    from flet.components import utils
+
+    try:
+        utils.current_renderer()
+    except RuntimeError:
+        work()
+        return
+    ft.use_effect(lambda: work(), [])

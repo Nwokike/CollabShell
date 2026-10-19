@@ -12,7 +12,7 @@ import logging
 import flet as ft
 
 from core import constants, tokens
-from core.styles import glass_card, section_header, tip_text
+from core.styles import after_render, glass_card, section_header, tip_text
 from services import ai_credits
 
 logger = logging.getLogger("AssistantSettings")
@@ -123,8 +123,12 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         except Exception as ex:
             logger.warning("Credits render failed: %s", ex)
 
-    # Kick off the first read; later refreshes are driven by the wallet dialog.
-    page.run_task(_load_credits)
+    # Kick off the first read after the component has patched, not during the
+    # render body: `build_ai_section` runs inside SettingsScreen's
+    # `@ft.component` body, and flet 1.0 forbids touching the page from there
+    # (see `core.styles.after_render`). Later refreshes (the wallet dialog) call
+    # the refresher from an event handler, which is always safe.
+    after_render(lambda: page.run_task(_load_credits))
 
     def _refresh_credits():
         credits_text.value = "Loading credits…"

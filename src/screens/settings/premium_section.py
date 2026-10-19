@@ -15,7 +15,7 @@ import flet as ft
 from core import tokens
 from core.channel import CHANNEL
 from core.notifications import show_notification
-from core.styles import glass_card, section_header, tip_text
+from core.styles import after_render, glass_card, section_header, tip_text
 
 logger = logging.getLogger("PremiumSection")
 
@@ -205,8 +205,13 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Cont
                 page, "Complete the payment. This screen unlocks itself when it lands."
             )
 
+    # NOT `page.run_task(_load)` in the body: `build_premium_section` runs
+    # inside SettingsScreen's `@ft.component` body, and flet 1.0 forbids touching
+    # the page from there — a task that mutates controls mid-render races the
+    # component's own patch and the screen comes back blank with no traceback
+    # (`flet/components/component.py:145-167`). See `core.styles.after_render`.
     _render([])
-    page.run_task(_load)
+    after_render(lambda: page.run_task(_load))
 
     return ft.Column(
         controls=[
