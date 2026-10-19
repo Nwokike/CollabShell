@@ -12,10 +12,30 @@ import logging
 import flet as ft
 
 from core import constants, tokens
-from core.styles import after_render, glass_card, section_header, tip_text
+from core.styles import glass_card, section_header, tip_text
 from services import ai_credits
 
 logger = logging.getLogger("AssistantSettings")
+
+
+def _defer(defer, work):
+    """Hand the work to the screen, or run it now when there is no screen.
+
+    A section builder is a plain function, not a component, so it cannot
+    register a flet effect on its own: `use_effect` needs a component render
+    frame, and without one it raises. That raise escapes `Component.update()`
+    into the session's update loop, which has no exception handler — the
+    scheduler dies and every later update is silently dropped.
+
+    So the work is COLLECTED by `SettingsScreen` (a real component) and run
+    from one effect there. When a builder is called on its own — a test, or
+    any plain caller — there is no component to defer to, so the work runs
+    immediately, which is what that caller wanted anyway.
+    """
+    if defer is not None:
+        defer(work)
+        return
+    work()
 
 
 def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
@@ -89,7 +109,7 @@ def _router_status_line(state) -> str:
     return "Router status unknown."
 
 
-def build_ai_section(page: ft.Page, state, services) -> ft.Column:
+def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
     """The ASSISTANT settings block."""
     credits = getattr(services, "credits", None)
     premium = getattr(services, "premium", None)
@@ -128,7 +148,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     # `@ft.component` body, and flet 1.0 forbids touching the page from there
     # (see `core.styles.after_render`). Later refreshes (the wallet dialog) call
     # the refresher from an event handler, which is always safe.
-    after_render(lambda: page.run_task(_load_credits))
+    _defer(defer, lambda: page.run_task(_load_credits))
 
     def _refresh_credits():
         credits_text.value = "Loading credits…"

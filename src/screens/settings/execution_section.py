@@ -15,10 +15,30 @@ import flet as ft
 
 from components.env_dialog import show_env_override_dialog
 from core import constants, tokens
-from core.styles import after_render, glass_card, section_header, tip_text
+from core.styles import glass_card, section_header, tip_text
 
 
-def build_execution_section(page: ft.Page, state, services) -> ft.Column:
+def _defer(defer, work):
+    """Hand the work to the screen, or run it now when there is no screen.
+
+    A section builder is a plain function, not a component, so it cannot
+    register a flet effect on its own: `use_effect` needs a component render
+    frame, and without one it raises. That raise escapes `Component.update()`
+    into the session's update loop, which has no exception handler — the
+    scheduler dies and every later update is silently dropped.
+
+    So the work is COLLECTED by `SettingsScreen` (a real component) and run
+    from one effect there. When a builder is called on its own — a test, or
+    any plain caller — there is no component to defer to, so the work runs
+    immediately, which is what that caller wanted anyway.
+    """
+    if defer is not None:
+        defer(work)
+        return
+    work()
+
+
+def build_execution_section(page: ft.Page, state, services, defer=None) -> ft.Column:
     async def _on_timeout_change(e):
         state.default_timeout = int(e.control.value)
         await services.storage.set(
@@ -93,7 +113,7 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
     # push a competing patch mid-render — the screen comes back blank with no
     # traceback (`flet/components/component.py:145-167`). It runs from an effect
     # after the body patch instead (the precedent at `app_shell.py:169`).
-    after_render(lambda: _refresh_env_summary())
+    _defer(defer, lambda: _refresh_env_summary())
 
     return ft.Column(
         controls=[

@@ -23,10 +23,30 @@ import logging
 import flet as ft
 
 from core import constants, tokens
-from core.styles import after_render, glass_card, section_header, tip_text
+from core.styles import glass_card, section_header, tip_text
 from core.theme import AppColors
 
 logger = logging.getLogger("AccountSection")
+
+
+def _defer(defer, work):
+    """Hand the work to the screen, or run it now when there is no screen.
+
+    A section builder is a plain function, not a component, so it cannot
+    register a flet effect on its own: `use_effect` needs a component render
+    frame, and without one it raises. That raise escapes `Component.update()`
+    into the session's update loop, which has no exception handler — the
+    scheduler dies and every later update is silently dropped.
+
+    So the work is COLLECTED by `SettingsScreen` (a real component) and run
+    from one effect there. When a builder is called on its own — a test, or
+    any plain caller — there is no component to defer to, so the work runs
+    immediately, which is what that caller wanted anyway.
+    """
+    if defer is not None:
+        defer(work)
+        return
+    work()
 
 
 def format_usage_values(usage: dict) -> tuple[list[tuple[str, str]], bool]:
@@ -326,7 +346,7 @@ def reset_usage_card() -> None:
     _USAGE_AUTOLOAD_KEY = object()
 
 
-def build_account_section(page: ft.Page, state, services) -> ft.Column:
+def build_account_section(page: ft.Page, state, services, defer=None) -> ft.Column:
     global _USAGE_AUTOLOAD_KEY
 
     # ── Auth status indicator ───────────────────────────
@@ -447,7 +467,7 @@ def build_account_section(page: ft.Page, state, services) -> ft.Column:
     identity = _usage_autoload_identity(state)
     if _USAGE_AUTOLOAD_KEY != identity:
         _USAGE_AUTOLOAD_KEY = identity
-        after_render(lambda: page_run_task(_load_usage))
+        _defer(defer, lambda: page_run_task(_load_usage))
 
     return ft.Column(
         controls=[

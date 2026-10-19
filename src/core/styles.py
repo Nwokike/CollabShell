@@ -1,8 +1,6 @@
 """Reusable widget factories."""
 
 import logging
-from collections.abc import Callable
-from typing import Any
 
 import flet as ft
 
@@ -233,41 +231,3 @@ def tip_text(text: str) -> ft.Text:
     )
 
 
-def after_render(work: Callable[[], Any]) -> None:
-    """Run a side effect once the enclosing component has finished rendering.
-
-    Settings sections are plain builders called from inside `SettingsScreen`'s
-    `@ft.component` body. flet 1.0 forbids touching the page from there: a
-    `page.update()`, or a `page.run_task()` that mutates controls, mid-render
-    pushes a competing patch before the component's own, so the subtree never
-    reaches the client — the screen comes back blank with no traceback
-    (`flet/components/component.py:145-167`: the body renders, the patch is
-    emitted, and only then do the render effects run).
-
-    So: inside a component, register the work as an effect, which flet runs
-    after the patch. Outside one — a test, or any plain caller — run it now.
-
-    THE GUARD IS `current_component()`, NOT `current_renderer()`. The two are
-    not the same strength: `use_effect` calls `current_component()`, which
-    raises unless the render stack has a component on it, while
-    `current_renderer()` succeeds whenever any renderer is bound. In the app's
-    nested render path the renderer IS bound and the stack is NOT — so a
-    renderer-only guard lets `use_effect` raise. That exception escapes
-    `Component.update()`, and the session's update loop
-    (`flet/messaging/session.py:719-720`) has NO exception handler around it,
-    so it kills the scheduler task. Every later update is then silently
-    dropped: the tab changes, the content never follows, and nothing is
-    logged. That was the blank Settings screen.
-
-    Checking `current_component()` is exactly the check `use_effect` makes
-    itself, so once it passes the hook cannot fail.
-    """
-    from flet.components import utils
-
-    try:
-        utils.current_component()
-    except RuntimeError:
-        # No component is rendering: there is no patch to race, so run it now.
-        work()
-        return
-    ft.use_effect(lambda: work(), [])

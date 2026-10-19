@@ -39,23 +39,40 @@ def SettingsScreen() -> ft.Control:
     sections = (
         build_preferences_section,
         build_account_section,
-        lambda page, state, services: build_banner_ad(page),
+        lambda page, state, services, defer=None: build_banner_ad(page),
         build_ai_section,
         build_premium_section,
         build_hardware_section,
         build_execution_section,
         build_behavior_section,
-        lambda page, state, services: build_banner_ad(page),
+        lambda page, state, services, defer=None: build_banner_ad(page),
         build_advanced_section,
         build_logs_section,
         build_data_section,
         build_about_section,
     )
 
+    # Work that must happen AFTER the component has patched — the section
+    # loaders. It is collected here and run from ONE effect, because
+    # `SettingsScreen` is a real component and can register a hook safely.
+    #
+    # It must NOT be registered from inside a section builder: those are plain
+    # functions, and flet's `use_effect` needs a component render frame
+    # (`current_component()`), not merely a bound renderer. Where the frame is
+    # missing, `use_effect` raises — and that raise escapes
+    # `Component.update()` into the session's update loop
+    # (`flet/messaging/session.py:719-720`), which has no exception handler:
+    # the scheduler task dies, every later update is silently dropped, and the
+    # screen never changes. That was the blank Settings tab.
+    #
+    # One effect, registered here, always — so the hook count cannot shift
+    # between renders and misalign the hook cursor.
+    pending: list = []
+
     controls: list[ft.Control] = []
     for build in sections:
         try:
-            controls.append(build(page, state, services))
+            controls.append(build(page, state, services, pending.append))
         except Exception as ex:
             logger.exception("Settings section failed: %r", build)
             controls.append(
@@ -69,6 +86,18 @@ def SettingsScreen() -> ft.Control:
                     padding=tokens.SPACE_MD,
                 )
             )
+
+    def _run_pending():
+        """Run the collected section work, after the patch has been emitted."""
+        for work in pending:
+            try:
+                work()
+            except Exception:
+                logger.exception("Settings deferred work failed")
+
+    # Exactly one effect, always — so the hook cursor cannot shift between
+    # renders and bind an effect to the wrong slot.
+    ft.use_effect(_run_pending, [])
 
     return ft.Column(
         controls=[

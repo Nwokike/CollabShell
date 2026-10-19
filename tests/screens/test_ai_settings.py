@@ -612,24 +612,36 @@ def test_router_is_up_only_while_ready():
     assert _router_is_up(_S()) is True
 
 
-def test_after_render_never_raises_when_only_a_renderer_is_bound():
-    """The guard must be `current_component`, not `current_renderer`.
+def test_a_plain_section_builder_never_registers_a_hook():
+    """The rule that keeps the session's scheduler alive.
 
-    flet binds a renderer for a nested render whose component stack is empty,
-    and `use_effect` (which `after_render` calls) raises there
-    ("Hooks must be called inside a component render"). The exception escapes
-    `Component.update()`, and the session's update loop
-    (`flet/messaging/session.py:719-720`) has no handler around it — so it
-    kills the scheduler task and every later update is silently dropped. The
-    symptom was the Settings tab changing while the content never followed.
+    A section builder is a plain function, not a component, so it cannot
+    register a flet effect: `use_effect` needs a component render frame
+    (`current_component()`), not merely a bound renderer. Where the frame is
+    missing, `use_effect` raises -- and that raise escapes
+    `Component.update()` into the session's update loop
+    (`flet/messaging/session.py:719-720`), which has NO exception handler
+    around it. The scheduler task dies, every later update is silently
+    dropped, and the screen stops changing: the Settings tab would change
+    while the content never followed, with nothing in the log.
+
+    So the work is COLLECTED by `SettingsScreen` and run from one effect
+    there. This test pins that the collectors are the only path.
     """
-    from flet.components.component import Renderer
+    from screens.settings import (
+        account_section,
+        ai_section,
+        execution_section,
+        premium_section,
+    )
 
-    from core.styles import after_render
-
-    ran: list[str] = []
-    renderer = Renderer()
-    with renderer.with_context():
-        # A renderer is bound, but no component is on the render stack.
-        after_render(lambda: ran.append("ran"))
-    assert ran == ["ran"], "the work must run rather than raise"
+    for module in (account_section, ai_section, execution_section, premium_section):
+        assert hasattr(module, "_defer"), f"{module.__name__} has no collector"
+        ran: list[str] = []
+        collected: list = []
+        module._defer(collected.append, lambda: ran.append("ran"))  # noqa: B023
+        assert collected, f"{module.__name__} did not collect its work"
+        assert not ran, f"{module.__name__} ran the work instead of collecting it"
+        # With no screen to defer to (a test, a plain caller) it runs now.
+        module._defer(None, lambda: ran.append("ran"))  # noqa: B023
+        assert ran == ["ran"], f"{module.__name__} did not run the work"
