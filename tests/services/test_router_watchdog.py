@@ -61,7 +61,12 @@ def instant_event(monkeypatch):
 
 @pytest.fixture
 def probe(monkeypatch):
-    """Patch `router.probe_router`; returns a list of the requests it took."""
+    """Patch `router.probe_router` AND `ensure_router`; returns the call log.
+
+    `ensure_router` is stubbed too, because the loop now calls it once at boot to
+    attach-or-embed (the owner: no manual `start gateway`). Without the stub the
+    boot path would hit the real network and make these tests slow and flaky.
+    """
     from services import router
 
     answers: list[tuple[str, int | None]] = []
@@ -74,7 +79,13 @@ def probe(monkeypatch):
             return answers[index]
         return answers[-1] if answers else ("unavailable", None)
 
+    async def fake_ensure(*_a, **kw):
+        # Never touch the network: a real attach-or-embed here would download
+        # an engine and make these tests slow and environment-dependent.
+        return None
+
     monkeypatch.setattr(router, "probe_router", fake_probe)
+    monkeypatch.setattr(router, "ensure_router", fake_ensure)
 
     def set(*pairs):
         answers[:] = list(pairs)
@@ -107,6 +118,77 @@ def _run_ticks(
 
     asyncio.run(go())
     return watchdog
+
+
+# ── starting the router at boot ─────────────────────────────────────────────
+
+
+def test_the_first_tick_starts_the_router(monkeypatch, instant_event):
+    """Attach-or-embed at boot, so nobody has to tap "Start gateway".
+
+    Both references do this (DDGS `app_controller.py:160`, lm-router
+    `main.py:296-297`) and the owner asked for it directly. Stubbed here so the
+    test proves the CALL happens, without the network.
+    """
+    from services import router
+
+    asked = []
+
+    async def fake_ensure(*_a, **kw):
+        asked.append(kw)
+        return 8083
+
+    monkeypatch.setattr(router, "ensure_router", fake_ensure)
+    monkeypatch.setattr(router, "probe_router", _probe_never)
+    watchdog = wd.RouterStatusWatchdog()
+
+    async def go():
+        task = asyncio.ensure_future(watchdog._loop())
+        for _ in range(6):
+            await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(go())
+    assert asked, "the router was never started at boot"
+
+
+def test_a_failure_to_start_is_not_fatal(monkeypatch, instant_event):
+    """No engine cached, no network: the loop keeps observing anyway.
+
+    The pill stays honest and the Settings "Start router" action still works —
+    an automatic path must not remove the manual one.
+    """
+    from services import router
+
+    async def boom(*_a, **kw):
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr(router, "ensure_router", boom)
+    watchdog = wd.RouterStatusWatchdog()
+
+    async def go():
+        task = asyncio.ensure_future(watchdog._loop())
+        for _ in range(6):
+            await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(go())  # must not raise
+
+
+def _probe_never():
+    return _never_answered()
+
+
+async def _never_answered():
+    return ("unavailable", None)
 
 
 # ── the loop's own rules ────────────────────────────────────────────────────

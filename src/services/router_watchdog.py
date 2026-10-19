@@ -4,13 +4,18 @@
 UI. Something has to carry a status change across, and this is that something:
 it is the only module that holds a page.
 
-Ported from DDGS's watchdog (`src/app_controller.py`, the router loop). Three
-properties it gets right, each learned the hard way there:
+Ported from DDGS's watchdog (`src/app_controller.py`, the router loop), with
+the one change the owner asked for. Three properties it gets right there, each
+learned the hard way:
 
-1. **It only observes.** It never starts, stops, or re-points a router. Starting
-   is the turn path's job and the user's job (a Settings button and a pill
-   action); a loop that quietly embedded a router would make "Start router"
-   look like it did nothing when it had already been done.
+1. **It starts the router, once, at boot.** Both references attach-or-embed at
+   startup: the assistant is supposed to work with no setup, and a pill that
+   says "Starting gateway…" until someone clicks a button is exactly the
+   complaint — "when you open the app, I don't have to manually go and click
+   start gateway". So the first tick attaches to a router already running, or
+   embeds the app's own. If that fails (no engine cached, no network) the loop
+   keeps observing and the Settings button still works — the failure path is
+   not removed by the automatic path.
 2. **It publishes only on a real change.** `_publish_status` already guards
    that, so the loop's own transition check is about the nudge, not the state.
 3. **It nudges the visible pill, and nothing else.** A status change is only
@@ -126,6 +131,33 @@ class RouterStatusWatchdog:
     async def _loop(self) -> None:
         from core.state import state
         from services import router
+
+        # Attach-or-embed ONCE, before the first observe. Both references do
+        # exactly this at boot — DDGS `app_controller.py:160` fires
+        # `_refresh_ai_catalog` (which calls `ensure_router()`), lm-router
+        # `main.py:296-297` runs `_start_gateway_quiet` — because the assistant
+        # is supposed to work with no setup. Waiting for a tap is what the owner
+        # called out: "I don't have to manually go and click start gateway."
+        #
+        # Failure is not fatal and does not remove the button: if there is no
+        # cached engine and no network, the pill stays honest ("Offline" + Start
+        # router) and the Settings action still works. Probes continue below.
+        try:
+            port = await router.ensure_router()
+            if port:
+                logger.info("AI router: ready on port %s at boot", port)
+                # Read the catalog while we are here, so the pill can name a
+                # model on the first paint instead of "Starting gateway…".
+                try:
+                    from services import model_catalog
+
+                    await model_catalog.refresh_catalog(router.router_base_url(port))
+                except Exception:
+                    logger.debug("boot catalog fetch failed", exc_info=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.info("AI router: not started at boot (%s); will keep watching", exc)
 
         while True:
             # Probe first, then wait: waiting first delays the very first
