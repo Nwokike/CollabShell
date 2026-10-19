@@ -245,15 +245,29 @@ def after_render(work: Callable[[], Any]) -> None:
     emitted, and only then do the render effects run).
 
     So: inside a component, register the work as an effect, which flet runs
-    after the patch. Outside one — a test, or any plain caller — run it now,
-    because ``use_effect`` raises "No current renderer" there and would
-    otherwise turn this helper into a landmine for every non-component caller.
+    after the patch. Outside one — a test, or any plain caller — run it now.
+
+    THE GUARD IS `current_component()`, NOT `current_renderer()`. The two are
+    not the same strength: `use_effect` calls `current_component()`, which
+    raises unless the render stack has a component on it, while
+    `current_renderer()` succeeds whenever any renderer is bound. In the app's
+    nested render path the renderer IS bound and the stack is NOT — so a
+    renderer-only guard lets `use_effect` raise. That exception escapes
+    `Component.update()`, and the session's update loop
+    (`flet/messaging/session.py:719-720`) has NO exception handler around it,
+    so it kills the scheduler task. Every later update is then silently
+    dropped: the tab changes, the content never follows, and nothing is
+    logged. That was the blank Settings screen.
+
+    Checking `current_component()` is exactly the check `use_effect` makes
+    itself, so once it passes the hook cannot fail.
     """
     from flet.components import utils
 
     try:
-        utils.current_renderer()
+        utils.current_component()
     except RuntimeError:
+        # No component is rendering: there is no patch to race, so run it now.
         work()
         return
     ft.use_effect(lambda: work(), [])

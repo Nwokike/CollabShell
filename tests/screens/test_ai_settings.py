@@ -610,3 +610,26 @@ def test_router_is_up_only_while_ready():
         ai_router_port = 8082
 
     assert _router_is_up(_S()) is True
+
+
+def test_after_render_never_raises_when_only_a_renderer_is_bound():
+    """The guard must be `current_component`, not `current_renderer`.
+
+    flet binds a renderer for a nested render whose component stack is empty,
+    and `use_effect` (which `after_render` calls) raises there
+    ("Hooks must be called inside a component render"). The exception escapes
+    `Component.update()`, and the session's update loop
+    (`flet/messaging/session.py:719-720`) has no handler around it — so it
+    kills the scheduler task and every later update is silently dropped. The
+    symptom was the Settings tab changing while the content never followed.
+    """
+    from flet.components.component import Renderer
+
+    from core.styles import after_render
+
+    ran: list[str] = []
+    renderer = Renderer()
+    with renderer.with_context():
+        # A renderer is bound, but no component is on the render stack.
+        after_render(lambda: ran.append("ran"))
+    assert ran == ["ran"], "the work must run rather than raise"
