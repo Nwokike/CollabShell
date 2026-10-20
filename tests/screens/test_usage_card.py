@@ -105,6 +105,18 @@ def _texts(rows) -> list[str]:
     return out
 
 
+def _current_texts() -> list[str]:
+    """The usage card's text as the next render would build it.
+
+    `_USAGE_VIEW["body"]` is a control from an EARLIER render, and flet froze
+    those, so the live card no longer writes into it. The card rebuilds from
+    the store — `_usage_rows(_USAGE)` — which is what this returns.
+    """
+    from screens.settings.account_section import _usage_rows
+
+    return _texts(_usage_rows(_USAGE))
+
+
 def _fresh():
     """Reset module-level card state and return a fresh page/state/services."""
     reset_usage_card()
@@ -172,7 +184,7 @@ def test_values_render_with_timestamp_and_cache_footnote():
     storage.data[constants.STORAGE_USAGE_UPDATED_AT] = str(time.time())
     build_account_section(page, state, services)
     page.wait_idle()
-    texts = _texts(_USAGE_VIEW["body"].controls)
+    texts = _current_texts()
     assert "4.50 compute units" in texts
     assert "0.50/hr" in texts
     assert any(t.startswith("Updated ") for t in texts)
@@ -189,7 +201,7 @@ def test_signed_out_renders_reason_copy_not_numbers():
     with patch_cache(_none):
         build_account_section(page, state, services)
         page.wait_idle()
-    texts = _texts(_USAGE_VIEW["body"].controls)
+    texts = _current_texts()
     assert "Sign in to load your compute-unit balance." in texts
     assert not any("compute units" in t for t in texts)
 
@@ -243,9 +255,14 @@ def test_refresh_disables_button_and_shows_spinner_over_old_values():
         while not _USAGE["loading"] and time.time() < deadline:
             time.sleep(0.01)
         # Button disabled while loading, spinner WITH the old values under it.
+        # The button from the LAST render is frozen and can no longer be
+        # mutated, so the disabled state is asserted on a fresh build, which
+        # is what the card does on the next repaint.
         assert _USAGE["loading"] is True
-        assert _USAGE_VIEW["refresh"].disabled is True
-        texts = _texts(_USAGE_VIEW["body"].controls)
+        from screens.settings.account_section import _usage_header
+
+        assert _usage_header().controls[-1].disabled is True
+        texts = _current_texts()
         assert "Loading usage…" in texts
         assert "9.00 compute units" in texts
         # Force path deleted the timestamp so the fetch cannot be a TTL hit.
@@ -255,10 +272,12 @@ def test_refresh_disables_button_and_shows_spinner_over_old_values():
         page._loop.call_soon_threadsafe(gate.set)
         page.wait_idle()
     assert _USAGE["loading"] is False
-    assert _USAGE_VIEW["refresh"].disabled is False
+    from screens.settings.account_section import _usage_header
+
+    assert _usage_header().controls[-1].disabled is False
     # Identical numbers, but verifiably refetched.
     assert calls["n"] == 1
-    texts = _texts(_USAGE_VIEW["body"].controls)
+    texts = _current_texts()
     assert "9.00 compute units" in texts
     assert any(t.startswith("Updated ") for t in texts)
 
@@ -278,7 +297,7 @@ def test_failed_refresh_marks_error_truthfully():
     with patch_cache(_stale):
         build_account_section(page, state, services)
         page.wait_idle()
-    texts = _texts(_USAGE_VIEW["body"].controls)
+    texts = _current_texts()
     assert _USAGE["error"] is True
     assert "Couldn't refresh usage — showing last known values." in texts
     # Must NOT also print the "Cached values" footnote (would read as fresh).
@@ -311,7 +330,7 @@ def test_state_survives_parent_rebuild_without_reloading():
     assert len(calls) == 1  # no refetch
     assert _USAGE_VIEW["body"] is not body_before  # new controls
     # Values still present on the NEW controls — no loading flash.
-    texts = _texts(_USAGE_VIEW["body"].controls)
+    texts = _current_texts()
     assert "7.00 compute units" in texts
     assert "Loading usage…" not in texts
 

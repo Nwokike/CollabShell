@@ -15,14 +15,20 @@ def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
         The OS permission is asked once and survives, so this is a channel
         switch, not a permission request: off means the app stays quiet without
         the user having to revoke anything in system settings.
+
+        Safe to write observable state here: this is an async handler, so it
+        runs after the render has returned. A write in the builder body itself
+        is what froze the Settings screen.
         """
         from services.notify import NotifyService
 
         state.notify_enabled = bool(e.control.value)
-        await services.storage.set(
-            constants.STORAGE_NOTIFY_ENABLED,
-            "true" if state.notify_enabled else "false",
-        )
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(
+                constants.STORAGE_NOTIFY_ENABLED,
+                "true" if state.notify_enabled else "false",
+            )
         notify = getattr(services, "notify", None)
         if isinstance(notify, NotifyService):
             if state.notify_enabled:

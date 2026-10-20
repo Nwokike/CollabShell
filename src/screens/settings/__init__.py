@@ -24,86 +24,84 @@ from state import AppStateCtx, ServiceCtx
 logger = logging.getLogger("Settings")
 
 
-@ft.component
+def _section_error(label: str, ex: BaseException) -> ft.Control:
+    """The card that replaces a section that could not be built.
+
+    The user must be able to tell WHICH card failed and why, because the
+    alternative — a section that silently does not appear — reads as "the
+    setting does not exist" and sends them looking in the wrong place.
+    """
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Text(
+                    label,
+                    size=tokens.FONT_XS,
+                    weight=ft.FontWeight.W_700,
+                    color=ft.Colors.ERROR,
+                ),
+                ft.Text(
+                    f"This section could not be shown. {type(ex).__name__}: {ex}",
+                    size=tokens.FONT_SM,
+                    color=ft.Colors.ERROR,
+                ),
+            ],
+            spacing=tokens.SPACE_XS,
+        ),
+        padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM),
+        border_radius=tokens.RADIUS_MD,
+        bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.ERROR),
+    )
+
+
 def SettingsScreen() -> ft.Control:
     """Full settings screen with modular cards arranged 1:1 with original app."""
     state = ft.use_context(AppStateCtx)
     services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
-    # Each section is built in isolation so one broken card cannot blank the
-    # whole screen — and so the traceback names the section instead of leaving
-    # the user with an empty column and no idea why. Every entry takes the
-    # same (page, state, services) triple; the banner builder takes fewer, so
-    # it is wrapped to match rather than called bare.
-    sections = (
-        build_preferences_section,
-        build_account_section,
-        lambda page, state, services, defer=None: build_banner_ad(page),
-        build_ai_section,
-        build_premium_section,
-        build_hardware_section,
-        build_execution_section,
-        build_behavior_section,
-        lambda page, state, services, defer=None: build_banner_ad(page),
-        build_advanced_section,
-        build_logs_section,
-        build_data_section,
-        build_about_section,
+    # Each section is built in isolation.
+    #
+    # A raise inside a section builder does NOT stay inside the section: it
+    # unwinds through this component's body, through `Component.update()`, and
+    # into the session's update loop (`flet/messaging/session.py:718-720`),
+    # which has no exception handler around `control.update()`. The scheduler
+    # task dies there, every later update is silently dropped, and the screen
+    # stops changing — the tab switches, the content never follows, and
+    # nothing is logged. That is the failure this guards against.
+    #
+    # Every builder here takes the same (page, state, services) triple. That
+    # uniformity is deliberate: the last version of this loop added a fourth
+    # `defer` parameter for deferred work but converted only four of the
+    # thirteen builders to accept it, so the other nine raised
+    # `TypeError: takes 3 positional arguments but 4 were given` and the screen
+    # filled with error cards. A test now pins the arity.
+    sections: tuple[tuple[str, object], ...] = (
+        ("APPEARANCE", build_preferences_section),
+        ("AUTHENTICATION", build_account_section),
+        ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
+        ("ASSISTANT", build_ai_section),
+        ("PREMIUM", build_premium_section),
+        ("HARDWARE DEFAULTS", build_hardware_section),
+        ("EXECUTION", build_execution_section),
+        ("SESSION BEHAVIOR", build_behavior_section),
+        ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
+        ("ADVANCED", build_advanced_section),
+        ("TROUBLESHOOTING & LOGS", build_logs_section),
+        ("DATA & STORAGE", build_data_section),
+        ("ABOUT", build_about_section),
     )
 
-    # Work that must happen AFTER the component has patched — the section
-    # loaders. It is collected here and run from ONE effect, because
-    # `SettingsScreen` is a real component and can register a hook safely.
-    #
-    # It must NOT be registered from inside a section builder: those are plain
-    # functions, and flet's `use_effect` needs a component render frame
-    # (`current_component()`), not merely a bound renderer. Where the frame is
-    # missing, `use_effect` raises — and that raise escapes
-    # `Component.update()` into the session's update loop
-    # (`flet/messaging/session.py:719-720`), which has no exception handler:
-    # the scheduler task dies, every later update is silently dropped, and the
-    # screen never changes. That was the blank Settings tab.
-    #
-    # One effect, registered here, always — so the hook count cannot shift
-    # between renders and misalign the hook cursor.
-    pending: list = []
-
     controls: list[ft.Control] = []
-    for build in sections:
+    for label, build in sections:
         try:
-            controls.append(build(page, state, services, pending.append))
+            controls.append(build(page, state, services))
         except Exception as ex:
-            logger.exception("Settings section failed: %r", build)
-            controls.append(
-                ft.Container(
-                    content=ft.Text(
-                        "This section could not be shown. "
-                        f"{type(ex).__name__}: {ex}",
-                        size=tokens.FONT_SM,
-                        color=ft.Colors.ERROR,
-                    ),
-                    padding=tokens.SPACE_MD,
-                )
-            )
-
-    def _run_pending():
-        """Run the collected section work, after the patch has been emitted."""
-        for work in pending:
-            try:
-                work()
-            except Exception:
-                logger.exception("Settings deferred work failed")
-
-    # Exactly one effect, always — so the hook cursor cannot shift between
-    # renders and bind an effect to the wrong slot.
-    ft.use_effect(_run_pending, [])
+            logger.exception("Settings section %r failed to build", label)
+            controls.append(_section_error(label, ex))
 
     return ft.Column(
-        controls=[
-            *controls,
-            ft.Container(height=tokens.SPACE_XXL),
-        ],
+        controls=[*controls, ft.Container(height=tokens.SPACE_XXL)],
         spacing=tokens.SPACE_SM,
         scroll=ft.ScrollMode.AUTO,
         expand=True,

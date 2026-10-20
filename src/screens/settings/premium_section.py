@@ -20,26 +20,6 @@ from core.styles import glass_card, section_header, tip_text
 logger = logging.getLogger("PremiumSection")
 
 
-def _defer(defer, work):
-    """Hand the work to the screen, or run it now when there is no screen.
-
-    A section builder is a plain function, not a component, so it cannot
-    register a flet effect on its own: `use_effect` needs a component render
-    frame, and without one it raises. That raise escapes `Component.update()`
-    into the session's update loop, which has no exception handler — the
-    scheduler dies and every later update is silently dropped.
-
-    So the work is COLLECTED by `SettingsScreen` (a real component) and run
-    from one effect there. When a builder is called on its own — a test, or
-    any plain caller — there is no component to defer to, so the work runs
-    immediately, which is what that caller wanted anyway.
-    """
-    if defer is not None:
-        defer(work)
-        return
-    work()
-
-
 def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
     return ft.Row(
         controls=[
@@ -84,9 +64,7 @@ def premium_subtitle(state, claims=None, has_ads: bool = True) -> str:
     return "500 credits a day · thank you!"
 
 
-def build_premium_section(
-    page: ft.Page, state, services, defer=None
-) -> ft.Column | ft.Container:
+def build_premium_section(page: ft.Page, state, services) -> ft.Column | ft.Container:
     """The PREMIUM card. Returns an empty container on the Play channel."""
     if CHANNEL == "play":
         return ft.Container(width=0, height=0)
@@ -111,7 +89,7 @@ def build_premium_section(
                     trailing=ft.OutlinedButton(
                         "Copy",
                         icon=ft.Icons.COPY_ROUNDED,
-                        on_click=lambda e: _copy_handler(recovery),
+                        on_click=lambda e: _copy(recovery, page),
                     ),
                 )
             )
@@ -141,17 +119,21 @@ def build_premium_section(
         except Exception as ex:
             logger.warning("Premium render failed: %s", ex)
 
-    async def _copy(text: str):
-        # Page has no set_clipboard/show_snack in flet 1.0 — use the
-        # Clipboard service and the shared notification helper.
+    def _copy(text: str, pg):
+        # flet 1.0's Page has no `set_clipboard` and no `show_snack`
+        # (`flet/controls/page.py`): the clipboard is a service
+        # (`ft.Clipboard().set`) and a notice is a SnackBar on `page.overlay`
+        # (`core.notifications.show_notification`). Calling the missing
+        # attributes raised AttributeError, so Copy did nothing and every
+        # checkout notice was lost.
+        pg.run_task(_copy_text, text)
+
+    async def _copy_text(text: str):
         try:
             await ft.Clipboard().set(text)
         except Exception as ex:
             logger.warning("Recovery ID copy failed: %s", ex)
         show_notification(page, "Recovery ID copied. Keep it somewhere safe.")
-
-    def _copy_handler(text: str):
-        page.run_task(_copy, text)
 
     async def _load(ev=None):
         # StorageService.get is a coroutine and there is no sync `.data`, so
@@ -210,7 +192,9 @@ def build_premium_section(
         try:
             checkout = await premium.kiri_checkout(product_id, email)
         except Exception as ex:
-            show_notification(page, f"Could not open the payment page: {ex}", is_error=True)
+            show_notification(
+                page, f"Could not open the payment page: {ex}", is_error=True
+            )
             return
         # The hosted page opens outside the app; the watcher polls in the
         # background and unlocks by itself.
@@ -227,13 +211,8 @@ def build_premium_section(
                 page, "Complete the payment. This screen unlocks itself when it lands."
             )
 
-    # NOT `page.run_task(_load)` in the body: `build_premium_section` runs
-    # inside SettingsScreen's `@ft.component` body, and flet 1.0 forbids touching
-    # the page from there — a task that mutates controls mid-render races the
-    # component's own patch and the screen comes back blank with no traceback
-    # (`flet/components/component.py:145-167`). See `core.styles.after_render`.
     _render([])
-    _defer(defer, lambda: page.run_task(_load))
+    page.run_task(_load)
 
     return ft.Column(
         controls=[

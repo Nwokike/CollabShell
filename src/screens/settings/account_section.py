@@ -23,30 +23,11 @@ import logging
 import flet as ft
 
 from core import constants, tokens
+from core.state import state
 from core.styles import glass_card, section_header, tip_text
 from core.theme import AppColors
 
 logger = logging.getLogger("AccountSection")
-
-
-def _defer(defer, work):
-    """Hand the work to the screen, or run it now when there is no screen.
-
-    A section builder is a plain function, not a component, so it cannot
-    register a flet effect on its own: `use_effect` needs a component render
-    frame, and without one it raises. That raise escapes `Component.update()`
-    into the session's update loop, which has no exception handler — the
-    scheduler dies and every later update is silently dropped.
-
-    So the work is COLLECTED by `SettingsScreen` (a real component) and run
-    from one effect there. When a builder is called on its own — a test, or
-    any plain caller — there is no component to defer to, so the work runs
-    immediately, which is what that caller wanted anyway.
-    """
-    if defer is not None:
-        defer(work)
-        return
-    work()
 
 
 def format_usage_values(usage: dict) -> tuple[list[tuple[str, str]], bool]:
@@ -194,12 +175,15 @@ def _usage_header() -> ft.Row:
         icon=ft.Icons.REFRESH_ROUNDED,
         icon_size=tokens.ICON_SM,
         tooltip="Refresh usage",
+        # Derived from the store at build time. The old code also assigned
+        # `.disabled` from the loader, which froze-control-raised for the same
+        # reason the body writes did; the build-time binding is the whole
+        # control.
         disabled=_USAGE["loading"],
         on_click=lambda e: page_run_task(_on_usage_refresh),
     )
-    # The refresh button is the only control whose state changes without the
-    # card being rebuilt, so it is published for direct mutation instead of
-    # swapping a freshly-built control into a mounted tree.
+    # Published so a loader can tell a fetch is in flight without holding a
+    # reference it would then try to mutate. Read-only from here on.
     _USAGE_VIEW["refresh"] = refresh_btn
     return ft.Row(
         controls=[
@@ -233,29 +217,29 @@ def page_run_task(coro_fn) -> None:
 
 
 def _refresh_usage_view() -> None:
-    """Re-render the card from the store into the CURRENT live controls."""
-    body = _USAGE_VIEW.get("body")
-    if body is not None:
-        try:
-            body.controls = _usage_rows(_USAGE)
-        except Exception as ex:
-            logger.warning("Usage body render failed (%s): %s", type(ex).__name__, ex)
-    refresh_btn = _USAGE_VIEW.get("refresh")
-    if refresh_btn is not None:
-        try:
-            refresh_btn.disabled = _USAGE["loading"]
-        except Exception as ex:
-            logger.warning(
-                "Usage refresh button update failed (%s): %s",
-                type(ex).__name__,
-                ex,
-            )
-    page = _USAGE_VIEW.get("page")
-    if page is not None:
-        try:
-            page.update()
-        except Exception as ex:
-            logger.warning("Usage view update failed (%s): %s", type(ex).__name__, ex)
+    """Repaint the card by rebuilding it from the store.
+
+    This used to write to the controls the previous render had produced —
+    `body.controls = ...`, `refresh_btn.disabled = ...`, then `page.update()`.
+    Those controls came out of `build_account_section`'s component body, so
+    flet had frozen them, and every one of those writes raised
+    "Frozen controls cannot be updated."
+    (`flet/controls/value_types.py:64-66`).
+
+    Both references publish the data instead of poking the widget:
+    `lm-router/src/main.py:730-743` writes `state.gateway_counts` and lets the
+    render body rebuild from it, and DDGS states the rule in a comment at
+    `src/components/settings/sections_premium.py:340-343` — *"Never assign to a
+    control: this card is a rendered component, so its controls are frozen.
+    Write the observable instead and let the component repaint."*
+
+    `usage_revision` is a plain int, so it notifies only when it changes, and
+    a subscribed screen rebuilds the card from `_USAGE` on the next render.
+    """
+    try:
+        state.usage_revision = (getattr(state, "usage_revision", 0) or 0) + 1
+    except Exception as ex:
+        logger.warning("Usage view update failed (%s): %s", type(ex).__name__, ex)
 
 
 def _empty_reason() -> str:
@@ -346,7 +330,7 @@ def reset_usage_card() -> None:
     _USAGE_AUTOLOAD_KEY = object()
 
 
-def build_account_section(page: ft.Page, state, services, defer=None) -> ft.Column:
+def build_account_section(page: ft.Page, state, services) -> ft.Column:
     global _USAGE_AUTOLOAD_KEY
 
     # ── Auth status indicator ───────────────────────────
@@ -438,6 +422,13 @@ def build_account_section(page: ft.Page, state, services, defer=None) -> ft.Colu
     _USAGE_VIEW["services"] = services
     _USAGE_VIEW["auth_method"] = state.auth_method
 
+    # Subscribe to the revision that publishes a fetched value. Without this
+    # read this section never re-renders when one lands, which was the whole
+    # reason the old code reached into the live controls (and hit the freeze).
+    # `getattr` with a default so a caller can pass a state stub that predates
+    # the field, the way `_effective_router_url` and `_router_is_up` already do.
+    _ = getattr(state, "usage_revision", 0)
+
     usage_body = ft.Column(controls=_usage_rows(_USAGE), spacing=tokens.SPACE_XS)
     _USAGE_VIEW["body"] = usage_body
 
@@ -459,15 +450,11 @@ def build_account_section(page: ft.Page, state, services, defer=None) -> ft.Colu
     )
 
     # Auto-load once per signed-in identity. A rebuild with the same identity
-    # keeps the stored values (no refetch, no loading flash). Deliberately from
-    # an effect, not the body: `build_account_section` runs inside
-    # SettingsScreen's `@ft.component` body, and a `page.run_task` that mutates
-    # controls mid-render races the component's own patch — the screen comes
-    # back blank with no traceback (`flet/components/component.py:145-167`).
+    # keeps the stored values (no refetch, no loading flash).
     identity = _usage_autoload_identity(state)
     if _USAGE_AUTOLOAD_KEY != identity:
         _USAGE_AUTOLOAD_KEY = identity
-        _defer(defer, lambda: page_run_task(_load_usage))
+        page_run_task(_load_usage)
 
     return ft.Column(
         controls=[

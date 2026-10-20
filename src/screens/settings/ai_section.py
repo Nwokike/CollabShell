@@ -18,26 +18,6 @@ from services import ai_credits
 logger = logging.getLogger("AssistantSettings")
 
 
-def _defer(defer, work):
-    """Hand the work to the screen, or run it now when there is no screen.
-
-    A section builder is a plain function, not a component, so it cannot
-    register a flet effect on its own: `use_effect` needs a component render
-    frame, and without one it raises. That raise escapes `Component.update()`
-    into the session's update loop, which has no exception handler — the
-    scheduler dies and every later update is silently dropped.
-
-    So the work is COLLECTED by `SettingsScreen` (a real component) and run
-    from one effect there. When a builder is called on its own — a test, or
-    any plain caller — there is no component to defer to, so the work runs
-    immediately, which is what that caller wanted anyway.
-    """
-    if defer is not None:
-        defer(work)
-        return
-    work()
-
-
 def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
     return ft.Row(
         controls=[
@@ -109,7 +89,7 @@ def _router_status_line(state) -> str:
     return "Router status unknown."
 
 
-def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
+def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     """The ASSISTANT settings block."""
     credits = getattr(services, "credits", None)
     premium = getattr(services, "premium", None)
@@ -129,33 +109,53 @@ def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
         except Exception:
             return "Credits update as you use the assistant."
 
+    # The credits line is built fresh from observable state on every render.
+    # An async loader must NOT write to a control that came out of this body:
+    # those are frozen and the write raises "Frozen controls cannot be
+    # updated." (`flet/controls/value_types.py:64-66`). Both DDGS and
+    # lm-router put async data in observable state instead and let the body
+    # repaint — `DDGS/src/components/settings/sections_premium.py:340-343`
+    # states the rule in a comment; `lm-router/src/main.py:730-743` is the
+    # same shape. `credits_copy` is a string, so `state.credits_copy`
+    # notifies only when the wording actually changes.
+    # `getattr` with a default so a caller can pass a state stub that
+    # predates the field.
+    saved_copy = getattr(state, "credits_copy", None)
+    shown = saved_copy if saved_copy is not None else "Loading credits…"
     credits_text = ft.Text(
-        "Loading credits…",
+        shown,
         size=tokens.FONT_SM,
         color=ft.Colors.ON_SURFACE_VARIANT,
         selectable=True,
     )
 
     async def _load_credits():
-        credits_text.value = await _credits_copy_async()
         try:
-            page.update()
+            state.credits_copy = await _credits_copy_async()
         except Exception as ex:
-            logger.warning("Credits render failed: %s", ex)
+            logger.warning("Credits publish failed: %s", ex)
 
-    # Kick off the first read after the component has patched, not during the
-    # render body: `build_ai_section` runs inside SettingsScreen's
-    # `@ft.component` body, and flet 1.0 forbids touching the page from there
-    # (see `core.styles.after_render`). Later refreshes (the wallet dialog) call
-    # the refresher from an event handler, which is always safe.
-    _defer(defer, lambda: page.run_task(_load_credits))
-
-    def _refresh_credits():
-        credits_text.value = "Loading credits…"
+    # Kick off the first read; later refreshes are driven by the wallet dialog.
+    if saved_copy is None:
         page.run_task(_load_credits)
 
-    # Expose the refresher so the wallet dialog can call it after a top-up.
-    state.refresh_credits = _refresh_credits
+    # NOTE: this used to do `state.refresh_credits = _refresh_credits`. That
+    # line froze the whole app, and the reason is worth keeping written down:
+    #
+    #   - `state` is `@ft.observable`, and `Observable.__setattr__` notifies
+    #     whenever the new value is not equal to the old one.
+    #   - `_refresh_credits` is a NEW closure on every call to this builder, so
+    #     the comparison is never equal — it notified on EVERY render.
+    #   - Every component that reads `AppStateCtx` subscribes to the whole
+    #     state object, and a notification schedules that component for update.
+    #   - So rendering Settings scheduled another render of Settings. Measured
+    #     against flet's real session: 853 SettingsScreen rebuilds in 1.5 s,
+    #     nothing painted, no exception logged.
+    #
+    # Nothing ever read it (the wallet dialog has its own refresh), so it was
+    # dead code. Any future cross-component refresher belongs in a module-level
+    # function or a non-observable attribute, NEVER a render-time assignment to
+    # observable state.
 
     mode_switch = ft.Switch(
         value=bool(getattr(state, "ai_mode", False)),
@@ -186,51 +186,38 @@ def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
             )
         page.update()
 
-    # How hard the model thinks before answering. Both DDGS and lm-router expose
-    # this dropdown with these exact options; "auto" sends no `reasoning_effort`
-    # at all, so the gateway's own default applies.
-    thinking_dropdown = ft.Dropdown(
-        value=str(getattr(state, "ai_thinking", "auto") or "auto"),
-        options=[
-            ft.DropdownOption(
-                key=depth,
-                text={
-                    "auto": "Auto (the router decides)",
-                    "minimal": "Minimal",
-                    "low": "Low",
-                    "medium": "Medium",
-                    "high": "High",
-                }[depth],
-            )
-            for depth in constants.THINKING_DEPTHS
-        ],
-        width=220,
-        text_size=tokens.FONT_SM,
-        border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
-        # `on_select`, not `on_change`: flet 1.0's Dropdown renamed it
-        # (`controls/material/dropdown.py:226`).
-        on_select=lambda e: page.run_task(_save_thinking, e.control.value),
-    )
-
-    async def _save_thinking(value: str):
-        depth = str(value or "auto").strip().lower()
-        if depth not in constants.THINKING_DEPTHS:
-            depth = "auto"
-        state.ai_thinking = depth
-        storage = getattr(services, "storage", None)
-        if storage is not None:
-            await storage.set(constants.STORAGE_AI_THINKING, depth)
-        page.update()
+    # Subscribe to the router status. The row's text is built from
+    # `ai_router_status`/`ai_router_port` on every render, so without this
+    # read a status change published by the watchdog never reaches this
+    # section — and the reload bump alone would not repaint it either.
+    _ = getattr(state, "ai_router_status", "")
+    _ = getattr(state, "router_status_revision", 0)
 
     # The live router row: what the app is actually talking to, and the one
-    # action that makes it talk to something. A user request must be verified
-    # (ensure_router(verify=True)), because a remembered dead port would
-    # otherwise make this button look inert.
+    # action that makes it talk to something. The router starts with the app
+    # (`services/router_watchdog`), so this button is the RECOVERY path — it
+    # matters when the router died or was never found.
+    #
+    # A user request must be verified (`ensure_router(verify=True)`), because a
+    # remembered dead port would otherwise make this button look inert.
     router_status_text = ft.Text(
         _router_status_line(state),
         size=tokens.FONT_SM,
         color=ft.Colors.ON_SURFACE_VARIANT,
     )
+    start_router_button = ft.TextButton(
+        "Start router",
+        on_click=lambda ev: page.run_task(_start_router),
+    )
+
+    async def _reload_router_status():
+        """Re-read the router's own state and repaint the row.
+
+        The row is frozen controls from the last render, so the loader cannot
+        write into them — it writes observable state and lets the section
+        rebuild, the way the credits line does.
+        """
+        state.router_status_revision = (getattr(state, "router_status_revision", 0) or 0) + 1
 
     async def _start_router(ev=None):
         """Start (or re-attach), then re-read the status.
@@ -240,29 +227,13 @@ def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
         """
         from services import router
 
-        start_router_button.disabled = True
-        router_status_text.value = "Starting router…"
-        router_status_text.color = ft.Colors.ON_SURFACE_VARIANT
-        page.update()
+        state.ai_router_status = "starting"
+        await _reload_router_status()
         try:
             await router.ensure_router(verify=True)
         except Exception as ex:
             logger.warning("Start router failed: %s", ex)
         await _reload_router_status()
-
-    start_router_button = ft.TextButton(
-        "Start router",
-        on_click=lambda ev: page.run_task(_start_router),
-    )
-
-    async def _reload_router_status():
-        """Re-read the router's own state and repaint the row."""
-        start_router_button.disabled = _router_is_up(state)
-        router_status_text.value = _router_status_line(state)
-        try:
-            page.update()
-        except Exception:
-            pass
 
     # The override field: what is shown is what the app is actually using right
     # now — either the saved override, or the port the router landed on. An
@@ -293,6 +264,42 @@ def build_ai_section(page: ft.Page, state, services, defer=None) -> ft.Column:
             except Exception as ex:
                 logger.warning("Provider reconfiguration failed: %s", ex)
         await _reload_router_status()
+        page.update()
+
+    # How hard the model thinks before answering. Both DDGS and lm-router expose
+    # this dropdown with these exact options; "auto" sends no `reasoning_effort`
+    # at all, so the gateway's own default applies.
+    async def _save_thinking(value: str):
+        depth = str(value or "auto").strip().lower()
+        if depth not in constants.THINKING_DEPTHS:
+            depth = "auto"
+        state.ai_thinking = depth
+        storage = getattr(services, "storage", None)
+        if storage is not None:
+            await storage.set(constants.STORAGE_AI_THINKING, depth)
+
+    thinking_dropdown = ft.Dropdown(
+        value=str(getattr(state, "ai_thinking", "auto") or "auto"),
+        options=[
+            ft.DropdownOption(
+                key=depth,
+                text={
+                    "auto": "Auto (the router decides)",
+                    "minimal": "Minimal",
+                    "low": "Low",
+                    "medium": "Medium",
+                    "high": "High",
+                }[depth],
+            )
+            for depth in constants.THINKING_DEPTHS
+        ],
+        width=220,
+        text_size=tokens.FONT_SM,
+        border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
+        # `on_select`, not `on_change`: flet 1.0's Dropdown renamed it
+        # (`controls/material/dropdown.py:226`).
+        on_select=lambda e: page.run_task(_save_thinking, e.control.value),
+    )
 
     router_field.on_submit = lambda ev: page.run_task(_save_router)
 

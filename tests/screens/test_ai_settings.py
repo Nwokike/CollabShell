@@ -106,9 +106,21 @@ def test_ai_section_builds_and_lists_its_rows():
 
 
 def test_ai_section_shows_free_cap_and_balance():
+    """The balance is loaded asynchronously, so it appears via state.
+
+    The section cannot write it into the row directly: flet froze the controls
+    the body produced. So `_load_credits` publishes to `state.credits_copy`
+    and the body builds the row from it — the stub page's `run_task` runs the
+    loader synchronously, so the value lands on state immediately and the
+    SECOND build shows it.
+    """
     from screens.settings.ai_section import build_ai_section
 
     page, state, services, _ = _stubs()
+    column = build_ai_section(page, state, services)
+    # The loader ran on the stub page; the value is in state now.
+    assert state.credits_copy and "42 of 50" in state.credits_copy, state.credits_copy
+    # And a rebuild renders it.
     column = build_ai_section(page, state, services)
     texts = _flatten_texts(column)
     assert any("42 of 50 credits" in t for t in texts), texts
@@ -150,16 +162,85 @@ def test_settings_screen_includes_the_ai_section():
     assert src.index("build_ai_section") < src.index("build_hardware_section")
 
 
-def test_a_broken_settings_section_does_not_blank_the_screen():
-    """The crash this pins: settings used to build every section inline, so one
-    raising builder produced an empty screen with no visible reason. Sections
-    are now each built in their own try/except."""
-    import pathlib
+def test_every_section_builder_takes_the_same_three_arguments():
+    """The contract the isolation loop calls with, pinned as a signature.
 
-    src = pathlib.Path("src/screens/settings/__init__.py").read_text(encoding="utf-8")
-    assert "for build in sections" in src, "sections must be built in isolation"
-    assert "except Exception" in src, "a failing section must be caught"
-    assert "could not be shown" in src, "the failure must be visible to the user"
+    The previous version of this test searched the file for
+    "for build in sections" and stayed green through the entire broken history:
+    db70e6b broke nine of the thirteen sections and every one of those
+    assertions still passed. Here each builder's real signature is checked, so
+    giving one of them a fourth parameter fails immediately instead of
+    appearing as nine TypeError cards on the user's screen.
+    """
+    import importlib
+    import inspect
+    import pkgutil
+
+    import screens.settings as pkg
+
+    builders = []
+    for _, name, _ in pkgutil.iter_modules(pkg.__path__):
+        module = importlib.import_module(f"screens.settings.{name}")
+        for attr in sorted(dir(module)):
+            if not attr.startswith("build_") or not attr.endswith("_section"):
+                continue
+            fn = getattr(module, attr)
+            if not callable(fn):
+                continue
+            params = list(inspect.signature(fn).parameters)
+            builders.append((f"{name}.{attr}", params))
+
+    assert builders, "no section builders found"
+    for label, params in builders:
+        assert params == ["page", "state", "services"], (
+            f"{label} takes {params}; the loop calls every section with "
+            "(page, state, services), so a differing arity is how the screen "
+            "filled with TypeError cards"
+        )
+
+
+def test_a_broken_section_does_not_blank_the_screen(monkeypatch):
+    """Behavioural isolation: one raising section must not take the screen.
+
+    A raise inside a section builder escapes SettingsScreen's body into the
+    session's update loop (flet/messaging/session.py:718-720), which has no
+    exception handler around control.update() -- the scheduler task dies and
+    every later update is silently dropped.
+    """
+    import types
+
+    import screens.settings as settings_screen
+
+    def _boom(page, state, services):
+        raise RuntimeError("this section is broken")
+
+    monkeypatch.setattr(settings_screen, "build_ai_section", _boom)
+
+    from core.state import state
+    from tests.screens.settings_harness import render_settings
+
+    column = render_settings(
+        state,
+        types.SimpleNamespace(),
+        types.SimpleNamespace(platform=None),
+    )
+    # `render_settings` builds the tree with the patched-in broken section, so
+    # the column below already holds the error card in the assistant's place.
+    controls = list(getattr(column, "controls", []) or [])
+    assert len(controls) == 14, f"expected 13 sections + spacer, got {len(controls)}"
+
+    from tests.screens.settings_harness import texts_of
+
+    texts = texts_of(column)
+    # The broken section is named, and the failure is visible. Asserted on the
+    # error card's own subtree, because "ASSISTANT" also appears elsewhere.
+    error_card = texts_of(controls[3])
+    assert any("ASSISTANT" in t for t in error_card), error_card
+    assert any("could not be shown" in t for t in error_card), error_card
+    assert any("RuntimeError" in t for t in error_card), error_card
+    # And the rest of the screen survived.
+    assert "APPEARANCE" in texts, texts
+    assert "ABOUT" in texts, texts
 
 
 # ── model picker ───────────────────────────────────────────────────────────
@@ -615,33 +696,131 @@ def test_router_is_up_only_while_ready():
 def test_a_plain_section_builder_never_registers_a_hook():
     """The rule that keeps the session's scheduler alive.
 
-    A section builder is a plain function, not a component, so it cannot
-    register a flet effect: `use_effect` needs a component render frame
+    A section builder is a plain function, not a component, so it must not
+    register a flet hook. `use_effect` needs a component render frame
     (`current_component()`), not merely a bound renderer. Where the frame is
     missing, `use_effect` raises -- and that raise escapes
     `Component.update()` into the session's update loop
-    (`flet/messaging/session.py:719-720`), which has NO exception handler
+    (`flet/messaging/session.py:718-720`), which has NO exception handler
     around it. The scheduler task dies, every later update is silently
-    dropped, and the screen stops changing: the Settings tab would change
-    while the content never followed, with nothing in the log.
+    dropped, and the screen stops changing.
 
-    So the work is COLLECTED by `SettingsScreen` and run from one effect
-    there. This test pins that the collectors are the only path.
+    Where a builder DOES run inside a component body the hook would not
+    raise, which is worse: it would register on whatever component happens to
+    be rendering, so the hook count could shift between renders and misalign
+    the hook cursor.
+
+    The deferred work a section needs runs through `page.run_task`, which is
+    safe: the coroutine is queued on the page's loop and starts only after
+    the render has returned.
     """
-    from screens.settings import (
-        account_section,
-        ai_section,
-        execution_section,
-        premium_section,
+    import ast
+    import pathlib
+
+    HOOKS = {
+        "use_effect",
+        "use_state",
+        "use_ref",
+        "use_memo",
+        "use_callback",
+        "on_mounted",
+        "on_unmounted",
+        "on_updated",
+    }
+
+    def _is_component_decorator(node) -> bool:
+        if isinstance(node, ast.Attribute):
+            return node.attr == "component"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            return node.func.attr == "component"
+        return False
+
+    settings_dir = pathlib.Path("src/screens/settings")
+    files = sorted(settings_dir.glob("*.py"))
+    assert files, "the settings folder must not be empty"
+
+    offenders: list[str] = []
+    for path in files:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(
+            _is_component_decorator(d)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            for d in node.decorator_list
+        ):
+            continue  # a real component; hooks are legal there
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = None
+            if isinstance(func, ast.Attribute):
+                name = func.attr
+            elif isinstance(func, ast.Name):
+                name = func.id
+            if name in HOOKS:
+                offenders.append(
+                    f"{path.name}:{node.lineno} calls {name}() outside a component"
+                )
+
+    assert not offenders, (
+        "a plain section builder must not register a flet hook:\n"
+        + "\n".join(offenders)
     )
 
-    for module in (account_section, ai_section, execution_section, premium_section):
-        assert hasattr(module, "_defer"), f"{module.__name__} has no collector"
-        ran: list[str] = []
-        collected: list = []
-        module._defer(collected.append, lambda: ran.append("ran"))  # noqa: B023
-        assert collected, f"{module.__name__} did not collect its work"
-        assert not ran, f"{module.__name__} ran the work instead of collecting it"
-        # With no screen to defer to (a test, a plain caller) it runs now.
-        module._defer(None, lambda: ran.append("ran"))  # noqa: B023
-        assert ran == ["ran"], f"{module.__name__} did not run the work"
+
+def test_no_section_writes_observable_state_in_its_body():
+    """The bug that froze Settings, pinned as a rule.
+
+    `state.refresh_credits = _refresh_credits` ran on every render, and
+    `@ft.observable` notifies on inequality -- a fresh closure is never equal
+    to the last one. Every component subscribed to AppState was then scheduled
+    for update, so rendering Settings scheduled another render: measured 853
+    SettingsScreen rebuilds in 1.5 seconds against a real flet session.
+
+    So: a section may READ observable state in its body, but must never WRITE
+    it. Every write belongs in an event handler or a `page.run_task` coroutine.
+    """
+    import ast
+    import pathlib
+
+    settings_dir = pathlib.Path("src/screens/settings")
+
+    def _builder_bodies(tree):
+        """Top-level statements of every `build_*` function.
+
+        Only statement-level writes are on the render path: an assignment
+        inside a nested `def` (an event handler or an async loader) runs when
+        that handler is called, which is AFTER the render has returned -- it is
+        the one place a write is safe.
+        """
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("build"):
+                yield node
+
+    offenders: list[str] = []
+    for path in sorted(settings_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for fn in _builder_bodies(tree):
+            for stmt in fn.body:
+                # A nested `def` (handler or async loader) is safe: it only
+                # runs when called, which is after this render returned.
+                if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for node in ast.walk(stmt):
+                    if not isinstance(node, ast.Assign):
+                        continue
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id in ("state", "app_state")
+                        ):
+                            offenders.append(
+                                f"{path.name}:{node.lineno} writes "
+                                f"{target.value.id}.{target.attr} during the render"
+                            )
+
+    assert not offenders, (
+        "a section body must not write observable state:\n" + "\n".join(offenders)
+    )

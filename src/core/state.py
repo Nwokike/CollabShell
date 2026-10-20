@@ -40,6 +40,20 @@ class AppState:
     # Bumped whenever a metered assistant turn settles, so the credit pill
     # re-reads the balance without a full rebuild.
     credits_revision: int = 0
+    # The assistant credits line in Settings. Async-loaded, so it lives in
+    # observable state: the controls in a component body are frozen, and the
+    # loader cannot write to them (`flet/controls/value_types.py:64-66`).
+    # None means "not loaded yet", so the section can skip the first fetch on
+    # a screen the user has already visited.
+    credits_copy: str | None = None
+    # Bumped when the Account section's compute-usage card has new values to
+    # show. The card keeps its own store at module level for its state machine
+    # (loading/error/reason), and this revision is what tells a subscribed
+    # screen to rebuild from it.
+    usage_revision: int = 0
+    # Bumped when the Settings router row has new status to show, so the
+    # section rebuilds the row instead of writing into its frozen controls.
+    router_status_revision: int = 0
     # Callable set by the active TerminalPanel; invoked on app RESUME so
     # dropped terminal WebSockets re-attach to their still-alive PTYs.
     terminal_reconnect = None
