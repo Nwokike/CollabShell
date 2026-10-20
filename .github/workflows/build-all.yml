@@ -41,7 +41,15 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "RELEASE_NAME=Colab Shell ${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+            # A tag build is a PRE-RELEASE, exactly like a SHA build.
+            #
+            # Publishing it as a real release is the owner's decision, made by
+            # hand in the Releases UI once the APK is tested and the AAB is on
+            # Play. Marking "Latest" here would tell every installed user that
+            # a version they do not have is the current one — and version.json,
+            # the feed those users poll, is deliberately bumped only at that
+            # point, so the app and the feed would disagree.
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
           else
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             echo "TAG_NAME=build-${SHORT_SHA}" >> $GITHUB_OUTPUT
@@ -55,7 +63,10 @@ jobs:
           tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
           name: ${{ steps.tag_info.outputs.RELEASE_NAME }}
           prerelease: ${{ steps.tag_info.outputs.IS_PRERELEASE }}
-          make_latest: true
+          # Never promote an automated build to "Latest". The owner does that
+          # by hand when the version is actually shipped — see the note on
+          # IS_PRERELEASE above.
+          make_latest: false
           body: |
             Automated multi-platform build generated from commit `${{ github.sha }}`.
 
