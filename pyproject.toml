@@ -38,11 +38,19 @@ startup_message = "Initializing Collab Shell..."
 [tool.flet.android]
 bundle_id = "ng.kiri.collabshell"
 
-# Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq 27.2.0's
+# Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq's
 # android x86_64 wheel ships 4 KB-aligned libs (libzmq + libc++_shared), so
-# x86_64 is dropped. armeabi-v7a is kept: 32-bit ABIs are exempt from the
-# 16 KB check, and it preserves phone/tablet/TV device reach.
-target_arch = ["arm64-v8a", "armeabi-v7a"]
+# x86_64 is dropped.
+#
+# armeabi-v7a is dropped for a different, harder reason: there is NO armv7
+# wheel for pyzmq at all (0 armv7, 15 aarch64, 0 pure-Python on PyPI), and
+# pyzmq arrives via kani/jupyter-kernel-client -> jupyter-client. `flet build`
+# installs the deps per ABI with `--only-binary :all:`, so it cannot compile
+# pyzmq from source, and the whole 32-bit install dies with
+# `ResolutionImpossible`. So armeabi-v7a is not a choice we can make: it
+# cannot be built with the current dependency set. arm64-v8a is the ABI every
+# current Android device uses.
+target_arch = ["arm64-v8a"]
 
 [tool.flet.android.meta_data]
 "com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~7138516733"
