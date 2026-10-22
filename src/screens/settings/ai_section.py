@@ -213,36 +213,22 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             logger.warning("Start router failed: %s", ex)
         await _reload_router_status()
 
-    # The override field: what is shown is what the app is actually using right
-    # now — either the saved override, or the port the router landed on. An
-    # empty field means "no override", which is the normal path (the app probes
-    # 8082..8092 and embeds its own router).
-    router_field = ft.TextField(
-        value=_effective_router_url(state),
-        label="Router URL (advanced — leave blank to auto-start)",
-        hint_text="http://127.0.0.1:8082/v1",
-        text_size=tokens.FONT_SM,
-        border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
-        expand=True,
+    # The address the app is actually talking to. Shown, not editable: neither
+    # DDGS nor lm-router exposes a router URL in Settings (DDGS has no router
+    # control at all; lm-router's is a numeric port for its own gateway), and
+    # an editable box here was a footgun — it was pre-filled with the live URL,
+    # so pressing Enter after the router auto-landed on 8083 saved that as a
+    # permanent override and pinned the app to it, destroying the 8082..8092
+    # re-probe. A stored override still works for anyone who has one; nothing
+    # in the UI can set one now.
+    router_url_text = ft.Text(
+        _effective_router_url(state),
+        size=tokens.FONT_SM,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+        selectable=True,
+        font_family="monospace",
     )
 
-    async def _save_router(ev=None):
-        url = (router_field.value or "").strip()
-        # Clearing the field is the way to go back to auto-start, so an empty
-        # value is a real state and not a no-op.
-        state.ai_router_url = url
-        storage = getattr(services, "storage", None)
-        if storage is not None:
-            await storage.set(constants.STORAGE_AI_ROUTER_URL, url)
-        if url:
-            try:
-                from services.ai_service import configure_provider
-
-                configure_provider(url)
-            except Exception as ex:
-                logger.warning("Provider reconfiguration failed: %s", ex)
-        await _reload_router_status()
-        page.update()
 
     # How hard the model thinks before answering. Both DDGS and lm-router expose
     # this dropdown with these exact options; "auto" sends no `reasoning_effort`
@@ -279,7 +265,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         on_select=lambda e: page.run_task(_save_thinking, e.control.value),
     )
 
-    router_field.on_submit = lambda ev: page.run_task(_save_router)
 
     def _pick_model(pg, st, svcs):
         from components.model_picker import show_model_picker
@@ -343,12 +328,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                             trailing=thinking_dropdown,
                         ),
                         ft.Divider(height=tokens.SPACE_SM),
-                        _row("Router URL", "OpenAI-compatible endpoint",
-                             trailing=None),
-                        ft.Container(
-                            content=router_field,
-                            padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
-                        ),
                         ft.Divider(height=tokens.SPACE_SM),
                         _row(
                             "Router",
@@ -356,7 +335,10 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                             trailing=start_router_button,
                         ),
                         ft.Container(
-                            content=router_status_text,
+                            content=ft.Column(
+                                controls=[router_status_text, router_url_text],
+                                spacing=tokens.SPACE_XXS,
+                            ),
                             padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
                         ),
                         ft.Divider(height=tokens.SPACE_SM),
