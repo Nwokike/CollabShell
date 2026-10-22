@@ -508,10 +508,8 @@ def NotebookView(
     # ── In-cell AI (M5): Explain / Fix error / Suggest next ─────────────────
     # The three actions live here rather than in the cell component so the
     # service calls, metering and insertion all sit next to the tab machinery
-    # they need. A cell only gets the button when `ai_mode` is on.
-
-    def _ai_available() -> bool:
-        return bool(getattr(state, "ai_mode", False))
+    # they need. They are always offered: the assistant is part of the app, not
+    # a mode to switch on.
 
     def _insert_ai_answer(cell_id: str, text: str, kind: str) -> bool:
         """Put an answer under `cell_id` as a new cell, focused and editable.
@@ -572,7 +570,7 @@ def NotebookView(
             _ai_notice("Out of assistant credits — top up in Assistant settings.")
             return
         except cell_ai.CellAIDisabled:
-            _ai_notice("Turn the Assistant on in Settings first.")
+            _ai_notice("Assistant credits are unavailable in this build.")
             return
         except Exception as ex:
             logger.warning("In-cell AI %s failed: %s", action, ex)
@@ -607,7 +605,7 @@ def NotebookView(
             _ai_notice("Out of assistant credits — top up in Assistant settings.")
             return
         except cell_ai.CellAIDisabled:
-            _ai_notice("Turn the Assistant on in Settings first.")
+            _ai_notice("Assistant credits are unavailable in this build.")
             return
         except Exception as ex:
             logger.warning("Hardware suggestion failed: %s", ex)
@@ -1033,15 +1031,11 @@ def NotebookView(
                 # the active cell, so there is one path to build.
                 "ask_ai_active": (
                     lambda: _show_cell_ai_menu(active_cell_id)
-                    if _ai_available() and active_cell_id
+                    if active_cell_id
                     else None
                 ),
                 # Notebook-scoped: "what runtime shape should I use for this?"
-                "suggest_hardware": (
-                    lambda: page.run_task(_suggest_hardware)
-                    if _ai_available()
-                    else None
-                ),
+                "suggest_hardware": lambda: page.run_task(_suggest_hardware),
             }
         )
 
@@ -1102,7 +1096,7 @@ def NotebookView(
                     Binding("i", ctrl=True),
                     (
                         lambda: _show_cell_ai_menu(active_cell_id)
-                        if _ai_available() and active_cell_id
+                        if active_cell_id
                         else None
                     ),
                 ),
@@ -1268,13 +1262,9 @@ def NotebookView(
                 is_active=cell.id == active_cell_id,
                 on_focus_change=_on_cell_focus,
                 focus_token=(focus_req[1] if focus_req[0] == cell.id else 0),
-                # Only when AI is on: a button that opens "turn AI on in
-                # Settings" is worse than no button.
-                on_ask_ai=(
-                    (lambda c=cell: _show_cell_ai_menu(c.id))
-                    if _ai_available()
-                    else None
-                ),
+                # Always offered: the assistant is part of the app. A button
+                # that only works after flipping a switch is worse than none.
+                on_ask_ai=lambda c=cell: _show_cell_ai_menu(c.id),
             )
         )
         if (i + 1) % 2 == 0:

@@ -215,20 +215,12 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_term_zoom_reset=lambda e=None: _call(term_actions, "zoom_reset"),
             on_term_toggle_blink=lambda e=None: _call(term_actions, "toggle_blink"),
             on_term_toggle_search=lambda e=None: _call(term_actions, "toggle_search"),
-            # AI. Each panel registers its own handler, and each is only
-            # offered while ai_mode is on — a menu entry that just opens a
-            # "turn it on" notice is worse than no entry.
-            on_ai_explain=(
-                lambda e: _call(term_actions, "explain") if state.ai_mode else None
-            ),
-            on_ai_explain_cell=(
-                lambda e: _call(nb_actions, "ask_ai_active") if state.ai_mode else None
-            ),
-            on_ai_suggest_hardware=(
-                lambda e: _call(nb_actions, "suggest_hardware")
-                if state.ai_mode
-                else None
-            ),
+            # AI. Each panel registers its own handler, and each is always
+            # offered: a menu entry that only opens a "turn it on" notice is
+            # worse than no entry.
+            on_ai_explain=lambda e: _call(term_actions, "explain"),
+            on_ai_explain_cell=lambda e: _call(nb_actions, "ask_ai_active"),
+            on_ai_suggest_hardware=lambda e: _call(nb_actions, "suggest_hardware"),
             on_open_assistant=lambda e: controller.open_assistant(),
         )
         try:

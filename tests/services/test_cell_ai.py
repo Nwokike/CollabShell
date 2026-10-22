@@ -41,7 +41,7 @@ class FakeOut:
 
 
 def _state(**kw):
-    base = {"ai_mode": True, "ai_model": "auto", "ai_help": False}
+    base = {"ai_model": "auto"}
     base.update(kw)
     return NS(**base)
 
@@ -63,16 +63,24 @@ def _patch_turn(monkeypatch, result):
 # ── the gates ────────────────────────────────────────────────────────────────
 
 
-def test_ai_off_raises_disabled_and_never_calls_the_model(monkeypatch):
+def test_no_credit_service_raises_disabled_and_never_calls_the_model(monkeypatch):
+    """The one remaining refusal: credits unavailable in this build.
+
+    There used to be a second one — the assistant "off" switch — but that
+    switch never worked (`on_change` passed a coroutine through a lambda, so
+    flet dropped it) and it defaulted to off, so the assistant was effectively
+    unusable. It is gone; the assistant always runs, and the only thing that
+    can stop a turn is no credits.
+    """
     called = _patch_turn(monkeypatch, {"ok": True, "text": "x"})
     try:
         asyncio.run(
             cell_ai.run_cell_action(
-                action="explain", state=_state(ai_mode=False), credits=object(),
+                action="explain", state=_state(), credits=None,
                 services=NS(), source="x=1", notebook_cells=[],
             )
         )
-        raise AssertionError("AI off must not reach the model")
+        raise AssertionError("no credits must not reach the model")
     except cell_ai.CellAIDisabled:
         pass
     assert not called, "a disabled gate must not run a turn"
@@ -230,9 +238,9 @@ def test_looks_like_error_ignores_plain_output():
 # ── the shared one-shot engine (ai_quick) ───────────────────────────────────
 
 
-def test_ai_quick_ask_gates_on_ai_mode(monkeypatch):
-    """The engine is the one place the gates live, so every caller inherits
-    them — a caller that forgets its own check still cannot spend credits."""
+def test_ai_quick_ask_refuses_without_credits(monkeypatch):
+    """The engine is the one place the refusal lives, so every caller inherits
+    it — a caller that forgets its own check still cannot spend credits."""
     from services import ai_quick
 
     called = []
@@ -246,11 +254,11 @@ def test_ai_quick_ask_gates_on_ai_mode(monkeypatch):
     try:
         asyncio.run(
             ai_quick.ask(
-                action="explain", state=_state(ai_mode=False), credits=object(),
+                action="explain", state=_state(), credits=None,
                 services=NS(), prompt="hi",
             )
         )
-        raise AssertionError("AI off must not reach the model")
+        raise AssertionError("no credits must not reach the model")
     except ai_quick.CellAIDisabled:
         pass
     assert not called

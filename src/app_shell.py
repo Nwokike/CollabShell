@@ -87,15 +87,14 @@ def AppShell() -> Control:
             ("Keyboard shortcuts", ft.Icons.KEYBOARD_ROUNDED, "F1",
              lambda: open_shortcuts_help(page, "global")),
         ]
-        if state.ai_mode:
-            commands.append(
-                (
-                    "Open Assistant",
-                    tokens.ASSISTANT_ICON,
-                    "Chat with the assistant",
-                    lambda: controller.open_assistant(),
-                )
+        commands.append(
+            (
+                "Open Assistant",
+                tokens.ASSISTANT_ICON,
+                "Chat with the assistant",
+                lambda: controller.open_assistant(),
             )
+        )
         commands.extend(
             ("Go to " + name, ft.Icons.LAUNCH_ROUNDED, f"Ctrl+{i + 1}",
              lambda i=i: controller.navigate_tab(i))
@@ -198,9 +197,8 @@ def AppShell() -> Control:
         current = page.views[0].floating_action_button
         ours = current is not None and current is _assistant_fab_ref.current
         # The FAB is always present once the app is up, the way DDGS ships it —
-        # it is the entry point to the assistant, so hiding it until ai_mode is
-        # on makes the feature undiscoverable. The assistant itself still gates
-        # on ai_mode and says so when it is off.
+        # it is the entry point to the assistant, so hiding it until a switch is
+        # flipped makes the feature undiscoverable. (There is no switch any more.)
         if not (state.app_ready and state.onboarding_done):
             if ours:
                 page.views[0].floating_action_button = None

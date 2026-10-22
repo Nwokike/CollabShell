@@ -43,8 +43,7 @@ STORAGE_USAGE_UPDATED_AT = "colab_usage_updated_at"
 # ── Assistant (AI) settings ─────────────────────────────────────────────────
 # Local prefs (survive Clear Local Data like the rest of this block). The
 # router base URL points at an OpenAI-compatible endpoint; the bundled SKILL.md
-# is injected into the system prompt when router_help is on.
-STORAGE_AI_MODE = "colab_ai_mode"
+# is injected into the system prompt — always, because there is no off switch.
 STORAGE_AI_MODEL = "colab_ai_model"
 # How hard the model thinks before answering. Both DDGS and lm-router expose
 # this; "auto" sends nothing, so the router's own default applies.
@@ -53,17 +52,12 @@ THINKING_DEPTHS = ("auto", "minimal", "low", "medium", "high")
 # The router URL is an ADVANCED OVERRIDE. When empty the app probes 8082..8092
 # and embeds its own router, which is the normal path — see services/router.py.
 STORAGE_AI_ROUTER_URL = "colab_ai_router_url"
-STORAGE_AI_HELP = "colab_ai_help"
 STORAGE_NOTIFY_ENABLED = "colab_notify_enabled"
 AI_DEFAULT_ROUTER_URL = "http://127.0.0.1:8082/v1"
 # How long a stop waits for the turn to notice its own flag before the UI
 # hard-cancels it. A model that stopped emitting has stopped polling too, so
 # the deadline is what keeps the Stop button from hanging forever.
 TURN_STOP_GRACE_S = 5.0
-TIP_AI_MODE = (
-    "Show the Assistant tab and the in-cell AI actions. "
-    "Manual work stays exactly the same."
-)
 
 # ── The model router ─────────────────────────────────────────────────────────
 # The app owns its router: it probes for one already running before embedding

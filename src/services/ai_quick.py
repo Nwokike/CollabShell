@@ -44,8 +44,6 @@ async def ask(
     """
     from services import ai_credits, ai_service
 
-    if not getattr(state, "ai_mode", False):
-        raise CellAIDisabled("Assistant is off")
     if credits is None:
         raise CellAIDisabled("Assistant credits are unavailable in this build")
 
@@ -68,9 +66,7 @@ async def ask(
 
 
 def system_for(state) -> str:
-    """The bundled SKILL.md, or "" when the user turned that off."""
-    if not getattr(state, "ai_help", True):
-        return ""
+    """The bundled SKILL.md. Always injected: there is no off switch."""
     from ai import skill_text
 
     return skill_text()

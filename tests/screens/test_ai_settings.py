@@ -19,10 +19,8 @@ def _stubs(**state_overrides):
     """Stub page/state/services with only what the section touches."""
     page = _FakePage()
     base = {
-        "ai_mode": False,
         "ai_model": "auto",
         "ai_router_url": constants.AI_DEFAULT_ROUTER_URL,
-        "ai_help": True,
         "is_premium": False,
     }
     base.update(state_overrides)
@@ -96,11 +94,9 @@ def test_ai_section_builds_and_lists_its_rows():
     texts = _flatten_texts(column)
     for needle in (
         "ASSISTANT",
-        "Assistant mode",
-        "Router URL",
+        "Router",
         "Assistant model",
         "Credits",
-        "Assistant premium",
     ):
         assert needle in texts, needle
 
@@ -141,7 +137,7 @@ def test_ai_section_is_safe_without_services():
 
     page = _FakePage()
     state = NS(
-        ai_mode=False, ai_model="auto",
+        ai_model="auto",
         ai_router_url="x", ai_help=True, is_premium=False,
     )
     services = NS(credits=None, premium=None, storage=None, ad_service=None)
@@ -510,10 +506,8 @@ def test_premium_user_sees_no_ad_topup():
 
 def test_ai_constants_exist():
     for name in (
-        "STORAGE_AI_MODE",
         "STORAGE_AI_MODEL",
         "STORAGE_AI_ROUTER_URL",
-        "STORAGE_AI_HELP",
     ):
         assert getattr(constants, name, None), name
     assert constants.AI_DEFAULT_ROUTER_URL.startswith("http://")
@@ -522,9 +516,9 @@ def test_ai_constants_exist():
 def test_app_state_has_ai_fields():
     from core.state import state
 
-    assert state.ai_mode is False
+    # There is no assistant switch: the assistant is part of the app, so the
+    # only assistant preference left is which model to prefer.
     assert state.ai_model == "auto"
-    assert state.ai_help is True
     # Empty means no override: the app probes 8082..8092 and embeds its own
     # router. A hardcoded 8082 default would mean the app could only ever find
     # a router the user had started by hand.

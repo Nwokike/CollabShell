@@ -670,13 +670,9 @@ def TerminalPanel(
                 "zoom_reset": _zoom_reset,
                 "toggle_blink": _toggle_blink,
                 "toggle_search": _toggle_search,
-                # Only when AI is on: the FAB menu hides items that would just
-                # open a "turn it on in Settings" notice.
-                "explain": (
-                    lambda: page.run_task(_explain_terminal)
-                    if getattr(app_state, "ai_mode", False)
-                    else None
-                ),
+                # Always offered: the FAB menu hides nothing, and an entry
+                # that only opens a "turn it on" notice is worse than none.
+                "explain": lambda: page.run_task(_explain_terminal),
                 "font_size": lambda: (
                     _active_entry().mt.font_size
                     if _active_entry() and _active_entry().mt
@@ -742,7 +738,7 @@ def TerminalPanel(
             _ai_snack("Out of assistant credits — top up in Assistant settings.")
             return
         except ai_quick.CellAIDisabled:
-            _ai_snack("Turn the Assistant on in Settings first.")
+            _ai_snack("Assistant credits are unavailable in this build.")
             return
         except Exception as ex:
             logger.warning("Terminal explain failed: %s", ex)

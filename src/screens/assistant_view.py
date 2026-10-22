@@ -762,8 +762,6 @@ class ChatSession:
         )
 
     def _system_prompt(self) -> str:
-        if not getattr(self.state, "ai_help", True):
-            return ""
         from ai import skill_text
 
         return skill_text()

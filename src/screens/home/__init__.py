@@ -133,7 +133,7 @@ def HomeScreen() -> ft.Control:
     credit_pill_row = ft.Container(
         content=CreditPill(),
         margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
-        visible=bool(getattr(state, "ai_mode", False)),
+        visible=True,
     )
 
     # ── Compute-unit balance chip (reactive: use_state, not mutation) ─────────

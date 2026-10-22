@@ -197,7 +197,7 @@ def test_settings_ai_section_reports_the_premium_cap():
     services = types.SimpleNamespace(credits=credits, storage=None, ad_service=None,
                                      premium=types.SimpleNamespace(available=True))
     state_ = types.SimpleNamespace(
-        ai_mode=False, ai_model="auto", ai_router_url="x", ai_help=True,
+        ai_model="auto", ai_router_url="x",
         is_premium=True,
     )
     column = ai_section.build_ai_section(page, state_, services)

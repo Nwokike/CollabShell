@@ -54,10 +54,10 @@ def _restore_process_globals():
         field: getattr(state, field)
         for field in (
             "ai_model",
+            "ai_thinking",
             "ai_router_url",
             "ai_router_status",
             "ai_router_port",
-            "ai_help",
             "credits_revision",
             "notify_enabled",
         )

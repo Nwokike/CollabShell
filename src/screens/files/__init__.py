@@ -297,7 +297,7 @@ def FilesScreen(session_name: str) -> ft.Control:
             _notify("Out of assistant credits — top up in Assistant settings.", True)
             return
         except ai_quick.CellAIDisabled:
-            _notify("Turn the Assistant on in Settings first.", True)
+            _notify("Assistant credits are unavailable in this build.", True)
             return
         except Exception as ex:
             logger.warning("Files explain failed: %s", ex)
@@ -339,7 +339,7 @@ def FilesScreen(session_name: str) -> ft.Control:
         "new_folder": _open_new_folder_dialog,
         "delete": _open_delete_dialog,
         "clear_selection": _clear_selection,
-        "explain": _explain_selected if state.ai_mode else None,
+        "explain": _explain_selected,
     }
 
     # ── Toolbar ───────────────────────────────────────────────────────────────
@@ -385,12 +385,12 @@ def FilesScreen(session_name: str) -> ft.Control:
                     ft.IconButton(
                         tokens.ASSISTANT_ICON,
                         icon_color=ft.Colors.PRIMARY
-                        if has_sel and state.ai_mode
+                        if has_sel
                         else ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Explain this file with AI",
                         on_click=(
                             None
-                            if not (has_sel and state.ai_mode)
+                            if not has_sel
                             else lambda e: page.run_task(_explain_selected)
                         ),
                     ),

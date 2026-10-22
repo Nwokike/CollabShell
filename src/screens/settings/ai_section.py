@@ -157,34 +157,12 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     # function or a non-observable attribute, NEVER a render-time assignment to
     # observable state.
 
-    mode_switch = ft.Switch(
-        value=bool(getattr(state, "ai_mode", False)),
-        on_change=lambda e: _save_mode(e.control.value),
-    )
-
-    help_switch = ft.Switch(
-        value=bool(getattr(state, "ai_help", True)),
-        on_change=lambda e: _save_help(e.control.value),
-    )
-
-    async def _save_mode(value: bool):
-        state.ai_mode = bool(value)
-
-        storage = getattr(services, "storage", None)
-        if storage is not None:
-            await storage.set(
-                constants.STORAGE_AI_MODE, "true" if value else "false"
-            )
-        page.update()
-
-    async def _save_help(value: bool):
-        state.ai_help = bool(value)
-        storage = getattr(services, "storage", None)
-        if storage is not None:
-            await storage.set(
-                constants.STORAGE_AI_HELP, "true" if value else "false"
-            )
-        page.update()
+    # There is no mode switch and no app-guide switch: both are always on.
+    # They existed once and neither ever worked — `on_change` passed an
+    # `async def` through a lambda, so flet (which only awaits a coroutine
+    # *function*, base_control.py:514-555) created the coroutine and dropped
+    # it, and the preference was never saved. The flag also defaulted to off,
+    # so the assistant looked disabled to a user who could not enable it.
 
     # Subscribe to the router status. The row's text is built from
     # `ai_router_status`/`ai_router_port` on every render, so without this
@@ -356,18 +334,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             glass_card(
                 ft.Column(
                     controls=[
-                        _row(
-                            "Assistant mode",
-                            constants.TIP_AI_MODE,
-                            trailing=mode_switch,
-                        ),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        _row(
-                            "Include app guide in prompts",
-                            "Teach the assistant how this app works so it "
-                            "does not run code that fails here.",
-                            trailing=help_switch,
-                        ),
                         ft.Divider(height=tokens.SPACE_SM),
                         _row(
                             "Thinking",

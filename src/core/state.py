@@ -87,13 +87,14 @@ class AppState:
     is_premium: bool = False
 
     # ── Assistant (AI) ──────────────────────────────────────────────────────
-    ai_mode: bool = False  # off until the user turns it on in Settings
+    # There is no on/off switch: the assistant is part of the app. It was one
+    # once, and it never worked — `on_change` passed an `async def` through a
+    # lambda, so flet dropped the coroutine and the preference was never saved.
     ai_model: str = "auto"
     # An ADVANCED OVERRIDE, not the normal path. Empty means the app probes
     # 8082..8092 and embeds its own router (services/router.py), which is what
     # makes the assistant work out of the box.
     ai_router_url: str = ""
-    ai_help: bool = True  # inject the bundled SKILL.md into the system prompt
     # How hard the model thinks before answering: one of `THINKING_DEPTHS`.
     # "auto" is stored by name but sends nothing, leaving the router's own
     # default in force — the same rule both reference apps use.

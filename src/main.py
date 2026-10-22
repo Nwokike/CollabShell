@@ -586,9 +586,6 @@ class AppController:
                 state.drive_mount_path = saved_drive_path
 
             # ── Assistant prefs ─────────────────────────────────────────────
-            saved_ai_mode = await self.storage.get(constants.STORAGE_AI_MODE)
-            if saved_ai_mode is not None:
-                state.ai_mode = saved_ai_mode == "true"
 
             saved_ai_model = await self.storage.get(constants.STORAGE_AI_MODEL)
             if saved_ai_model:
@@ -600,9 +597,6 @@ class AppController:
             saved_ai_router = await self.storage.get(constants.STORAGE_AI_ROUTER_URL)
             state.ai_router_url = saved_ai_router or ""
 
-            saved_ai_help = await self.storage.get(constants.STORAGE_AI_HELP)
-            if saved_ai_help is not None:
-                state.ai_help = saved_ai_help == "true"
 
             saved_thinking = await self.storage.get(constants.STORAGE_AI_THINKING)
             if saved_thinking in constants.THINKING_DEPTHS:
