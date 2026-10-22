@@ -91,7 +91,7 @@ def AppShell() -> Control:
             commands.append(
                 (
                     "Open Assistant",
-                    ft.Icons.AUTO_AWESOME_OUTLINED,
+                    tokens.ASSISTANT_ICON,
                     "Chat with the assistant",
                     lambda: controller.open_assistant(),
                 )
@@ -227,7 +227,7 @@ def AppShell() -> Control:
         # No shape override (the platform's own roundness is right) and no
         # badge or per-credit rebuild.
         fab = ft.FloatingActionButton(
-            icon=ft.Icons.CHAT_BUBBLE_ROUNDED,
+            icon=tokens.ASSISTANT_ICON,
             foreground_color=ft.Colors.WHITE,
             bgcolor=brand_color(page),
             mini=True,

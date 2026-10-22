@@ -35,7 +35,7 @@ from core.theme import AppColors, brand_color
 
 logger = logging.getLogger("assistant")
 
-_CHAT_ICON = ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED
+_CHAT_ICON = tokens.ASSISTANT_ICON
 _THOUGHT_CAP = 8000
 
 TEXT_FLUSH_SEC = 0.2

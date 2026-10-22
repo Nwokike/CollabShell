@@ -757,7 +757,7 @@ def TerminalPanel(
                 modal=True,
                 title=ft.Row(
                     [
-                        ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                        ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
                         ft.Text("What the terminal is telling you"),
                     ],
                     spacing=tokens.SPACE_SM,

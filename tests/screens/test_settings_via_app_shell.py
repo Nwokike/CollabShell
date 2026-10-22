@@ -167,3 +167,76 @@ def test_every_screen_app_shell_builds_is_a_component():
             f"{screen.__name__} must be a @ft.component — the shell calls each "
             "with key=ft.ValueKey(...)"
         )
+
+
+# ── one assistant icon, everywhere ───────────────────────────────────────────
+# The FAB used CHAT_BUBBLE_ROUNDED while the thing it opens used
+# CHAT_BUBBLE_OUTLINE_ROUNDED and every "AI" entry point used a sparkle, so the
+# FAB and the assistant looked like two different products. `tokens` now owns
+# the one constant and every identity site reads it.
+
+_ASSISTANT_IDENTITY_SITES = (
+    "src/app_shell.py",
+    "src/screens/assistant_view.py",
+    "src/components/credit_pill.py",
+    "src/components/notebook_cell/actions.py",
+    "src/screens/session/fab_menu.py",
+    "src/screens/files/__init__.py",
+    "src/screens/session/terminal_panel.py",
+    "src/screens/settings/ai_section.py",
+)
+# Where the icon means "the assistant" rather than "an AI action" — a sparkle
+# here is what made the FAB and the thing it opens look like different products.
+_ASSISTANT_IDENTITY_ONLY = (
+    "src/app_shell.py",
+    "src/screens/assistant_view.py",
+    "src/components/credit_pill.py",
+    "src/screens/settings/ai_section.py",
+)
+
+
+def test_every_assistant_identity_icon_is_the_one_constant():
+    """No site may name an assistant icon of its own.
+
+    Two rules, because they are different rules:
+    - the outline bubble is banned everywhere — it was the wrong variant of the
+      approved glyph, and it is what the chat screen used;
+    - the sparkle is banned from the assistant's own identity surface, but it
+      stays legal as a per-capability glyph ("Explain this with AI"), which is
+      what both reference apps use for actions.
+    """
+    import flet as ft
+
+    from core import tokens
+
+    assert tokens.ASSISTANT_ICON == ft.Icons.CHAT_BUBBLE_ROUNDED, (
+        "the approved assistant icon is the filled chat bubble"
+    )
+
+    for rel in _ASSISTANT_IDENTITY_SITES:
+        text = (Path(_SRC).parent / rel).read_text(encoding="utf-8")
+        assert "CHAT_BUBBLE_OUTLINE_ROUNDED" not in text, (
+            f"{rel} uses the outline bubble; the approved glyph is the filled one"
+        )
+
+    for rel in _ASSISTANT_IDENTITY_ONLY:
+        text = (Path(_SRC).parent / rel).read_text(encoding="utf-8")
+        assert "AUTO_AWESOME" not in text, (
+            f"{rel} names an assistant identity icon instead of tokens.ASSISTANT_ICON"
+        )
+
+    for rel in _ASSISTANT_IDENTITY_SITES:
+        text = (Path(_SRC).parent / rel).read_text(encoding="utf-8")
+        if "Open Assistant" in text or "_CHAT_ICON" in text or "ASSISTANT_ICON" in text:
+            assert "tokens.ASSISTANT_ICON" in text, f"{rel} does not read the constant"
+
+
+def test_the_assistant_screen_uses_the_shared_icon():
+    """The chat screen's own icon must be the shared one, not a private alias."""
+    import inspect
+
+    from screens import assistant_view
+
+    source = inspect.getsource(assistant_view)
+    assert "tokens.ASSISTANT_ICON" in source
+    assert "CHAT_BUBBLE_OUTLINE_ROUNDED" not in source

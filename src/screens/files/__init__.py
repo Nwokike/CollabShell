@@ -311,7 +311,7 @@ def FilesScreen(session_name: str) -> ft.Control:
                 modal=True,
                 title=ft.Row(
                     [
-                        ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                        ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
                         ft.Text(name),
                     ],
                     spacing=tokens.SPACE_SM,
@@ -383,7 +383,7 @@ def FilesScreen(session_name: str) -> ft.Control:
                         ),
                     ),
                     ft.IconButton(
-                        ft.Icons.AUTO_AWESOME_OUTLINED,
+                        tokens.ASSISTANT_ICON,
                         icon_color=ft.Colors.PRIMARY
                         if has_sel and state.ai_mode
                         else ft.Colors.ON_SURFACE_VARIANT,

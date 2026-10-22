@@ -44,7 +44,7 @@ def build_credit_pill(
         content=ft.Row(
             [
                 ft.Icon(
-                    ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED,
+                    tokens.ASSISTANT_ICON,
                     size=tokens.ICON_SM,
                     color=color,
                 ),

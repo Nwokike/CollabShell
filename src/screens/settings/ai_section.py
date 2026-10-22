@@ -22,7 +22,7 @@ def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
     return ft.Row(
         controls=[
             ft.Icon(
-                ft.Icons.AUTO_AWESOME_ROUNDED,
+                tokens.ASSISTANT_ICON,
                 size=tokens.ICON_LG,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),

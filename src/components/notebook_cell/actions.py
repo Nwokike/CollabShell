@@ -26,7 +26,7 @@ def make_actions_row(
         # the menu that opens names all three actions in full.
         controls.append(
             ft.IconButton(
-                ft.Icons.AUTO_AWESOME_OUTLINED,
+                tokens.ASSISTANT_ICON,
                 icon_size=tokens.ICON_SM,
                 tooltip="Ask AI about this cell",
                 on_click=lambda e: on_ask_ai() if on_ask_ai else None,
@@ -117,7 +117,7 @@ def ai_menu(page: ft.Page, cell_id: str, on_pick) -> None:
             modal=True,
             title=ft.Row(
                 [
-                    ft.Icon(ft.Icons.AUTO_AWESOME_OUTLINED, size=tokens.ICON_SM),
+                    ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
                     ft.Text("Ask AI about this cell"),
                 ],
                 spacing=tokens.SPACE_SM,

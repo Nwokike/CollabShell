@@ -294,11 +294,16 @@ def test_the_fab_matches_the_ddgs_recipe():
     """DDGS: mini, white icon, brand fill, CHAT_BUBBLE_ROUNDED, tooltip only.
     No shape override (the platform's roundness is right) and no badge."""
     fab = _fab_source()
-    assert "ft.Icons.CHAT_BUBBLE_ROUNDED" in fab, "the FAB icon must be the chat bubble"
+    assert "tokens.ASSISTANT_ICON" in fab, (
+        "the FAB icon must be the assistant icon (tokens.ASSISTANT_ICON)"
+    )
     assert "mini=True" in fab
     assert "foreground_color=ft.Colors.WHITE" in fab
     # Not the sparkle icon nor a forced circle shape.
     assert "AUTO_AWESOME_OUTLINED" not in fab, "the FAB icon is not the sparkle"
+    assert "CHAT_BUBBLE_OUTLINE_ROUNDED" not in fab, (
+        "the FAB icon is the filled bubble, not the outline variant"
+    )
     assert "shape=ft.CircleBorder()" not in fab, "no shape override on the FAB"
 
 

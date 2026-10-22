@@ -197,7 +197,7 @@ def build_session_fab(
                     on_ai_suggest_hardware,
                 )
             )
-    ai.append(_item("Open Assistant", ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED, on_open_assistant))
+    ai.append(_item("Open Assistant", tokens.ASSISTANT_ICON, on_open_assistant))
     if any(ai):
         menu_items.append(ft.PopupMenuItem())
         menu_items.extend(ai)
