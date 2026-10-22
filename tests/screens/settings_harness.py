@@ -143,15 +143,21 @@ def render_screen(component_fn, state, services, page):
     component onto the stack (`component.py:194`).
 
     So this renders a thin wrapper component and then walks the tree calling
-    `before_update()` on every node, which is exactly what
-    `session.patch_control` does when it emits a patch.
+    ``before_update()`` on every node, which is exactly what
+    ``session.patch_control`` does when it emits a patch.
+
+    The wrapper calls ``component_fn(key=ft.ValueKey(...))`` the way the real
+    shell does. This is deliberate: an earlier version called it with no
+    arguments, and a commit that deleted ``@ft.component`` from the Settings
+    screen passed here while the app's Settings tab was dead, because only
+    ``@ft.component`` pops ``key``.
     """
     from flet.components.component import Renderer
     from state import AppStateCtx, ServiceCtx
 
     @ft.component
     def _Root():
-        return component_fn()
+        return component_fn(key=ft.ValueKey("settings_tab"))
 
     renderer = Renderer()
     # `create_context` keys the renderer's stack on the provider's private

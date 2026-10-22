@@ -54,6 +54,7 @@ def _section_error(label: str, ex: BaseException) -> ft.Control:
     )
 
 
+@ft.component
 def SettingsScreen() -> ft.Control:
     """Full settings screen with modular cards arranged 1:1 with original app."""
     state = ft.use_context(AppStateCtx)
