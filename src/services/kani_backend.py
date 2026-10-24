@@ -401,6 +401,7 @@ async def run_turn(
     on_model_step: Callable[[], Awaitable[None]] | None = None,
     should_stop: Callable[[], bool] | None = None,
     base_url: str | None = None,
+    model: str | None = None,
     max_rounds: int = 6,
     timeout_s: float = 240.0,
     max_tokens: int = 2048,
@@ -418,7 +419,7 @@ async def run_turn(
     from services.ai_service import AIMidStream, AIUnavailable
     from services.model_catalog import mark_model_failed, turn_candidates
 
-    candidates = turn_candidates(_model_name())
+    candidates = turn_candidates(model if model is not None else _model_name())
     if not candidates:
         raise AIUnavailable("No models are available from the router.")
 
@@ -634,7 +635,7 @@ async def run_turn(
 def _model_name() -> str:
     from core.state import state
 
-    return str(getattr(state, "ai_model", "auto") or "auto")
+    return str(getattr(state, "ai_model", "") or "").strip()
 
 
 def _thinking_depth() -> str | None:

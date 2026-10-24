@@ -183,7 +183,7 @@ def _router_ready(monkeypatch):
 
 
 def test_the_model_dropdown_lists_the_routers_models(tmp_path, monkeypatch):
-    """Items come from the catalog, with auto first — nothing hardcoded."""
+    """Items come from the catalog in ranked order — nothing hardcoded."""
     from services import model_catalog
 
     _router_ready(monkeypatch)
@@ -191,16 +191,14 @@ def test_the_model_dropdown_lists_the_routers_models(tmp_path, monkeypatch):
         model_catalog,
         "pickable_models",
         lambda: [
-            {"id": "auto", "status": "active", "rate_hint": {"tier": "high"}},
+            {"id": "fast-model", "status": "active", "rate_hint": {"tier": "high"}},
             {"id": "qwen3", "status": "active", "rate_hint": {"tier": "medium"}},
         ],
     )
     session = _session(tmp_path, monkeypatch)
     pill = _find(session.view, ft.PopupMenuButton)
     assert len(pill.items) == 2
-    # auto leads.
-    first = pill.items[0]
-    assert "Auto" in _texts(first), _texts(first)
+    assert "fast-model" in _texts(pill.items[0])
     assert "qwen3" in _texts(pill.items[1])
 
 

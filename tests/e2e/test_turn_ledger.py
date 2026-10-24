@@ -137,8 +137,10 @@ def _patch_bridges(monkeypatch) -> None:
     )
 
 
-def _state() -> NS:
-    return NS(auth_method="oauth2", default_timeout=30.0, is_premium=False, credits_revision=0)
+def _state(**overrides) -> NS:
+    d = {"auth_method": "oauth2", "default_timeout": 30.0, "is_premium": False, "credits_revision": 0}
+    d.update(overrides)
+    return NS(**d)
 
 
 def _ledger(credits) -> dict:
@@ -342,6 +344,7 @@ def test_every_candidate_failing_charges_nothing(monkeypatch):
 
     # Point the app at a port nothing answers, with a span that cannot find one.
     monkeypatch.setattr("core.constants.AI_DEFAULT_ROUTER_URL", "http://127.0.0.1:1/v1")
+    monkeypatch.setattr("core.state.state.ai_router_url", "http://127.0.0.1:1/v1")
     with router._router_lock:
         router._router_port = None
     router._probe_miss_until = 0.0
@@ -350,9 +353,9 @@ def test_every_candidate_failing_charges_nothing(monkeypatch):
     def go():
         return asyncio.run(
             ai_credits.run_metered_turn(
-                state=_state(),
+                state=_state(ai_router_url="http://127.0.0.1:1/v1"),
                 credits=credits,
-                model="auto",
+                model="",
                 tools=tools,
                 messages=[{"role": "user", "content": "hi"}],
                 system="You are a test.",

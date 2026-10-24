@@ -271,9 +271,10 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
 
     # Generated from the catalog so the row cannot drift from what the router
     # actually offers right now.
+    from components.model_picker import model_label as _picked_label
+
     model_label = ft.Text(
-        "Auto" if (getattr(state, "ai_model", "auto") or "auto").lower() == "auto"
-        else getattr(state, "ai_model", "auto"),
+        _picked_label(state),
         size=tokens.FONT_SM,
         weight=ft.FontWeight.W_600,
         color=ft.Colors.ON_SURFACE_VARIANT,
@@ -346,11 +347,10 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
 
 
 def _model_subtitle(state) -> str:
-    """Subtitle for the model row, generated from state so it cannot drift."""
-    model = getattr(state, "ai_model", "auto") or "auto"
-    if model == "auto":
-        return "Rotates across the models your router has awake."
-    return model
+    """Subtitle for the model row — the picker's own, so the two agree."""
+    from components.model_picker import model_subtitle
+
+    return model_subtitle(state)
 
 
 

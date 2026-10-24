@@ -661,7 +661,7 @@ class ChatSession:
         result = await ai_credits.run_metered_turn(
             state=self.state,
             credits=getattr(self.services, "credits", None),
-            model=getattr(self.state, "ai_model", "auto"),
+            model=str(getattr(self.state, "ai_model", "") or "").strip(),
             tools=self._build_tools(),
             messages=self._model_history() + [{"role": "user", "content": text}],
             system=self._system_prompt(),

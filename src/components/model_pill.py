@@ -38,7 +38,6 @@ from core.theme import brand_color
 
 logger = logging.getLogger("model_pill")
 
-_ICON_AUTO = ft.Icons.AUTO_AWESOME_ROUNDED
 _ICON_MODEL = ft.Icons.MEMORY_ROUNDED
 _ICON_OFFLINE = ft.Icons.CLOUD_OFF_ROUNDED
 
@@ -166,13 +165,18 @@ def pill_state() -> PillState:
        cannot outlive the router that offered it.
     """
     from services import model_catalog
-    from services.model_catalog import AUTO_MODEL_ID
 
     status = str(getattr(_app_state(), "ai_router_status", "starting") or "starting")
     selected = str(getattr(_app_state(), "ai_model", "") or "")
 
     message = ""
     action = ""
+    # lm-router's rule (`chat_controls.py:108`): `discovering` is a DATA
+    # condition — the gateway is up but no chat-eligible model has been
+    # published yet — not a lifecycle string. Keying the spinner on
+    # `status == "starting"` ended it the moment /health answered, whether or
+    # not any model existed, and the pill then had nothing honest to show.
+    discovering = status == "ready" and not model_catalog.pickable_models()
     if status in _DEAD_STATUSES:
         label = "Offline"
         active = False
@@ -183,26 +187,20 @@ def pill_state() -> PillState:
         )
         action = "Start router"
         spinning = False
-    elif status == "starting":
+    elif status == "starting" or discovering:
         label = "Starting gateway…"
         active = False
-        # A start is the one thing that unblocks a gateway that is not up yet.
         message = "Discovering available models…"
-        action = "Start router"
+        action = "Start router" if status == "starting" else "Refresh"
         spinning = True
     else:
-        # Ready: name what will serve. `serving_model()` never returns "auto"
-        # while the pool has anything in it, and it never returns a name the
-        # router is not offering.
+        # Ready with models: name what will serve — the user's pick, or the
+        # fastest medium/high model the gateway reported. It is never a name
+        # the router is not offering.
         label = model_catalog.serving_model()
-        active = True
+        active = bool(label)
         spinning = False
-        if label.lower() == AUTO_MODEL_ID and not model_catalog.pickable_models():
-            # Answers `/health` and published nothing we can rank. The turn
-            # still attempts the gateway's own rotation, so the name is honest,
-            # but the pill stays muted: a green pill promising a working
-            # assistant on a router that offered nothing is the lie a user pays
-            # for by sending a message that fails.
+        if not label:
             active = False
             message = "No models reported by the router."
             action = "Refresh"
@@ -210,7 +208,7 @@ def pill_state() -> PillState:
     return PillState(
         label=label,
         active=active,
-        discovering=status == "starting",
+        discovering=status == "starting" or discovering,
         spinning=spinning,
         status=status,
         selected=selected,
@@ -245,17 +243,14 @@ def _menu_item(entry: dict, selected: bool, on_pick) -> ft.PopupMenuItem:
     from services import model_catalog
 
     model_id = str(entry.get("id") or "")
-    is_auto = model_id.lower() == "auto"
     hint = model_catalog.model_hint(entry)
     tier = _tier_label(entry)
     caption = " · ".join(part for part in (tier, hint) if part)
 
-    name = "Auto" if is_auto else model_id
-    if is_auto:
-        caption = caption or "the router's ranked best model"
+    name = model_id
 
     lead = ft.Icon(
-        _ICON_AUTO if is_auto else _ICON_MODEL,
+        _ICON_MODEL,
         size=tokens.ICON_SM,
         color=brand_color() if selected else ft.Colors.ON_SURFACE_VARIANT,
     )

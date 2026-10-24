@@ -179,6 +179,18 @@ async def run_turn(
             "Connect to the internet so the router can be fetched, then retry."
         )
 
+    # A turn must never walk an empty or stale pool: with no candidates the
+    # walk has nothing to try and dies after one request. Proven on a live
+    # gateway — the boot fetch can fail or race the first turn, and the
+    # candidate list is then empty while the router itself is healthy.
+    from services import model_catalog
+
+    if not model_catalog.candidate_models() or model_catalog.catalog_stale():
+        try:
+            await model_catalog.refresh_catalog(base_url)
+        except Exception:
+            logger.debug("pre-turn catalog refresh failed", exc_info=True)
+
     cancel = asyncio.Event()
     if should_stop is not None and should_stop():
         cancel.set()
@@ -209,6 +221,7 @@ async def run_turn(
         on_model_step=(lambda: on_model_step()) if on_model_step else None,
         on_round_reset=on_round_reset,
         base_url=base_url,
+        model=model,
         max_rounds=max_rounds,
     )
     result["cancelled"] = cancel.is_set()

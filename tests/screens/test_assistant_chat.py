@@ -922,7 +922,7 @@ def test_refresh_model_chip_rebuilds_when_only_the_menu_changed(
 
     rows = [
         {
-            "id": "auto",
+            "id": "m1",
             "status": "active",
             "latency_ms": 10,
             "endpoint_type": "chat.completion",

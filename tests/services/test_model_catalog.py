@@ -73,11 +73,11 @@ def test_pickable_keeps_active_chat_high_and_medium():
     assert ids == ["a", "b"], ids
 
 
-def test_auto_is_always_kept_even_without_a_tier():
+def test_auto_is_excluded_from_pickable_models():
     _fresh([_row("auto"), _row("a", tier="high")])
     ids = [e["id"] for e in mc.pickable_models()]
-    assert ids[0] == "auto"
-    assert "a" in ids
+    assert "auto" not in ids
+    assert ids == ["a"]
 
 
 def test_row_without_an_id_is_dropped():
@@ -103,7 +103,7 @@ def test_ranking_is_tier_then_latency_then_id():
         _row("auto"),
     ])
     ids = [e["id"] for e in mc.pickable_models()]
-    assert ids == ["auto", "fast-high", "slow-high", "fast-medium"], ids
+    assert ids == ["fast-high", "slow-high", "fast-medium"], ids
 
 
 def test_unknown_latency_sorts_last():
@@ -137,32 +137,32 @@ def test_candidates_exclude_auto_and_unusable_rows():
     assert mc.candidate_models() == []
 
 
-def test_turn_candidates_auto_means_pool_then_auto_last():
+def test_turn_candidates_auto_falls_back_to_ranked_pool():
     _fresh([_row("auto"), _row("a", tier="high", latency=100)])
-    assert mc.turn_candidates("auto") == ["a", "auto"]
+    assert mc.turn_candidates("auto") == ["a"]
 
 
 def test_turn_candidates_explicit_pick_goes_first_verbatim():
     _fresh([_row("auto"),
             _row("fast", tier="high", latency=10),
             _row("slow", tier="high", latency=900)])
-    assert mc.turn_candidates("slow") == ["slow", "fast", "auto"]
+    assert mc.turn_candidates("slow") == ["slow", "fast"]
 
 
 def test_turn_candidates_empty_choice_falls_back_to_auto_order():
     _fresh([_row("auto"), _row("a", tier="high")])
-    assert mc.turn_candidates("") == ["a", "auto"]
+    assert mc.turn_candidates("") == ["a"]
 
 
 def test_turn_candidates_deduplicates_a_pick_also_in_the_pool():
     _fresh([_row("auto"), _row("a", tier="high")])
-    assert mc.turn_candidates("a") == ["a", "auto"]
+    assert mc.turn_candidates("a") == ["a"]
 
 
 def test_explicit_pick_bypasses_tier_and_status_filters():
     """A stopped, low-tier pick is still tried first — the user asked for it."""
     _fresh([_row("auto"), _row("wanted", tier="low", status="stopped")])
-    assert mc.turn_candidates("wanted") == ["wanted", "auto"]
+    assert mc.turn_candidates("wanted") == ["wanted"]
 
 
 def test_explicit_pck_bypasses_an_open_circuit():
@@ -170,7 +170,7 @@ def test_explicit_pck_bypasses_an_open_circuit():
     mc.mark_model_failed("a")
     assert mc.candidate_models() == ["b"]
     # ...but an explicit choice is still honoured.
-    assert mc.turn_candidates("a") == ["a", "b", "auto"]
+    assert mc.turn_candidates("a") == ["a", "b"]
 
 
 # ── circuit breaker ────────────────────────────────────────────────────────
@@ -188,12 +188,6 @@ def test_circuit_ttl_expiry_readmits():
     mc._model_failed_until["a"] = time.monotonic() - 1
     assert mc.model_circuit_open("a") is False
     assert mc.candidate_models() == ["a"]
-
-
-def test_auto_is_never_breakered():
-    _fresh([_row("auto")])
-    mc.mark_model_failed("auto")
-    assert mc.model_circuit_open("auto") is False
 
 
 def test_mark_failed_ignores_empty_ids():
@@ -232,18 +226,7 @@ def test_catalog_staleness_tracking():
     assert mc.catalog_stale() is True
 
 
-def test_has_auto_reflects_the_catalog():
-    _fresh([_row("a", tier="high")])
-    assert mc.has_auto() is False
-    mc.apply_catalog([_row("a", tier="high"), _row("auto")])
-    assert mc.has_auto() is True
-
-
 # ── labels ─────────────────────────────────────────────────────────────────
-
-
-def test_auto_hint_is_the_rotation_line():
-    assert mc.model_hint(_row("auto")) == "Rotates across available models"
 
 
 def test_hint_shows_latency_and_the_gateway_label_verbatim():

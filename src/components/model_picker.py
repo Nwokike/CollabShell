@@ -4,9 +4,9 @@ Nothing here is hardcoded. Tier, status, latency and the rate label are fields
 the gateway publishes; this dialog only displays them and records the choice.
 A router whose catalog changes changes this list without a code change.
 
-The one entry that is not ranked is ``auto``, which the gateway publishes as a
-real row. When the gateway does not publish it, the picker says so rather than
-pretending, and the stored preference resolves to the ranked head.
+Every row is ranked — tier first, then the gateway's own latency — so the
+head of the list is the fastest medium/high model. With no stored preference
+that head is what serves.
 """
 
 from __future__ import annotations
@@ -19,8 +19,6 @@ from core import constants, tokens
 from core.styles import tip_text
 
 logger = logging.getLogger("ModelPicker")
-
-AUTO = "auto"
 
 
 def _http_client(timeout: float = 30.0):
@@ -65,8 +63,7 @@ def _model_row(entry: dict, selected: bool, on_pick) -> ft.ListTile:
     subtitle = model_catalog.model_hint(entry)
     trailing: list = []
     tier = model_catalog.tier_of(entry)
-    if model_id.lower() != AUTO:
-        trailing.append(_tier_chip(tier))
+    trailing.append(_tier_chip(tier))
     latency = entry.get("latency_ms")
     if isinstance(latency, (int, float)) and not isinstance(latency, bool):
         trailing.append(
@@ -114,7 +111,7 @@ def show_model_picker(page: ft.Page, state, services) -> None:
         entries = await model_catalog.refresh_catalog(router_url)
         _render(entries)
 
-    selected = {"id": getattr(state, "ai_model", AUTO) or AUTO}
+    selected = {"id": str(getattr(state, "ai_model", "") or "").strip()}
     body = ft.Column(controls=[], spacing=tokens.SPACE_XS, tight=True)
     dialog = ft.AlertDialog(
         title=ft.Text("Assistant model"),
@@ -169,25 +166,27 @@ def model_label(state) -> str:
     """
     from services import model_catalog
 
-    chosen = str(getattr(state, "ai_model", AUTO) or AUTO)
-    if chosen.lower() == AUTO:
-        return "Auto" if model_catalog.has_auto() else "Auto (router default)"
-    return chosen
+    chosen = str(getattr(state, "ai_model", "") or "").strip()
+    if chosen:
+        return chosen
+    serving = model_catalog.serving_model()
+    return serving or "Selecting the fastest model…"
 
 
 def model_subtitle(state) -> str:
     """Subtitle for the settings model row."""
     from services import model_catalog
 
-    chosen = str(getattr(state, "ai_model", AUTO) or AUTO)
+    chosen = str(getattr(state, "ai_model", "") or "").strip()
     catalog = model_catalog.catalog()
     entry = next(
         (e for e in catalog if e["id"].lower() == chosen.lower()), None
     )
     if entry is not None:
         return model_catalog.model_hint(entry)
-    if chosen.lower() == AUTO:
-        if model_catalog.has_auto():
-            return "Rotates across available models"
-        return "Uses the router's ranked best model"
+    if not chosen:
+        serving = model_catalog.serving_model()
+        if serving:
+            return f"Fastest available: {serving}"
+        return "The fastest model is selected once the gateway reports one"
     return "Not offered by the router right now"

@@ -739,9 +739,9 @@ def test_a_dead_endpoint_never_becomes_a_model_failure():
         assert "reach" in str(ex).lower(), ex
 
 
-def test_turn_with_an_empty_catalog_falls_back_to_the_routers_auto():
-    """An empty catalog keeps `auto` as the last resort — it is the gateway's
-    own rotation, not a client default, so it is tried rather than skipped."""
+def test_turn_with_an_empty_catalog_raises_unavailable():
+    """An empty catalog means no models are available from the router."""
+    from services.ai_service import AIUnavailable
 
     _fresh_calls()
     catalog = _install_catalog([_catalog_row("x", "high", 10)])
@@ -749,9 +749,11 @@ def test_turn_with_an_empty_catalog_falls_back_to_the_routers_auto():
     catalog._catalog = []
     catalog._catalog_fetched_at = 0.0
 
-    result = _run(_turn([], system="SYS"))
-    assert result["model"] == "auto", result
-    assert result["text"], result
+    try:
+        _run(_turn([], system="SYS"))
+        raise AssertionError("should have raised AIUnavailable")
+    except AIUnavailable as ex:
+        assert "no models" in str(ex).lower(), ex
 
 
 # ── 5. per-candidate patience ──────────────────────────────────────────────

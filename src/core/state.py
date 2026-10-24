@@ -98,7 +98,11 @@ class AppState:
     # There is no on/off switch: the assistant is part of the app. It was one
     # once, and it never worked — `on_change` passed an `async def` through a
     # lambda, so flet dropped the coroutine and the preference was never saved.
-    ai_model: str = "auto"
+    # The user's model preference. Empty means none: the app then serves the
+    # fastest medium/high model the gateway reported — both references' rule.
+    # There is no "auto" entry; a rotation model was a client-side invention
+    # neither reference has.
+    ai_model: str = ""
     # An ADVANCED OVERRIDE, not the normal path. Empty means the app probes
     # 8082..8092 and embeds its own router (services/router.py), which is what
     # makes the assistant work out of the box.

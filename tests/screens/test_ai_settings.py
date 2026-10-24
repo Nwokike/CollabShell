@@ -281,8 +281,8 @@ def _row(model_id, tier="high", latency=100):
     }
 
 
-def test_catalog_puts_auto_first_then_ranked(monkeypatch):
-    """The picker's order is the gateway's: auto, then tier-then-latency."""
+def test_catalog_ranks_by_tier_then_latency(monkeypatch):
+    """The picker's order: tier-then-latency."""
 
     from services import model_catalog
 
@@ -306,7 +306,7 @@ def test_catalog_puts_auto_first_then_ranked(monkeypatch):
         model_catalog.refresh_catalog("http://router/v1")
     )
     assert [e["id"] for e in entries] == [
-        "auto", "fast-high", "slow-high", "fast-medium",
+        "fast-high", "slow-high", "fast-medium",
     ]
 
 
@@ -366,12 +366,12 @@ def test_picker_lists_the_ranked_models(monkeypatch):
     model_catalog._catalog_fetched_at = 0.0
 
     page = _FakePage()
-    state = NS(ai_model="auto")
+    state = NS(ai_model="")
     mp.show_model_picker(page, state, NS(storage=None))
 
     texts = _flatten_texts(page.dialogs[-1])
     assert "step-3" in texts
-    assert "auto" in texts
+    assert "auto" not in texts
     assert not any("No high or medium" in t for t in texts), texts
 
 
@@ -391,7 +391,7 @@ def test_picker_states_an_unreachable_router_honestly(monkeypatch):
     model_catalog._catalog_fetched_at = 0.0
 
     page = _FakePage()
-    state = NS(ai_model="auto")
+    state = NS(ai_model="")
     mp.show_model_picker(page, state, NS(storage=None))
 
     texts = _flatten_texts(page.dialogs[-1])
@@ -427,14 +427,19 @@ def test_model_label_and_subtitle_come_from_the_catalog():
     model_catalog._catalog = []
     model_catalog._catalog_fetched_at = 0.0
 
-    state = NS(ai_model="auto")
-    assert mp.model_label(state) == "Auto (router default)"
-    assert "ranked best" in mp.model_subtitle(state)
+    state = NS(ai_model="")
+    assert "Selecting the fastest" in mp.model_label(state)
+    assert "fastest model is selected" in mp.model_subtitle(state)
 
-    model_catalog.apply_catalog([_row("auto"), _row("m", "high", 100)])
+    model_catalog.apply_catalog([_row("m", "high", 100)])
     state = NS(ai_model="m")
     assert mp.model_label(state) == "m"
     assert "100ms" in mp.model_subtitle(state)
+
+    # Empty preference uses the serving model (ranked best)
+    state = NS(ai_model="")
+    assert mp.model_label(state) == "m"
+    assert "Fastest available: m" in mp.model_subtitle(state)
 
     # A saved pick the router no longer offers says so.
     state = NS(ai_model="gone")
@@ -526,8 +531,9 @@ def test_app_state_has_ai_fields():
     from core.state import state
 
     # There is no assistant switch: the assistant is part of the app, so the
-    # only assistant preference left is which model to prefer.
-    assert state.ai_model == "auto"
+    # only assistant preference left is which model to prefer. Empty means
+    # no manual preference; the router's fastest servable model answers.
+    assert state.ai_model == ""
     # Empty means no override: the app probes 8082..8092 and embeds its own
     # router. A hardcoded 8082 default would mean the app could only ever find
     # a router the user had started by hand.

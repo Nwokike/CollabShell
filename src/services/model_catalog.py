@@ -6,9 +6,6 @@ read-only fields the gateway publishes on each catalog row; this module only
 filters, sorts and remembers failures. That is why a router whose catalog
 changes constantly needs no code change — swap its rows and the picker and the
 fallback pool follow.
-
-The one hardcoded string is ``"auto"``, which is a real gateway entry, not a
-client heuristic.
 """
 
 from __future__ import annotations
@@ -26,10 +23,6 @@ PICKABLE_TIERS = ("high", "medium")
 # A model that failed is skipped for five minutes. Monotonic clock, in-memory
 # only — a restart clears it, which is the safe direction.
 MODEL_CIRCUIT_TTL = 300.0
-
-# The router's own rotation. Kept as a literal because the gateway publishes
-# it as a catalog entry; it is never a client-side default.
-AUTO_MODEL_ID = "auto"
 
 # Catalog cadence: refreshed periodically by the caller, and on picker open.
 CATALOG_REFRESH_INTERVAL = 300.0
@@ -71,33 +64,26 @@ def router_url_for_read() -> str:
 def serving_model() -> str:
     """The model that will actually answer right now.
 
-    Not ``state.ai_model`` — that can be ``"auto"`` or a name the router stopped
-    offering, and neither tells the user anything. This is the concrete id the
-    turn will lead with:
-
-    1. the chosen model, when the router is still offering it;
-    2. otherwise the ranked head of the pool — tier first, then gateway latency,
-       which is the fastest active medium/high model (`candidate_models`);
-    3. otherwise ``"auto"``, the gateway's own rotation, as the last resort.
-
-    This is what the header pill names, so "Auto" never appears as a label for
-    someone who has not chosen anything.
+    The user's pick when the router still offers it, otherwise the ranked
+    head of the pool — tier first, then gateway latency, which IS the
+    fastest medium/high model. That is both references' behaviour: lm-router
+    resolves to the ranked best after discovery, DDGS picks the fastest of
+    the medium/high pool. There is no client-side rotation model; an empty
+    string means "no models discovered yet".
     """
     from core.state import state
 
     chosen = str(getattr(state, "ai_model", "") or "").strip()
+    if chosen.lower() == "auto":
+        chosen = ""
     pool = candidate_models()
-    if (
-        chosen
-        and chosen.lower() != AUTO_MODEL_ID
-        and any(m.lower() == chosen.lower() for m in pool)
-    ):
+    if chosen and any(m.lower() == chosen.lower() for m in pool):
         return chosen
     # The saved pick is gone (or was never made). Fall through to the ranked
     # head rather than showing a name the router no longer serves.
     if pool:
         return pool[0]
-    return chosen or AUTO_MODEL_ID
+    return ""
 
 
 def adopt_default_model() -> str:
@@ -172,15 +158,10 @@ def _normalise(rows) -> list[dict]:
 
 
 def pickable_models() -> list[dict]:
-    """Rows the picker may show: active, chat-capable, high/medium tier.
-
-    ``auto`` is always kept when present — it is the gateway's own rotation and
-    is listed first regardless of its (absent) tier.
-    """
+    """Rows the picker may show: active, chat-capable, high/medium tier."""
     kept = []
     for entry in _catalog:
-        if entry["id"].lower() == AUTO_MODEL_ID:
-            kept.append(entry)
+        if str(entry.get("id") or "").lower() == "auto":
             continue
         if not is_active(entry) or not _is_chat_row(entry):
             continue
@@ -191,17 +172,16 @@ def pickable_models() -> list[dict]:
 
 
 def candidate_models(exclude: str | None = None) -> list[str]:
-    """Ordered model ids a turn may try, excluding ``auto`` itself.
+    """Ordered model ids a turn may try.
 
     Tier first, then gateway latency, then id — so "high by fastest" leads and
-    medium follows. ``auto`` is deliberately absent: it can only ever be the
-    appended last resort, never part of the ranked pool.
+    medium follows.
     """
     skip = (exclude or "").strip().lower()
     ranked = []
     for entry in _catalog:
         model_id = entry["id"]
-        if model_id.lower() == AUTO_MODEL_ID:
+        if str(model_id).lower() == "auto":
             continue
         if skip and model_id.lower() == skip:
             continue
@@ -220,29 +200,25 @@ def turn_candidates(chosen: str) -> list[str]:
     """The exact order a turn walks.
 
     An explicit pick goes first, verbatim — it bypasses status, tier and
-    circuit checks, because the user asked for that model. ``auto`` means
-    "the ranked best right now": the tier-then-latency pool leads and the
-    router's own ``auto`` rides last as the final resort, because its
-    in-request failover is invisible to us (a dead upstream comes back as
-    HTTP 200 with an empty stream and an embedded error body).
+    circuit checks, because the user asked for that model. The ranked pool
+    follows so one bad model never ends the turn. There is no rotation
+    entry: the pool IS the fallback, and its head is the fastest
+    medium/high model the gateway reported.
     """
     pool = candidate_models()
     wanted = str(chosen or "").strip()
-    if wanted.lower() == AUTO_MODEL_ID:
-        return [*pool, AUTO_MODEL_ID]
-    if not wanted:
-        return [*pool, AUTO_MODEL_ID]
-    head = [wanted] if wanted.lower() != AUTO_MODEL_ID else []
+    if not wanted or wanted.lower() == "auto":
+        return pool
+    head = [wanted]
     rest = [m for m in pool if m.lower() != wanted.lower()]
-    return [*head, *rest, AUTO_MODEL_ID]
+    return [*head, *rest]
 
 
 def _sorted(entries: list[dict]) -> list[dict]:
-    """auto first, then tier-then-latency-then-id (the picker's order)."""
+    """Tier first, then latency, then id (the picker's order)."""
+
     def key(entry):
-        is_auto = entry["id"].lower() == AUTO_MODEL_ID
         return (
-            0 if is_auto else 1,
             0 if tier_of(entry) == "high" else 1,
             _latency_of(entry),
             entry["id"].lower(),
@@ -255,8 +231,8 @@ def _sorted(entries: list[dict]) -> list[dict]:
 
 
 def mark_model_failed(model_id: str) -> None:
-    """Skip this model for MODEL_CIRCUIT_TTL. Never applies to ``auto``."""
-    if model_id and model_id.strip().lower() != AUTO_MODEL_ID:
+    """Skip this model for MODEL_CIRCUIT_TTL."""
+    if model_id:
         _model_failed_until[model_id] = time.monotonic() + MODEL_CIRCUIT_TTL
 
 
@@ -282,15 +258,6 @@ def catalog_age() -> float:
 
 def catalog_stale() -> bool:
     return catalog_age() >= CATALOG_REFRESH_INTERVAL
-
-
-def has_auto() -> bool:
-    """Whether the gateway actually publishes ``auto``.
-
-    Callers must not assume it exists — lm-router resolves a missing auto to
-    the ranked head instead.
-    """
-    return any(e["id"].lower() == AUTO_MODEL_ID for e in _catalog)
 
 
 def apply_catalog(rows) -> None:
@@ -395,9 +362,6 @@ def model_hint(entry: dict) -> str:
     """
     if not isinstance(entry, dict):
         return ""
-    model_id = str(entry.get("id") or "")
-    if model_id.lower() == AUTO_MODEL_ID:
-        return "Rotates across available models"
 
     parts: list[str] = []
     latency = entry.get("latency_ms")

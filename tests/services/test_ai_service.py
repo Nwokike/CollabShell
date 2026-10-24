@@ -136,7 +136,7 @@ def test_run_turn_streams_and_returns_the_model_that_answered():
 
     async def go():
         return await ai_service.run_turn(
-            model="auto",
+            model="m",
             tools=[],
             messages=[{"role": "user", "content": "what does c7 do?"}],
             system="SYS",
@@ -160,7 +160,7 @@ def test_the_settings_override_reaches_the_turn():
 
     async def go():
         return await ai_service.run_turn(
-            model="auto",
+            model="m",
             tools=[],
             messages=[{"role": "user", "content": "hi"}],
             system="SYS",
@@ -181,7 +181,7 @@ def test_a_stop_before_the_first_token_is_not_billed():
 
     async def go():
         return await ai_service.run_turn(
-            model="auto",
+            model="m",
             tools=[],
             messages=[{"role": "user", "content": "hi"}],
             system="SYS",

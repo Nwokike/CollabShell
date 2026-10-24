@@ -220,26 +220,23 @@ def test_starting_says_so_and_spins():
 
 
 def test_ready_with_an_empty_catalog_is_not_claimed_healthy():
-    """A router that published nothing is not evidence the assistant works.
+    """A router that published nothing is still discovering models.
 
-    `ready` only means `/health` answered 200. Painting the brand colour there
-    promises a working assistant on a router that has offered nothing, and the
-    user finds out by sending a message that fails.
+    Like LM Router (chat_controls.py:108), `discovering = gateway_running and not models`.
+    When the gateway is up but no models have been published yet, the pill displays
+    "Starting gateway…" with a spinner, and does not claim any model or claim to be active.
     """
     from services import model_catalog
 
     model_catalog._catalog = []
     _fetched()
-    _state("ready", 8083, "auto")
+    _state("ready", 8083, "")
 
     pill = model_pill.pill_state()
     assert pill.active is False, pill
-    assert pill.spinning is False, pill
-    assert pill.action == "Refresh", pill
-    assert "No models" in pill.message, pill
-    # With no pool there is nothing real to name, so the gateway's own rotation
-    # is all that is left — and it is named in the menu, not dressed up.
-    assert pill.label.lower() == "auto", pill
+    assert pill.spinning is True, pill
+    assert pill.discovering is True, pill
+    assert pill.label == "Starting gateway…", pill
 
 
 def test_a_dead_router_never_offers_its_stale_rows(tmp_path, monkeypatch):
