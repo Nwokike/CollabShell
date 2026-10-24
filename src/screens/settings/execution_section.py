@@ -31,34 +31,21 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
             constants.STORAGE_LOG_FORMAT, state.default_log_format
         )
 
+    # Derived from observable state at build time: `state.default_env` is
+    # replaced (never mutated) when the dialog saves, and that write repaints
+    # this section through the observable notify. The previous version also
+    # assigned `env_summary.value` and called `page.update()` from inside the
+    # render body — a frozen-control write that silently failed, and a page
+    # push from a body.
+    env_count = len(getattr(state, "default_env", {}) or {})
     env_summary = ft.Text(
-        "",
+        f"{env_count} variable{'s' if env_count != 1 else ''} set"
+        if env_count
+        else "No default variables",
         size=tokens.FONT_XS,
         color=ft.Colors.ON_SURFACE_VARIANT,
         italic=True,
     )
-
-    def _refresh_env_summary(current: dict | None = None):
-        env = (
-            current
-            if current is not None
-            else (getattr(state, "default_env", {}) or {})
-        )
-        n = len(env)
-        try:
-            env_summary.value = (
-                f"{n} variable{'s' if n != 1 else ''} set"
-                if n
-                else "No default variables"
-            )
-        except RuntimeError:
-            # Control not mounted yet during first build (Flet 1.0 freezes
-            # unmounted controls) — value will be set on the next refresh.
-            pass
-        try:
-            page.update()
-        except Exception:
-            pass
 
     def _open_env_dialog(e=None):
         # Persisted mode: the working dict IS state.default_env; on_save
@@ -70,7 +57,8 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
             await services.storage.set(
                 constants.STORAGE_DEFAULT_ENV, json.dumps(state.default_env)
             )
-            _refresh_env_summary(state.default_env)
+            # No repaint call needed: the observable write above rebuilds this
+            # section, and the summary is derived from the state at build time.
 
         def _on_save(saved: dict):
             page.run_task(_persist, saved)
@@ -84,11 +72,6 @@ def build_execution_section(page: ft.Page, state, services) -> ft.Column:
             subtitle="Injected into every execution. Values are never logged or saved in plain text outside this store.",
             managed_note="these defaults",
         )
-        # Sync the working dict back on close is handled by on_save; refresh
-        # the summary optimistically from current state.
-        _refresh_env_summary()
-
-    _refresh_env_summary()
 
     return ft.Column(
         controls=[
