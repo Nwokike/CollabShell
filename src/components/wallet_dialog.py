@@ -12,6 +12,7 @@ import logging
 import flet as ft
 
 from core import tokens
+from core.channel import CHANNEL
 from core.styles import tip_text
 
 logger = logging.getLogger("WalletDialog")
@@ -53,15 +54,22 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
         page.run_task(_refresh_async)
 
     def _open_premium(ev=None):
+        """Deep-link to the Settings tab, where the PREMIUM card lives.
+
+        The old version read `state.controller`, which does not exist on
+        `AppState` — `getattr` returned None, the guard skipped the
+        navigation, and the button did nothing at all. The navigation is a
+        plain state write: the shell subscribes to the observable, so setting
+        the tab (and the route, so Back behaves) is the whole action.
+        """
+        from core.state import state as app_state
+
         page.pop_dialog()
-        # Deep-link the user to the settings screen's premium row rather than
-        # nesting a second dialog.
-        controller = getattr(state, "controller", None)
-        if controller is not None and hasattr(controller, "navigate_tab"):
-            try:
-                controller.navigate_tab(4)
-            except Exception:
-                logger.warning("Could not navigate to settings")
+        app_state.current_tab = 4
+        try:
+            page.route = "/settings"
+        except Exception:
+            logger.debug("route write skipped", exc_info=True)
         page.update()
 
     async def _watch_ad(ev=None):
@@ -131,6 +139,13 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
                             on_click=lambda ev: _open_premium(),
                         )
                     ]
+                    if CHANNEL != "play"
+                    # The Play build has no premium of any kind — no ad exists
+                    # there either (Play Billing is a separate channel this
+                    # build does not use), so the dialog's only action is
+                    # Close. Never a purchase surface in a Play-distributed
+                    # build: ktv-player's rule, DDGS's rule.
+                    else []
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.END,

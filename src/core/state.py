@@ -51,6 +51,14 @@ class AppState:
     # (loading/error/reason), and this revision is what tells a subscribed
     # screen to rebuild from it.
     usage_revision: int = 0
+    # The premium card's async-loaded data, in observable state for the same
+    # reason as `credits_copy`: the card's body is built from these, so a
+    # write repaints it without anyone mutating frozen controls.
+    # license_prices maps product id -> price label; empty means "not loaded".
+    # Never mutated in place — the loader REPLACES it, like `default_env` below.
+    license_prices: dict = {}  # noqa: RUF012
+    # The recovery ID from the licence token (also in the receipt email).
+    license_recovery_id: str = ""
     # Bumped when the Settings router row has new status to show, so the
     # section rebuilds the row instead of writing into its frozen controls.
     router_status_revision: int = 0

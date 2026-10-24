@@ -77,12 +77,24 @@ def SettingsScreen() -> ft.Control:
     # thirteen builders to accept it, so the other nine raised
     # `TypeError: takes 3 positional arguments but 4 were given` and the screen
     # filled with error cards. A test now pins the arity.
+    # The premium card is NOT BUILT on the Play channel — not even an empty
+    # container. An external-checkout surface inside a Play-distributed build
+    # is a policy violation, and "Assistant premium / Unavailable" was the
+    # leak the owner found: both references state the rule as "not even a
+    # disabled card — nothing to declare, nothing to reach, ads stay on"
+    # (ktv-player `settings_screen.py:1229-1233`, DDGS `settings_screen:164`).
+    from core.channel import CHANNEL
+
     sections: tuple[tuple[str, object], ...] = (
         ("APPEARANCE", build_preferences_section),
         ("AUTHENTICATION", build_account_section),
         ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
         ("ASSISTANT", build_ai_section),
-        ("PREMIUM", build_premium_section),
+        *(
+            []
+            if CHANNEL == "play"
+            else [("PREMIUM", build_premium_section)]
+        ),
         ("HARDWARE DEFAULTS", build_hardware_section),
         ("EXECUTION", build_execution_section),
         ("SESSION BEHAVIOR", build_behavior_section),
