@@ -81,7 +81,6 @@ def real_services(page, state, storage=None):
     """The real service objects, wired as `main.py` wires them."""
     from services.colab import ColabService
     from services.credit_service import CreditService
-    from services.license_service import KiriLicenseService
     from services.premium_service import PremiumService
     from services.storage_service import StorageService
     from state.service_ctx import Services
@@ -153,6 +152,7 @@ def render_screen(component_fn, state, services, page):
     ``@ft.component`` pops ``key``.
     """
     from flet.components.component import Renderer
+
     from state import AppStateCtx, ServiceCtx
 
     @ft.component

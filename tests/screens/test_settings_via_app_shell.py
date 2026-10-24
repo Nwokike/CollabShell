@@ -115,8 +115,9 @@ def test_the_settings_screen_is_a_component():
     Without it `SettingsScreen` is a plain function and `app_shell.py:565`
     raises `TypeError: got an unexpected keyword argument 'key'`.
     """
-    import flet as ft
     from unittest import mock
+
+    import flet as ft
 
     from screens.settings import SettingsScreen
 
@@ -130,8 +131,8 @@ def test_the_settings_screen_is_a_component():
     # know `key=` is accepted is to pass it.
     from flet.components.component import Renderer
 
-    from tests.screens.settings_harness import app_state
     from state import AppStateCtx, ServiceCtx
+    from tests.screens.settings_harness import app_state
 
     page = FakePage()
     renderer = Renderer()
@@ -146,9 +147,7 @@ def test_the_settings_screen_is_a_component():
 
 def test_every_screen_app_shell_builds_is_a_component():
     """The same contract for every screen the shell switches between."""
-    import inspect
 
-    import flet as ft
 
     from screens.files import FilesScreen
     from screens.history import HistoryScreen
