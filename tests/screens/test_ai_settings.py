@@ -123,10 +123,19 @@ def test_ai_section_shows_free_cap_and_balance():
 
 
 def test_ai_section_shows_premium_cap_when_premium():
+    """The cap lives on the credits line now, not on a second premium row.
+
+    Premium appears once — in the PREMIUM card. The assistant card reports the
+    *consequence* (a 500-credit day) through the credits line, which loads
+    asynchronously and publishes to `state.credits_copy`; the rebuild that
+    follows shows it.
+    """
     from screens.settings.ai_section import build_ai_section
 
     page, state, services, _ = _stubs(is_premium=True)
-    column = build_ai_section(page, state, services)
+    build_ai_section(page, state, services)   # schedules the credits load
+    page.wait_idle() if hasattr(page, "wait_idle") else None
+    column = build_ai_section(page, state, services)   # rebuild after the load
     texts = _flatten_texts(column)
     assert any("500" in t for t in texts), texts
 

@@ -74,3 +74,44 @@ def test_the_override_still_works_for_anything_already_stored():
     text = (_SRC / "main.py").read_text(encoding="utf-8")
     assert "STORAGE_AI_ROUTER_URL" in text, "hydration of the override is gone"
     assert "ai_router_url" in text
+
+
+# ── premium lives in one card, not a row inside the assistant card ───────────
+# DDGS's Assistant settings card has exactly: assistant mode, thinking depth,
+# assistant model, credits, what credits are for, scheduled crawls. KTV Player's
+# premium is a standalone Settings card. Neither has a premium row inside the
+# AI section — and ours was not channel-gated, so the Play build rendered
+# "Assistant premium / Unavailable", declaring a purchase surface in the build
+# that must show nothing premium-shaped.
+
+
+def test_the_assistant_section_has_no_premium_row():
+    text = (_SRC / "screens/settings/ai_section.py").read_text(encoding="utf-8")
+    for needle in (
+        "Assistant premium",
+        "premium_row",
+        "_premium_subtitle",
+        "_show_premium",
+        "premium_available",
+        "Upgrade",
+    ):
+        assert needle not in text, f"the assistant section still has {needle!r}"
+
+
+def test_premium_still_lives_in_the_one_card():
+    """Removing the row did not remove the feature."""
+    text = (_SRC / "screens/settings/premium_section.py").read_text(encoding="utf-8")
+    assert "build_premium_section" in text
+    assert "CHANNEL == \"play\"" in text, "the card's channel gate is gone"
+    # And the screen still mounts it.
+    screen = (_SRC / "screens/settings/__init__.py").read_text(encoding="utf-8")
+    assert "build_premium_section" in screen
+
+
+def test_the_assistant_section_reads_no_premium_service():
+    """The credits line may still read `state.is_premium` for the cap — that is
+    a number, not a second premium surface."""
+    text = (_SRC / "screens/settings/ai_section.py").read_text(encoding="utf-8")
+    assert "services, \"premium\"" not in text
+    assert "getattr(services" in text or "getattr(state" in text
+    assert "premium.available" not in text

@@ -200,7 +200,8 @@ def test_settings_ai_section_reports_the_premium_cap():
         ai_model="auto", ai_router_url="x",
         is_premium=True,
     )
-    column = ai_section.build_ai_section(page, state_, services)
+    ai_section.build_ai_section(page, state_, services)   # schedules the load
+    column = ai_section.build_ai_section(page, state_, services)  # rebuild
     texts = _flatten(column)
     assert any("500" in t for t in texts), texts
 

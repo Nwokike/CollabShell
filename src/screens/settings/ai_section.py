@@ -1,4 +1,4 @@
-"""Assistant settings section — mode, model, router, credits, premium.
+"""Assistant settings section — thinking depth, router, model, credits.
 
 Built with the same section_header/glass_card idiom as every other settings
 section. Every row reads the live services through context so the numbers
@@ -92,8 +92,6 @@ def _router_status_line(state) -> str:
 def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     """The ASSISTANT settings block."""
     credits = getattr(services, "credits", None)
-    premium = getattr(services, "premium", None)
-    premium_available = premium is not None and getattr(premium, "available", False)
 
     async def _credits_copy_async() -> str:
         if credits is None:
@@ -298,20 +296,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         ),
     )
 
-    premium_row = _row(
-        "Assistant premium",
-        _premium_subtitle(state),
-        trailing=ft.FilledButton(
-            "Upgrade",
-            on_click=lambda e: _show_premium(page, state, services),
-        )
-        if premium_available
-        else ft.Text(
-            "Unavailable",
-            size=tokens.FONT_SM,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-        ),
-    )
 
     return ft.Column(
         controls=[
@@ -349,8 +333,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                             content=credits_text,
                             padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),
                         ),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        premium_row,
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
@@ -363,12 +345,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
     )
 
 
-def _premium_subtitle(state) -> str:
-    if bool(getattr(state, "is_premium", False)):
-        return "Premium is active — 500 credits a day."
-    return "Raise the daily allowance from 50 to 500 credits."
-
-
 def _model_subtitle(state) -> str:
     """Subtitle for the model row, generated from state so it cannot drift."""
     model = getattr(state, "ai_model", "auto") or "auto"
@@ -377,8 +353,4 @@ def _model_subtitle(state) -> str:
     return model
 
 
-def _show_premium(page: ft.Page, state, services):
-    """Open the wallet dialog (balance, top-up, and the premium upsell)."""
-    from components.wallet_dialog import show_wallet_dialog
 
-    show_wallet_dialog(page, state, services)
