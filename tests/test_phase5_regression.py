@@ -39,22 +39,33 @@ def test_history_detail_renders_shape_env_reason():
     assert "session_terminated" in src
 
 
-def test_changelog_212_covers_phases_and_fallback_intact():
+def test_changelog_covers_phases_and_fallback_intact():
+    """The 2.2.0 entry owns the 2.2.0 features; the fallback is the newest.
+
+    This test once pinned the WRONG fallback as a contract — it asserted
+    `notes_for("9.9.9") == CHANGELOG["2.1.0"]` and called that "the latest
+    entry", because `reversed(dict.values())` yields the last-inserted value
+    and the dict happened to be ordered oldest-last. The owner then clicked
+    the version in Settings and saw 2.1.0's notes under a v2.2.0 header. The
+    real contract lives in tests/screens/test_changelog.py; this keeps the
+    content assertions.
+    """
     from core.changelog import CHANGELOG, notes_for
 
-    entry = notes_for("2.1.2")
+    entry = notes_for("2.2.0")
     for needle in (
         "High-RAM",
         "environment variables",
-        "refresh",
-        "allocation",
-        "SSH",
+        "router",
+        "notifications",
+        "Assistant",
     ):
         assert needle.lower() in entry.lower(), f"missing: {needle}"
-    # Fallback contract: unknown version falls back to the latest entry
-    # (currently 2.1.0, the last-inserted dict value).
-    assert notes_for("9.9.9") == CHANGELOG["2.1.0"]
-    assert entry == CHANGELOG["2.1.2"]
+    # Fallback contract: unknown version falls back to the NEWEST entry, by
+    # version order — see notes_for's docstring for why order matters.
+    newest = max(CHANGELOG, key=lambda v: tuple(int(x) for x in v.split(".")))
+    assert notes_for("9.9.9") == CHANGELOG[newest]
+    assert entry == CHANGELOG["2.2.0"]
 
 
 def test_intercept_oauth_defaults_agree_on_true():
