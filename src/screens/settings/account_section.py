@@ -19,6 +19,7 @@ per-render dict would flash "Loading usage…" and refetch on each rebuild.
 from __future__ import annotations
 
 import logging
+import time
 
 import flet as ft
 
@@ -80,18 +81,53 @@ _USAGE_VIEW: dict = {
 # sign-out/sign-in refetches while a theme toggle does not.
 _USAGE_AUTOLOAD_KEY: object = object()
 
+# How old the numbers may be before re-entering Settings re-checks them.
+# The card's own cache lasts 24h, so without this a user who leaves Settings
+# open all morning is still looking at the numbers from when they arrived.
+USAGE_STALE_SEC = 300.0
+
 
 def _format_updated(store: dict) -> str:
+    """How old the numbers are, in words: "As of 3 minutes ago".
+
+    A clock time ("Updated 14:32") answers "when was this fetched" only if the
+    reader does the subtraction. The age answers the question the reader
+    actually has: "can I trust these?"
+    """
     ts = store.get("updated_at") or ""
     if not ts:
         return ""
     try:
-        import datetime
-
-        dt = datetime.datetime.fromtimestamp(float(ts), tz=datetime.UTC).astimezone()
-        return f"Updated {dt.strftime('%H:%M')}"
+        age = time.time() - float(ts)
     except (TypeError, ValueError, OSError, OverflowError):
         return ""
+    if age < 0:
+        age = 0.0
+    if age < 60:
+        return "As of just now"
+    minutes = int(age // 60)
+    if minutes < 60:
+        return f"As of {minutes} minute{'s' if minutes != 1 else ''} ago"
+    hours = int(minutes // 60)
+    if hours < 24:
+        return f"As of {hours} hour{'s' if hours != 1 else ''} ago"
+    days = int(hours // 24)
+    return f"As of {days} day{'s' if days != 1 else ''} ago"
+
+
+def _usage_is_stale(store: dict) -> bool:
+    """Whether the shown numbers are old enough to be worth re-checking.
+
+    Only meaningful when a fetch actually succeeded: without a timestamp there
+    is no age to judge, and the last attempt already said what it could.
+    """
+    ts = store.get("updated_at") or ""
+    if not ts:
+        return False
+    try:
+        return (time.time() - float(ts)) > USAGE_STALE_SEC
+    except (TypeError, ValueError, OSError, OverflowError):
+        return False
 
 
 def _usage_row(label: str, value: str) -> ft.Row:
@@ -146,8 +182,8 @@ def _usage_rows(store: dict) -> list:
             "signed-out": "Sign in to load your compute-unit balance.",
             "offline": "You're offline — reconnect to load usage.",
             "fetch-failed": "Couldn't reach Colab — check your connection and retry.",
-            "no-cache": "Usage unavailable. Tap Refresh to retry.",
-        }.get(reason, "Usage unavailable. Tap Refresh to retry.")
+            "no-cache": "Usage unavailable. Tap Check now to retry.",
+        }.get(reason, "Usage unavailable. Tap Check now to retry.")
         return [
             ft.Text(
                 copy,
@@ -163,7 +199,7 @@ def _usage_rows(store: dict) -> list:
     if store["error"]:
         rows.append(tip_text("Couldn't refresh usage — showing last known values."))
     elif usage.get("cached"):
-        rows.append(tip_text("Cached values — tap refresh for the latest."))
+        rows.append(tip_text("Cached values — tap Check now for the latest."))
     stamped = _format_updated(store)
     if stamped:
         rows.append(tip_text(stamped))
@@ -171,19 +207,16 @@ def _usage_rows(store: dict) -> list:
 
 
 def _usage_header() -> ft.Row:
-    refresh_btn = ft.IconButton(
+    refresh_btn = ft.TextButton(
+        "Check now",
         icon=ft.Icons.REFRESH_ROUNDED,
-        icon_size=tokens.ICON_SM,
-        tooltip="Refresh usage",
-        # Derived from the store at build time. The old code also assigned
-        # `.disabled` from the loader, which froze-control-raised for the same
-        # reason the body writes did; the build-time binding is the whole
-        # control.
+        style=ft.ButtonStyle(
+            text_style=ft.TextStyle(size=tokens.FONT_SM),
+            icon_size=tokens.ICON_SM,
+        ),
         disabled=_USAGE["loading"],
         on_click=lambda e: page_run_task(_on_usage_refresh),
     )
-    # Published so a loader can tell a fetch is in flight without holding a
-    # reference it would then try to mutate. Read-only from here on.
     _USAGE_VIEW["refresh"] = refresh_btn
     return ft.Row(
         controls=[
@@ -205,13 +238,13 @@ def _usage_header() -> ft.Row:
     )
 
 
-def page_run_task(coro_fn) -> None:
+def page_run_task(coro_fn, *args) -> None:
     """Schedule a coroutine function on the live page (no-op without one)."""
     page = _USAGE_VIEW.get("page")
     if page is None:
         return
     try:
-        page.run_task(coro_fn)
+        page.run_task(coro_fn, *args)
     except Exception as ex:  # detached page during teardown
         logger.warning("Usage task scheduling failed (%s): %s", type(ex).__name__, ex)
 
@@ -452,9 +485,14 @@ def build_account_section(page: ft.Page, state, services) -> ft.Column:
     # Auto-load once per signed-in identity. A rebuild with the same identity
     # keeps the stored values (no refetch, no loading flash).
     identity = _usage_autoload_identity(state)
-    if _USAGE_AUTOLOAD_KEY != identity:
+    new_identity = _USAGE_AUTOLOAD_KEY != identity
+    stale = (not new_identity) and _usage_is_stale(_USAGE)
+    if new_identity or stale:
         _USAGE_AUTOLOAD_KEY = identity
-        page_run_task(_load_usage)
+        if stale:
+            page_run_task(_load_usage, True)
+        else:
+            page_run_task(_load_usage)
 
     return ft.Column(
         controls=[

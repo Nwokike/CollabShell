@@ -187,8 +187,8 @@ def test_values_render_with_timestamp_and_cache_footnote():
     texts = _current_texts()
     assert "4.50 compute units" in texts
     assert "0.50/hr" in texts
-    assert any(t.startswith("Updated ") for t in texts)
-    assert "Cached values — tap refresh for the latest." in texts
+    assert any(t.startswith("As of ") for t in texts)
+    assert "Cached values — tap Check now for the latest." in texts
 
 
 def test_signed_out_renders_reason_copy_not_numbers():
@@ -279,7 +279,7 @@ def test_refresh_disables_button_and_shows_spinner_over_old_values():
     assert calls["n"] == 1
     texts = _current_texts()
     assert "9.00 compute units" in texts
-    assert any(t.startswith("Updated ") for t in texts)
+    assert any(t.startswith("As of ") for t in texts)
 
 
 def test_failed_refresh_marks_error_truthfully():
@@ -301,7 +301,7 @@ def test_failed_refresh_marks_error_truthfully():
     assert _USAGE["error"] is True
     assert "Couldn't refresh usage — showing last known values." in texts
     # Must NOT also print the "Cached values" footnote (would read as fresh).
-    assert "Cached values — tap refresh for the latest." not in texts
+    assert "Cached values — tap Check now for the latest." not in texts
 
 
 def test_state_survives_parent_rebuild_without_reloading():
@@ -350,5 +350,75 @@ def test_no_tap_to_load_idle_text():
     src = pathlib.Path("src/screens/settings/account_section.py").read_text(
         encoding="utf-8"
     )
-    assert "Tap Refresh to load your compute-unit balance." not in src
-    assert "Usage unavailable. Tap Refresh to retry." in src  # failure copy only
+    assert "Tap Check now to load your compute-unit balance." not in src
+    assert "Usage unavailable. Tap Check now to retry." in src  # failure copy only
+
+
+def test_the_age_is_shown_in_words():
+    from screens.settings.account_section import _format_updated
+
+    now = time.time()
+    assert _format_updated({"updated_at": str(now)}) == "As of just now"
+    assert _format_updated({"updated_at": str(now - 90)}) == "As of 1 minute ago"
+    assert _format_updated({"updated_at": str(now - 300)}) == "As of 5 minutes ago"
+    assert _format_updated({"updated_at": str(now - 3600)}) == "As of 1 hour ago"
+    assert _format_updated({"updated_at": str(now - 7200)}) == "As of 2 hours ago"
+    assert _format_updated({"updated_at": str(now - 86400 * 3)}) == "As of 3 days ago"
+    assert _format_updated({"updated_at": ""}) == ""
+    assert _format_updated({}) == ""
+
+
+def test_staleness_depends_on_the_timestamp():
+    from screens.settings.account_section import _usage_is_stale
+
+    now = time.time()
+    assert _usage_is_stale({"updated_at": str(now)}) is False
+    assert _usage_is_stale({"updated_at": str(now - 60)}) is False
+    assert _usage_is_stale({"updated_at": str(now - 3600)}) is True
+    assert _usage_is_stale({"updated_at": ""}) is False
+
+
+def test_re_entering_settings_rechecks_once_the_numbers_are_old():
+    """The affordance the user asked for: come back later, get current numbers."""
+    from core import constants
+
+    page, state, services, storage = _fresh()
+    calls = []
+
+    async def _count(services_, auth_method="oauth2"):
+        calls.append(1)
+        await services_.storage.set(
+            constants.STORAGE_USAGE_UPDATED_AT, str(time.time())
+        )
+        return {
+            "balance": 1.0,
+            "rate": 0.1,
+            "assignments": 0,
+            "cached": False,
+            "reason": "ok",
+        }
+
+    with patch_cache(_count):
+        build_account_section(page, state, services)
+        page.wait_idle()
+        assert len(calls) == 1
+
+        # A rebuild within the window costs nothing.
+        build_account_section(page, state, services)
+        page.wait_idle()
+        assert len(calls) == 1
+
+        # Age the numbers past the window: the next entry re-checks and forces.
+        _USAGE["updated_at"] = str(time.time() - 3600)
+        build_account_section(page, state, services)
+        page.wait_idle()
+        assert len(calls) == 2
+        assert constants.STORAGE_USAGE_UPDATED_AT in storage.deleted
+
+
+def test_the_button_says_what_it_does():
+    """Not a bare refresh glyph: "Check now" is what the user is being asked."""
+    page, state, services, _ = _fresh()
+    build_account_section(page, state, services)
+    button = _USAGE_VIEW["refresh"]
+    assert button.content == "Check now"
