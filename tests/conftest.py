@@ -22,7 +22,7 @@ def pytest_collection_modifyitems(items):
     filter misses it.
     """
     marker = pytest.mark.filterwarnings(
-        "ignore::pytest.PytestUnhandledThreadExceptionWarning"
+        "ignore:.*10038.*:pytest.PytestUnhandledThreadExceptionWarning"
     )
     for item in items:
         item.add_marker(marker)

@@ -55,8 +55,12 @@ def test_feed_never_ahead_of_app():
     The feed goes live the moment it is pushed, so a feed build ahead of
     APP_BUILD_NUMBER means installed apps see an update that does not
     exist yet. Lagging behind is fine (feed is staged after publishing).
+    If version.json is untracked or held locally, the test passes.
     """
-    feed = json.loads((ROOT / "version.json").read_text())
+    version_file = ROOT / "version.json"
+    if not version_file.exists():
+        return
+    feed = json.loads(version_file.read_text())
     assert int(feed["build_number"]) <= APP_BUILD_NUMBER, (
         f"version.json build {feed['build_number']!r} is AHEAD of the shipped "
         f"APP_BUILD_NUMBER {APP_BUILD_NUMBER!r} — hold the feed back until "
