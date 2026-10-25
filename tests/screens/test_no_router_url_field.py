@@ -19,10 +19,10 @@ the auto-start behaviour that `constants.py:53-54` and `main.py:597-599`
 promise. Only blanking the field and pressing Enter again recovered it.
 
 So the row now shows the address as information, the way lm-router's status
-card does — status line, then the base URL in a selectable monospace line,
-next to the Start router button. `state.ai_router_url` and
-`STORAGE_AI_ROUTER_URL` still work as an override for anything already stored,
-but nothing in the UI can set one any more.
+card does — status line, then the base URL in a selectable monospace line.
+There is no Start button: the router starts with the app. `state.ai_router_url`
+and `STORAGE_AI_ROUTER_URL` still work as an override for anything already
+stored, but nothing in the UI can set one any more.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def test_the_router_row_still_names_the_router_and_the_port():
     assert '"Router"' in text, "the Router row title is gone"
     # The status line already carries the port.
     assert "Running on 127.0.0.1" in text, "the status line no longer names the port"
-    assert "Start router" in text, "the Start router action is gone"
+    assert "starts automatically" in text, "the row says the router starts"
 
 
 def test_the_address_is_shown_read_only():

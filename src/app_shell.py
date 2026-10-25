@@ -515,6 +515,32 @@ def AppShell() -> Control:
             on_click=lambda e: controller.open_version_dialog(),
         )
 
+    def _build_header_chips(page) -> ft.Container:
+        """Assistant credits and compute-usage chips in the header.
+
+        Both move out of the Home body: the owner saw them stacked under the
+        signed-in chip, where a wall of chips read as the page itself. DDGS
+        does the same thing — its `AppHeader` takes `extra_actions=[CreditPill()]`
+        (`screens/home_screen.py:612`) instead of putting the pill in the body.
+
+        The credits pill is the existing component. The usage balance is a
+        small read-only chip beside it; both numbers are loaded by the same
+        loaders the Home body already runs.
+        """
+        from components.credit_pill import CreditPill
+        from components.usage_chip import UsageChip
+
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    CreditPill(),
+                    UsageChip(),
+                ],
+                spacing=tokens.SPACE_XS,
+            ),
+            visible=state.app_ready and state.onboarding_done,
+        )
+
     header_bar = ft.Container(
         content=ft.Row(
             controls=[
@@ -533,6 +559,7 @@ def AppShell() -> Control:
                     visible=state.current_tab == 0,
                 ),
                 _build_version_chip(),
+                _build_header_chips(page),
                 build_help_button(page, "global"),
                 theme_btn,
             ],

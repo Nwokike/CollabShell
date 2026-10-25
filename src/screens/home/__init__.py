@@ -125,73 +125,6 @@ def HomeScreen() -> ft.Control:
         margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
     )
 
-    # ── Assistant credit pill ────────────────────────────────────────────────
-    # Only meaningful once the assistant is on; hidden otherwise so the header
-    # stays uncluttered for users who never enable it.
-    from components.credit_pill import CreditPill
-
-    credit_pill_row = ft.Container(
-        content=CreditPill(),
-        margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
-        visible=True,
-    )
-
-    # ── Compute-unit balance chip (reactive: use_state, not mutation) ─────────
-    # Sibling of auth_status_chip. Value-or-nothing: no error chip on Home
-    # (Settings card owns errors). Loader runs in use_effect on auth/online.
-    balance_text, set_balance_text = ft.use_state("")
-    balance_visible, set_balance_visible = ft.use_state(False)
-
-    async def _load_balance():
-        if not state.is_authenticated or not state.is_online:
-            return
-        try:
-            from services.usage_cache import get_usage_cached
-
-            usage = await get_usage_cached(services, state.auth_method)
-        except Exception as ex:
-            logger.warning(
-                "Home balance load failed (%s): %s", type(ex).__name__, ex
-            )
-            return
-        if usage is None:
-            logger.warning("Home balance load returned None (no cache, fetch failed)")
-            return
-        set_balance_text(f"{float(usage.get('balance', 0.0)):.2f} CU")
-        set_balance_visible(True)
-
-    ft.use_effect(lambda: page.run_task(_load_balance), [state.is_authenticated, state.is_online])
-
-    balance_chip = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Icon(
-                    ft.Icons.DATA_USAGE_ROUNDED,
-                    size=tokens.ICON_SM,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                ),
-                ft.Text(
-                    balance_text,
-                    size=tokens.FONT_XS,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                ),
-            ],
-            spacing=tokens.SPACE_SM,
-            alignment=ft.MainAxisAlignment.START,
-        ),
-        padding=ft.Padding(
-            tokens.SPACE_MD,
-            tokens.SPACE_SM,
-            tokens.SPACE_MD,
-            tokens.SPACE_SM,
-        ),
-        border_radius=tokens.RADIUS_PILL,
-        bgcolor=adaptive_glass_bg(),
-        margin=ft.Margin(tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_SM),
-        visible=balance_visible,
-        on_click=lambda e: controller.navigate_tab(4),
-    )
-
     # ── Sessions list content ─────────────────────────────────────────────────
     if is_loading:
         sessions_content: ft.Control = ft.Container(
@@ -323,10 +256,6 @@ def HomeScreen() -> ft.Control:
             build_brand_header(),
             offline_banner,
             auth_status_chip,
-            balance_chip,
-            # Assistant credits — sibling of the balance chip, one tap to the
-            # wallet (ad top-up / premium).
-            credit_pill_row,
             # Quick actions
             ft.Container(
                 content=ft.Column(

@@ -112,10 +112,19 @@ def show_model_picker(page: ft.Page, state, services) -> None:
         _render(entries)
 
     selected = {"id": str(getattr(state, "ai_model", "") or "").strip()}
-    body = ft.Column(controls=[], spacing=tokens.SPACE_XS, tight=True)
+    # Scrollable, and capped: a router with 30+ models used to overflow the
+    # dialog and the bottom of the list was unreachable. DDGS bounds the same
+    # list (`model_picker.py:235` sets `scroll=AUTO` and `_fit` caps height).
+    body = ft.Column(
+        controls=[],
+        spacing=tokens.SPACE_XS,
+        tight=True,
+        scroll=ft.ScrollMode.AUTO,
+        height=320,
+    )
     dialog = ft.AlertDialog(
         title=ft.Text("Assistant model"),
-        content=ft.Container(content=body, width=380),
+        content=ft.Container(content=body, width=380, height=380),
         actions=[
             ft.TextButton("Close", on_click=lambda ev: page.pop_dialog()),
         ],

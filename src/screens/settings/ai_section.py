@@ -18,11 +18,16 @@ from services import ai_credits
 logger = logging.getLogger("AssistantSettings")
 
 
-def _row(title: str, subtitle: str, trailing=None) -> ft.Row:
+def _row(title: str, subtitle: str, trailing=None, icon=None) -> ft.Row:
+    # Every row carries an icon that says what the row IS — a brain for
+    # thinking, a memory chip for the model, a bolt for credits — so the
+    # assistant card scans like every other settings card instead of one
+    # repeated glyph. DDGS's card uses a distinct icon per row too
+    # (sections_ai.py:149, 165, 197, 216).
     return ft.Row(
         controls=[
             ft.Icon(
-                tokens.ASSISTANT_ICON,
+                icon or tokens.ASSISTANT_ICON,
                 size=tokens.ICON_LG,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
@@ -181,10 +186,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         size=tokens.FONT_SM,
         color=ft.Colors.ON_SURFACE_VARIANT,
     )
-    start_router_button = ft.TextButton(
-        "Start router",
-        on_click=lambda ev: page.run_task(_start_router),
-    )
 
     async def _reload_router_status():
         """Re-read the router's own state and repaint the row.
@@ -194,22 +195,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         rebuild, the way the credits line does.
         """
         state.router_status_revision = (getattr(state, "router_status_revision", 0) or 0) + 1
-
-    async def _start_router(ev=None):
-        """Start (or re-attach), then re-read the status.
-
-        `verify=True` because this is a user's tap: a port the app still holds
-        but nothing answers on must be re-checked, or the button looks inert.
-        """
-        from services import router
-
-        state.ai_router_status = "starting"
-        await _reload_router_status()
-        try:
-            await router.ensure_router(verify=True)
-        except Exception as ex:
-            logger.warning("Start router failed: %s", ex)
-        await _reload_router_status()
 
     # The address the app is actually talking to. Shown, not editable: neither
     # DDGS nor lm-router exposes a router URL in Settings (DDGS has no router
@@ -295,6 +280,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             spacing=tokens.SPACE_SM,
             tight=True,
         ),
+        icon=ft.Icons.MEMORY_ROUNDED,
     )
 
 
@@ -311,13 +297,14 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                             "Deeper thinking takes longer and shows more in the "
                             "chat.",
                             trailing=thinking_dropdown,
+                            icon=ft.Icons.PSYCHOLOGY_ROUNDED,
                         ),
-                        ft.Divider(height=tokens.SPACE_SM),
                         ft.Divider(height=tokens.SPACE_SM),
                         _row(
                             "Router",
-                            "The local model router that answers the assistant.",
-                            trailing=start_router_button,
+                            "The local model router that answers the assistant. "
+                            "It starts automatically.",
+                            icon=ft.Icons.ROUTER_ROUNDED,
                         ),
                         ft.Container(
                             content=ft.Column(
@@ -329,7 +316,11 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
                         ft.Divider(height=tokens.SPACE_SM),
                         model_row,
                         ft.Divider(height=tokens.SPACE_SM),
-                        _row("Credits", ai_credits.credits_are_for_copy()),
+                        _row(
+                            "Credits",
+                            ai_credits.credits_are_for_copy(),
+                            icon=ft.Icons.BOLT_ROUNDED,
+                        ),
                         ft.Container(
                             content=credits_text,
                             padding=ft.Padding(0, tokens.SPACE_XS, 0, 0),

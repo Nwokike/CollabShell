@@ -653,7 +653,10 @@ def test_ai_section_lists_the_router_row():
     column = build_ai_section(page, state, services)
     texts = _flatten_texts(column)
     assert "Router" in texts, texts
-    assert "Start router" in texts, texts
+    # No Start button: the router starts with the app (router_watchdog), so a
+    # button that offers to do what already happened only confuses.
+    assert "Start router" not in texts, texts
+    assert any("It starts automatically." in t for t in texts), texts
 
 
 def test_router_status_ready_names_its_port():
