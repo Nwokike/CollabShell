@@ -5,6 +5,30 @@ from __future__ import annotations
 import uuid
 
 
+def _as_dict(cell) -> dict:
+    """Normalise a cell to a plain dict.
+
+    The notebook view passes live ``CellData`` objects (an observable class
+    without ``.get()``), while storage and the script editor pass dicts.
+    ScriptView and NotebookView crashed with
+    ``AttributeError: 'CellData' object has no attribute 'get'`` because
+    ``cells_to_py`` and ``merge_script_cells`` only handled dicts.
+    """
+    if isinstance(cell, dict):
+        return cell
+    to_dict = getattr(cell, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    # Last resort: Duck-type via getattr, so a future cell model cannot
+    # reintroduce the crash.
+    return {
+        "id": getattr(cell, "id", ""),
+        "type": getattr(cell, "type", "code"),
+        "source": getattr(cell, "source", "") or "",
+        "outputs": list(getattr(cell, "outputs", []) or []),
+    }
+
+
 def cells_to_ipynb(cells: list[dict]) -> dict:
     """Convert internal cell list to IPYNB (nbformat v4)."""
     ipynb_cells = []
@@ -90,6 +114,7 @@ def cells_to_py(cells: list[dict]) -> str:
     """
     blocks: list[str] = []
     for cell in cells:
+        cell = _as_dict(cell)
         source = (cell.get("source", "") or "").rstrip("\n")
         if not source.strip():
             continue
@@ -201,7 +226,15 @@ def block_at_offset(source: str, offset: int) -> str:
     return blocks[0]["source"]
 
 
-def merge_script_cells(old_cells: list[dict], new_cells: list[dict]) -> list[dict]:
+def merge_script_cells(old_cells: list, new_cells: list[dict]) -> list[dict]:
+    """Fold re-split script cells back into the existing cell list.
+
+    Both lists may contain ``CellData`` objects (from the notebook view) or
+    plain dicts (from storage/the script editor); every cell is normalised
+    through ``_as_dict`` first, so the `.get()` calls below cannot raise
+    ``AttributeError`` on the observable cell model.
+    """
+    old_cells = [_as_dict(c) for c in (old_cells or [])]
     """Fold re-split script cells back into the existing cell list.
 
     Editing a script re-derives the cell list, and every freshly parsed cell

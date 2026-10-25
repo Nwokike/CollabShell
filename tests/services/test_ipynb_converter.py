@@ -299,3 +299,33 @@ def test_unknown_output_kind_is_preserved_not_dropped():
     weird = {"type": "some_future_kind", "payload": {"x": 1}}
     cells = [_cell("x", outputs=[weird])]
     assert cells_to_ipynb(cells)["cells"][0]["outputs"][0] == weird
+
+
+# ── CellData objects must work, not only dicts ─────────────────────────────
+# The Settings->notebook "Script" tab froze the UI because ScriptView passed
+# CellData objects into cells_to_py / merge_script_cells, which only handled
+# dicts. The AttributeError killed the render and the screen went blank.
+
+
+def test_cells_to_py_accepts_cell_data_objects():
+    from components.notebook_cell import CellData
+    from services.ipynb_converter import cells_to_py
+
+    cells = [CellData(source="x = 1"), CellData(cell_type="markdown", source="# Hi")]
+    result = cells_to_py(cells)
+    assert "# %%" in result
+    assert "x = 1" in result
+    assert "# %% [markdown]" in result
+    assert "# Hi" in result
+
+
+def test_merge_script_cells_accepts_cell_data_objects():
+    from components.notebook_cell import CellData
+    from services.ipynb_converter import merge_script_cells
+
+    old = [CellData(source="x = 1", outputs=[{"type": "stream", "text": "1"}])]
+    new = [{"type": "code", "source": "x = 1", "outputs": []}]
+    merged = merge_script_cells(old, new)
+    assert len(merged) == 1
+    # Output must survive: a re-parse must not wipe a cell the user did not touch
+    assert merged[0]["outputs"], merged[0]["outputs"]
