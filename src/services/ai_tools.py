@@ -177,6 +177,20 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             bridges = notebook_view._bridges(_live_session())
             if not bridges:
                 return "(no notebook is open for this session)"
+            # The active tab may be a Python script, which is a document of its
+            # own and has no cells. Say so and name its path rather than
+            # reporting an empty notebook.
+            active_tab = bridges.get("active_tab")
+            active_tab = active_tab() if callable(active_tab) else None
+            if isinstance(active_tab, dict) and (
+                active_tab.get("view") == "script"
+            ):
+                script_path = active_tab.get("path") or "the script's path"
+                return (
+                    f"The active tab is a Python script ({script_path}), not a "
+                    "notebook — it has no cells. Read it with read_file, or ask "
+                    "the user to open a notebook tab."
+                )
             cells = bridges["read_cells"]()
             if not cells:
                 return "(notebook is empty)"
@@ -370,7 +384,10 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
 
             inserted = write_cells_to_active_tab(_live_session(), cells)
             if not inserted:
-                return "(no notebook tab is open to write into)"
+                return (
+                    "(no notebook tab is open to write into — the active tab "
+                    "may be a Python script, which has no cells)"
+                )
             # The ids matter twice: the user can be pointed at the exact cell,
             # and the chat turns this step row into a tap-through to it.
             ids = ", ".join(c.id for c in inserted if hasattr(c, "id"))

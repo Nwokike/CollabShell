@@ -147,9 +147,16 @@ def list_tab_summaries(session_name: str) -> str:
     tabs = bridges.get("list_tabs")() or []
     if not tabs:
         return "(no tabs)"
+
+    def _describe(t: dict) -> str:
+        if t.get("view") == "script":
+            # Name the document and its path: "cells" would describe a tab
+            # that has none.
+            return f"- {t['name']} (Python script at {t.get('path') or '?'})"
+        return f"- {t['name']} (notebook, {t.get('cells', 0)} cells)"
+
     return "\n".join(
-        f"- {t['name']} ({t['view']} view, {t['cells']} cells)"
-        + (" [active]" if t["id"] == bridges.get("active_tab_id")() else "")
+        _describe(t) + (" [active]" if t["id"] == bridges.get("active_tab_id")() else "")
         for t in tabs
     )
 # Per-cell cap on rendered base64 image bytes (~4 MiB). See enforce_image_budget.
@@ -246,15 +253,43 @@ def NotebookView(
             "cells": list(cells) if cells else [CellData()],
         }
 
+    def _new_script_tab(name=None, path=None, tab_id=None):
+        """A Python file, edited as plain text — not a view of a cell list.
+
+        A script tab used to be a notebook tab rendered as `# %%` text, which
+        made every edit a re-split-and-merge against the cell model: empty
+        cells were dropped on the way through, and a cell edited back to its
+        earlier text got that cell's stale outputs back. One document, one
+        renderer: the text is the tab, and `# %%` appears only if the file
+        itself uses it.
+        """
+        tab_seq_ref.current[0] += 1
+        tid = tab_id or f"py{tab_seq_ref.current[0]}"
+        return {
+            "id": tid,
+            "name": name or f"Script {tab_seq_ref.current[0]}",
+            "view": "script",
+            "path": path or f"/content/script_{tab_seq_ref.current[0]}.py",
+            "script": "",
+            # Kept so every code path that reads `cells` finds a list rather
+            # than raising a KeyError on a tab that has none.
+            "cells": [],
+        }
+
     def _save_index():
-        """Persist tab order/names/view prefs (sidecar to the per-tab files)."""
+        """Persist tab order/names/view (sidecar to the per-tab documents)."""
         tabs = tabs_ref.current or []
         try:
             page.run_task(
                 services.storage.save_tab_index,
                 session_name,
                 [
-                    {"id": t["id"], "name": t.get("name"), "view": t.get("view")}
+                    {
+                        "id": t["id"],
+                        "name": t.get("name"),
+                        "view": t.get("view") or "notebook",
+                        "path": t.get("path") or "",
+                    }
                     for t in tabs
                 ],
             )
@@ -272,10 +307,29 @@ def NotebookView(
         if saved_ids:
             restored = []
             for tid in saved_ids:
-                loaded = await services.storage.load_notebook(session_name, tid)
-                cells = [CellData.from_dict(c) for c in loaded] or [CellData()]
                 tab_seq_ref.current[0] += 1
                 meta = meta_by_id.get(tid, {})
+                # A tab's kind comes from the index when it has one. Without an
+                # index the document itself says it: a script file exists only
+                # for script tabs, so its presence is the kind — one read.
+                saved_script = await services.storage.load_script(session_name, tid)
+                is_script = meta.get("view") == "script" or (
+                    meta.get("view") is None and saved_script is not None
+                )
+                if is_script:
+                    restored.append(
+                        {
+                            "id": tid,
+                            "name": meta.get("name") or tid,
+                            "view": "script",
+                            "path": meta.get("path") or f"/content/{tid}.py",
+                            "script": saved_script or "",
+                            "cells": [],
+                        }
+                    )
+                    continue
+                cells = await services.storage.load_notebook(session_name, tid)
+                cell_list = [CellData.from_dict(c) for c in cells] or [CellData()]
                 restored.append(
                     {
                         "id": tid,
@@ -283,8 +337,12 @@ def NotebookView(
                         # an index is written below so the next launch has a
                         # real name.
                         "name": meta.get("name") or tid,
-                        "view": meta.get("view") or "notebook",
-                        "cells": cells,
+                        # An old "script view" tab was a notebook rendered as
+                        # `# %%` text, not a document of its own. It restores
+                        # as the notebook it always was, and its cells survive
+                        # — the projection is gone, the work is not.
+                        "view": "notebook",
+                        "cells": cell_list,
                     }
                 )
             _set_tabs(restored)
@@ -356,13 +414,25 @@ def NotebookView(
         if target is None:
             return
         try:
-            if getattr(page, "_session", getattr(page, "session", None)):
+            if not getattr(page, "_session", getattr(page, "session", None)):
+                return
+            if (target.get("view") or "notebook") == "script":
+                # The script's text is the document: it is stored verbatim,
+                # so what comes back on the next launch is exactly what was
+                # in the editor.
                 page.run_task(
-                    services.storage.save_notebook,
+                    services.storage.save_script,
                     session_name,
-                    [c.to_dict() for c in target["cells"] or []],
                     target["id"],
+                    target.get("script") or "",
                 )
+                return
+            page.run_task(
+                services.storage.save_notebook,
+                session_name,
+                [c.to_dict() for c in target["cells"] or []],
+                target["id"],
+            )
         except RuntimeError:
             pass
 
@@ -811,14 +881,133 @@ def NotebookView(
         set_active_tab_id(tab["id"])
         set_active_cell_id((tab["cells"][0]).id)
 
+    def _create_script_tab(name=None, path=None):
+        """Open a new Python script tab and make it the active tab."""
+        tab = _new_script_tab(name=name, path=path)
+        tabs = list(tabs_ref.current or [])
+        tabs.append(tab)
+        _set_tabs(tabs)
+        _save(tab)
+        _save_index()
+        set_active_tab_id(tab["id"])
+        set_active_cell_id("")
+
+    def _show_new_script_dialog(e=None):
+        """Ask for the script's name and path before creating the tab.
+
+        Both fields are real: the name labels the tab, and the path is where
+        the file lives on the session VM and where "Save to session" writes.
+        """
+        name_ref = ft.Ref[ft.TextField]()
+        path_ref = ft.Ref[ft.TextField]()
+        next_id = f"py{tab_seq_ref.current[0] + 1}"
+
+        def _commit(ev=None):
+            name = (name_ref.current.value if name_ref.current else "") or ""
+            path = (path_ref.current.value if path_ref.current else "") or ""
+            page.pop_dialog()
+            _create_script_tab(
+                name=name.strip() or None,
+                path=path.strip() or f"/content/{next_id}.py",
+            )
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text("New Python script"),
+                content=ft.Column(
+                    controls=[
+                        ft.TextField(
+                            ref=name_ref,
+                            label="Tab name",
+                            hint_text="Pipeline",
+                            autofocus=True,
+                            on_submit=lambda ev: _commit(),
+                        ),
+                        ft.TextField(
+                            ref=path_ref,
+                            label="Path on the session",
+                            hint_text=f"/content/{next_id}.py",
+                            prefix_text="/content/",
+                            on_submit=lambda ev: _commit(),
+                        ),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=lambda ev: page.pop_dialog()),
+                    ft.FilledButton("Create", on_click=lambda ev: _commit()),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
+
+    async def _export_script(e=None):
+        """Save the active script's text to a local file."""
+        import os
+
+        tab = _get_tab()
+        if tab is None:
+            return
+        filename = f"{session_name}_{tab['name'].replace(' ', '_')}.py"
+        if page.platform.is_mobile():
+            dl_dir = "/storage/emulated/0/Download"
+            if not os.path.exists(dl_dir):
+                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(dl_dir, exist_ok=True)
+            path = os.path.join(dl_dir, filename)
+        else:
+            try:
+                path = await page.file_picker.save_file(
+                    allowed_extensions=["py"], file_name=filename
+                )
+            except ValueError:
+                dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+                os.makedirs(dl_dir, exist_ok=True)
+                path = os.path.join(dl_dir, filename)
+        if path:
+            try:
+                Path(path).write_text(tab.get("script") or "", encoding="utf-8")
+                controller.show_snack(f"✅ Saved {filename}")
+            except Exception as ex:
+                logger.exception("Script export failed")
+                controller.show_snack(f"❌ Export failed: {ex}", is_error=True)
+
+    async def _import_script(e=None):
+        """Load a local Python file into the active script tab, text as-is."""
+        tab = _get_tab()
+        if tab is None:
+            return
+        try:
+            files = await page.file_picker.pick_files(
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["py"],
+                allow_multiple=False,
+            )
+            if not files or not files[0].path:
+                return
+            raw = Path(files[0].path).read_text(encoding="utf-8")
+            _on_script_change(raw)
+            controller.show_snack(f"✅ Loaded {files[0].name}")
+        except Exception as ex:
+            logger.exception("Script import failed")
+            controller.show_snack(f"❌ Import failed: {ex}", is_error=True)
+
     def _close_tab(tab_id: str):
         tabs = [t for t in tabs_ref.current or [] if t["id"] != tab_id]
         closing = _get_tab(tab_id)
         if closing is not None:
             _save(closing)
-            page.run_task(
-                services.storage.delete_notebook, session_name, closing["id"]
-            )
+            # Delete the document that tab actually owns: a script tab has no
+            # cell file, and deleting the wrong one leaves an orphan behind.
+            if (closing.get("view") or "notebook") == "script":
+                page.run_task(
+                    services.storage.delete_script, session_name, closing["id"]
+                )
+            else:
+                page.run_task(
+                    services.storage.delete_notebook, session_name, closing["id"]
+                )
         if not tabs:
             tabs = [_new_tab(name="Notebook 1", tab_id="nb1")]
             _save(tabs[0])
@@ -876,9 +1065,15 @@ def NotebookView(
         Stable entry point for the Assistant bridge (Phase 4): the AI targets
         a tab directly instead of synthesising taps. Selecting the tab would
         steal focus from the chat, so the target tab keeps its active state.
+
+        A script tab is a Python document, not a cell list, so it refuses:
+        writing cells into one would be the projection that used to make the
+        script view lose work. The caller reports it as "no notebook tab".
         """
         target = _get_tab(tab_id)
         if target is None or not cells:
+            return None
+        if (target.get("view") or "notebook") == "script":
             return None
         merged = insert_cells_into(target, cells, at_end, after_id)
         if merged is None:
@@ -937,7 +1132,14 @@ def NotebookView(
 
         The two options are genuinely different documents, so the copy says
         what each one keeps and drops rather than leaving the user to guess.
+
+        A script tab has no formats to choose between — it is already Python —
+        so it exports its text straight away rather than offering a choice that
+        would describe a cell list it does not have.
         """
+        if (_get_tab() or {}).get("view") == "script":
+            page.run_task(_export_script)
+            return
 
         def _pick(fmt):
             page.pop_dialog()
@@ -981,12 +1183,16 @@ def NotebookView(
         """Import a `.ipynb` notebook, or a `.py` script (becomes code cells).
 
         Imports target the ACTIVE tab (no longer clobbers blindly — the file
-        lands in the current tab, other tabs untouched).
+        lands in the current tab, other tabs untouched). A script tab loads the
+        file's text instead of splitting it into cells it cannot show.
         """
         from services.ipynb_converter import ipynb_to_cells, py_to_cells
 
         tab = _get_tab()
         if tab is None:
+            return
+        if (tab.get("view") or "notebook") == "script":
+            await _import_script(e)
             return
         try:
             files = await page.file_picker.pick_files(
@@ -1019,6 +1225,7 @@ def NotebookView(
                 "import_ipynb": lambda: page.run_task(_import_ipynb),
                 "clear_all": _clear_all_outputs,
                 "new_notebook": lambda: _create_tab(),
+                "new_script": lambda: _show_new_script_dialog(),
                 "rename_notebook": lambda: _show_rename_dialog(active_tab_id)
                 if active_tab_id
                 else None,
@@ -1049,6 +1256,7 @@ def NotebookView(
                 "id": t["id"],
                 "name": t.get("name") or t["id"],
                 "view": t.get("view") or "notebook",
+                "path": t.get("path") or "",
                 "cells": len(t.get("cells") or []),
             }
             for t in (tabs_ref.current or [])
@@ -1058,6 +1266,9 @@ def NotebookView(
         ]
         if _get_tab(tab_id) is not None
         else [],
+        # The active tab itself, so a caller can tell a Python script tab from
+        # a notebook before asking it for cells it does not have.
+        "active_tab": lambda: _get_tab(),
         "switch_tab": _switch_tab,
         "active_tab_id": lambda: active_tab_id,
         # Bring a cell into view and put the caret in it. Bumps the shared
@@ -1217,12 +1428,8 @@ def NotebookView(
         ),
     )
 
-    # Import/Export are shared by both views; the leading buttons swap with the
-    # view, because "+ Markdown" means nothing in script view and "Run File"
-    # means nothing in cell view.
-    # Import/Export are shared by both views; the leading buttons swap with the
-    # view, because "+ Markdown" means nothing in script view and "Run File"
-    # means nothing in cell view.
+    # Import/Export are shared by both document types; what they move depends
+    # on the tab's kind, so the trailing handlers are chosen per view.
     _trailing = {
         "on_export_ipynb": lambda e: _show_export_dialog(),
         "on_import_ipynb": lambda e: page.run_task(_import_ipynb, e),
@@ -1232,11 +1439,14 @@ def NotebookView(
     active_tab = _get_tab()
 
     if (active_tab or {}).get("view") == "script":
+        # A Python document has no cells to add and no outputs to clear, and
+        # its import/export is the file's own text rather than a cell list.
         toolbar = build_notebook_toolbar(
             on_add_code=None,
             on_add_markdown=None,
             on_clear_all=None,
-            **_trailing,
+            on_export_ipynb=lambda e: page.run_task(_export_script),
+            on_import_ipynb=lambda e: page.run_task(_import_script),
         )
     else:
         toolbar = build_notebook_toolbar(
@@ -1273,11 +1483,18 @@ def NotebookView(
     # ── Notebook tab bar (mirrors the terminal panel's tab pattern) ─────────
     def _tab_button(tab):
         is_active = tab["id"] == active_tab_id
+        # A script tab says so with its own icon, so the document type is
+        # readable at a glance instead of only after clicking into it.
+        tab_icon = (
+            ft.Icons.CODE_ROUNDED
+            if (tab.get("view") or "notebook") == "script"
+            else ft.Icons.DESCRIPTION_OUTLINED
+        )
         return ft.Container(
             content=ft.Row(
                 controls=[
                     ft.Icon(
-                        ft.Icons.DESCRIPTION_OUTLINED,
+                        tab_icon,
                         size=tokens.ICON_SM,
                         color=ft.Colors.PRIMARY
                         if is_active
@@ -1320,39 +1537,6 @@ def NotebookView(
 
     # Per-tab view toggle: same document, second renderer. Persisted through
     # the index so a tab reopens the way it was left.
-    def _view_chip(label: str, view: str, icon) -> ft.Container:
-        selected = (active_tab or {}).get("view") == view
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(
-                        icon,
-                        size=tokens.ICON_XS,
-                        color=ft.Colors.PRIMARY
-                        if selected
-                        else ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                    ft.Text(
-                        label,
-                        size=tokens.FONT_XS,
-                        weight=ft.FontWeight.W_600 if selected else None,
-                        color=ft.Colors.PRIMARY
-                        if selected
-                        else ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                ],
-                spacing=tokens.SPACE_XXS,
-            ),
-            padding=ft.Padding(tokens.SPACE_SM, tokens.SPACE_XXS),
-            border_radius=tokens.RADIUS_MD,
-            bgcolor=ft.Colors.with_opacity(
-                0.12 if selected else 0.04, ft.Colors.PRIMARY
-            ),
-            tooltip=f"View this notebook as {label.lower()}",
-            on_click=lambda e, v=view: _set_view(v),
-            ink=True,
-        )
-
     tab_bar = ft.Row(
         controls=[
             *[_tab_button(t) for t in tabs_ref.current or []],
@@ -1362,43 +1546,32 @@ def NotebookView(
                 tooltip="New notebook",
                 on_click=lambda e: _create_tab(),
             ),
-            ft.Container(
-                content=ft.Row(
-                    controls=[
-                        _view_chip("Cells", "notebook", ft.Icons.VIEW_AGENDA_ROUNDED),
-                        _view_chip("Script", "script", ft.Icons.CODE_ROUNDED),
-                    ],
-                    spacing=tokens.SPACE_XXS,
-                ),
-                padding=ft.Padding(tokens.SPACE_XS, 0, 0, 0),
+            ft.IconButton(
+                icon=ft.Icons.INSERT_DRIVE_FILE_ROUNDED,
+                icon_size=tokens.ICON_SM,
+                tooltip="New Python script",
+                on_click=lambda e: _show_new_script_dialog(),
             ),
         ],
         spacing=tokens.SPACE_XS,
         scroll=ft.ScrollMode.AUTO,
     )
 
-    def _set_view(view: str):
-        target = _get_tab()
-        if target is None or target.get("view") == view:
-            return
-        target["view"] = view
-        _set_tabs(list(tabs_ref.current or []))
-        _save(target)
-        _save_index()
-
     def _on_script_change(new_text: str):
-        """Fold an edited script back into the active tab's cells.
+        """Keep the active script tab's text current, saving on a debounce.
 
-        merge_script_cells keeps the outputs of untouched cells, so toggling
-        between views never discards a plot or a traceback.
+        The text IS the tab, so the in-memory copy is updated on every
+        keystroke and only the storage write is coalesced — an export a moment
+        after typing must not read a stale document. The old implementation
+        re-split the text into cells and merged them back, which is what
+        dropped empty cells and handed a reverted edit its stale outputs.
         """
-        from services.ipynb_converter import merge_script_cells, py_to_cells
-
         target = _get_tab()
         if target is None:
             return
-        merged = merge_script_cells(target["cells"], py_to_cells(new_text))
-        _publish(target, [CellData.from_dict(c) for c in merged])
+        target["script"] = new_text or ""
+        _set_tabs(list(tabs_ref.current or []))
+        _debounced_save()
 
     # Invisible focusable sink — Escape moves focus here so editors blur and
     # markdown cells render (kept 1px, not 0, so the focus node stays live).
@@ -1410,7 +1583,7 @@ def NotebookView(
     )
 
     def _document_container() -> ft.Container:
-        """Cell boxes or the script editor — same document, two renderers."""
+        """Cell boxes or the script editor — one renderer per document type."""
         if (active_tab or {}).get("view") == "script":
             from screens.session.script_view import ScriptView
 

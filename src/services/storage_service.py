@@ -139,16 +139,28 @@ class StorageService:
             base += f"__{_slugify(notebook_id)}"
         return _STORAGE_DIR / f"{base}.json"
 
+    def _get_script_file(self, session_name: str, tab_id: str | None = None) -> Path:
+        """Path of a script tab's document — the tab's plain Python text.
+
+        A script tab is its own document, not a projection of a cell list, so
+        it gets its own file rather than reusing the cell payload shape. Same
+        atomic-write contract as the notebook files.
+        """
+        base = f"script_{_slugify(session_name)}"
+        if tab_id:
+            base += f"__{_slugify(tab_id)}"
+        return _STORAGE_DIR / f"{base}.json"
+
     def _get_tab_index_file(self, session_name: str) -> Path:
         return (
             _STORAGE_DIR / f"notebook_{_slugify(session_name)}__index.json"
         )
 
     async def save_tab_index(self, session_name: str, tabs: list[dict]) -> None:
-        """Persist tab order, names, and view prefs (sidecar to per-tab files).
+        """Persist tab order, names, view prefs and script paths (sidecar).
 
-        Tabs is a list of {"id", "name", "view"}. Kept separate from the cell
-        payloads so per-tab files stay unchanged in shape and the legacy
+        Tabs is a list of {"id", "name", "view", "path"}. Kept separate from
+        the per-tab documents so both file shapes stay unchanged and the legacy
         single-file migration is untouched.
         """
         try:
@@ -159,6 +171,9 @@ class StorageService:
                         "id": str(t.get("id", "")),
                         "name": str(t.get("name", "")),
                         "view": str(t.get("view") or "notebook"),
+                        # Only script tabs carry a path; a notebook's document
+                        # is its cell list.
+                        "path": str(t.get("path") or ""),
                     }
                     for t in tabs
                     if t.get("id")
@@ -234,24 +249,28 @@ class StorageService:
         return []
 
     async def list_notebooks(self, session_name: str) -> list[str]:
-        """Tab ids with saved files for a session (for tab-bar restore).
+        """Tab ids with saved documents for a session (for tab-bar restore).
 
-        Prefers the tab index because it carries the user's order; falls back
-        to the glob when no index exists so installs that already have
-        per-tab files migrate instead of losing tabs.
+        Notebook and script tabs share one id space, so both file prefixes are
+        scanned. Prefers the tab index because it carries the user's order;
+        falls back to the glob when no index exists so installs that already
+        have per-tab files migrate instead of losing tabs.
         """
         try:
-            prefix = f"notebook_{_slugify(session_name)}__"
             index = await self.load_tab_index(session_name)
             if index is not None:
                 return [str(t["id"]) for t in index]
             ids = []
             if _STORAGE_DIR.exists():
-                for f in _STORAGE_DIR.glob(f"{prefix}*.json"):
-                    tab = f.name[len(prefix) : -len(".json")]
-                    # The index sidecar shares the prefix pattern.
-                    if tab and tab != "index":
-                        ids.append(tab)
+                for prefix in (
+                    f"notebook_{_slugify(session_name)}__",
+                    f"script_{_slugify(session_name)}__",
+                ):
+                    for f in _STORAGE_DIR.glob(f"{prefix}*.json"):
+                        tab = f.name[len(prefix) : -len(".json")]
+                        # The index sidecar shares the prefix pattern.
+                        if tab and tab != "index":
+                            ids.append(tab)
             return sorted(ids)
         except Exception as e:
             logger.warning("StorageService.list_notebooks failed: %s", e)
@@ -265,6 +284,44 @@ class StorageService:
             nb_file.unlink(missing_ok=True)
         except Exception as e:
             logger.warning("StorageService.delete_notebook failed: %s", e)
+
+    async def save_script(self, session_name: str, tab_id: str, text: str) -> None:
+        """Save a script tab's Python text.
+
+        The text is the document: it is written exactly as the editor holds it,
+        so nothing is re-serialised on the way in or out and a save can never
+        lose a character the user typed.
+        """
+        try:
+            script_file = self._get_script_file(session_name, tab_id)
+            data_bytes = str(text or "").encode("utf-8")
+            tmp = script_file.with_suffix(".json.tmp")
+            tmp.write_bytes(data_bytes)
+            tmp.replace(script_file)
+        except Exception as e:
+            logger.warning("StorageService.save_script failed: %s", e)
+
+    async def load_script(self, session_name: str, tab_id: str) -> str | None:
+        """A script tab's saved text, or None when it was never saved.
+
+        None (not "") is the "no such document" signal: a script the user saved
+        while empty is a real empty document, and the caller must be able to
+        tell the two apart when restoring tabs.
+        """
+        try:
+            script_file = self._get_script_file(session_name, tab_id)
+            if script_file.exists():
+                return script_file.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning("StorageService.load_script failed: %s", e)
+        return None
+
+    async def delete_script(self, session_name: str, tab_id: str) -> None:
+        try:
+            script_file = self._get_script_file(session_name, tab_id)
+            script_file.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning("StorageService.delete_script failed: %s", e)
 
     async def cleanup_orphaned_notebooks(self, active_session_names: list[str]) -> None:
         """Deletes notebook history for sessions that no longer exist.
@@ -286,17 +343,18 @@ class StorageService:
                 active_files.add(f"notebook_{slug}.json")
                 # Per-tab files for live sessions are kept; anything else for
                 # a live session prefix is also kept (tabs come and go).
-                active_files.update(
-                    f.name
-                    for f in _STORAGE_DIR.glob(f"notebook_{slug}__*.json")
-                )
+                for prefix in (f"notebook_{slug}__", f"script_{slug}__"):
+                    active_files.update(
+                        f.name for f in _STORAGE_DIR.glob(f"{prefix}*.json")
+                    )
                 # The tab index sidecar shares the per-tab prefix and must
                 # survive with the tabs it describes.
                 active_files.add(f"notebook_{slug}__index.json")
 
-            for f in _STORAGE_DIR.glob("notebook_*.json"):
-                if f.name not in active_files:
-                    logger.info("Cleaning up orphaned notebook: %s", f.name)
-                    f.unlink(missing_ok=True)
+            for pattern in ("notebook_*.json", "script_*.json"):
+                for f in _STORAGE_DIR.glob(pattern):
+                    if f.name not in active_files:
+                        logger.info("Cleaning up orphaned document: %s", f.name)
+                        f.unlink(missing_ok=True)
         except Exception as e:
             logger.warning("StorageService.cleanup_orphaned_notebooks failed: %s", e)

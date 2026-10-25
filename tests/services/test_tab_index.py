@@ -263,6 +263,113 @@ def test_tab_dicts_carry_view_preference():
     src = pathlib.Path("src/screens/session/notebook_view.py").read_text(
         encoding="utf-8"
     )
-    # Tabs keep a view field so Phase 3's script mode can persist per tab.
+    # Tabs keep a view field so the tab's document kind persists per tab.
     assert '"view": view or "notebook"' in src
-    assert '"view": meta.get("view") or "notebook"' in src
+    # A script tab also carries the path of the file it edits.
+    assert '"view": "script"' in src
+    assert '"path":' in src
+
+
+# ── Script documents (a Python tab is a file, not a cell list) ─────────────
+
+
+def test_script_save_and_load_is_verbatim():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        body = 'import sys\n\n\nprint("hi")  # %% stay\n'
+        asyncio.run(svc.save_script("s1", "py1", body))
+        # Stored exactly as the editor held it: no re-serialising, no markers
+        # added or removed, so what comes back is what was typed.
+        assert asyncio.run(svc.load_script("s1", "py1")) == body
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_script_an_empty_document_is_not_a_missing_one():
+    """None means "never saved" and "" means "saved while empty" — the caller
+    restoring tabs has to be able to tell the two apart."""
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        assert asyncio.run(svc.load_script("s1", "py1")) is None
+        asyncio.run(svc.save_script("s1", "py1", ""))
+        assert asyncio.run(svc.load_script("s1", "py1")) == ""
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_script_and_notebook_documents_do_not_collide():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        asyncio.run(svc.save_notebook("s1", [{"id": "a"}], "py1"))
+        asyncio.run(svc.save_script("s1", "py2", "print(2)"))
+        assert (mod._STORAGE_DIR / "notebook_s1__py1.json").exists()
+        assert (mod._STORAGE_DIR / "script_s1__py2.json").exists()
+        assert asyncio.run(svc.load_notebook("s1", "py1")) == [{"id": "a"}]
+        assert asyncio.run(svc.load_script("s1", "py2")) == "print(2)"
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_delete_script_removes_only_the_script():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        asyncio.run(svc.save_script("s1", "py1", "print(1)"))
+        asyncio.run(svc.save_notebook("s1", [{"id": "a"}], "nb1"))
+        asyncio.run(svc.delete_script("s1", "py1"))
+        assert asyncio.run(svc.load_script("s1", "py1")) is None
+        # The notebook beside it is untouched.
+        assert asyncio.run(svc.load_notebook("s1", "nb1")) == [{"id": "a"}]
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_glob_fallback_lists_script_tabs_beside_notebooks():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        asyncio.run(svc.save_notebook("s1", [{"id": "a"}], "nb1"))
+        asyncio.run(svc.save_script("s1", "py1", "print(1)"))
+        assert asyncio.run(svc.list_notebooks("s1")) == ["nb1", "py1"]
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_cleanup_keeps_script_documents_for_live_sessions():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        asyncio.run(svc.save_script("s1", "py1", "print(1)"))
+        asyncio.run(svc.save_script("dead", "py9", "print(9)"))
+        asyncio.run(svc.cleanup_orphaned_notebooks(["s1"]))
+        assert asyncio.run(svc.load_script("s1", "py1")) == "print(1)"
+        assert asyncio.run(svc.load_script("dead", "py9")) is None
+    finally:
+        mod._STORAGE_DIR = orig
+
+
+def test_index_roundtrip_carries_the_script_path():
+    import asyncio
+
+    svc, mod, orig = _storage()
+    try:
+        asyncio.run(
+            svc.save_tab_index(
+                "s1",
+                [{"id": "py1", "name": "Pipeline", "view": "script", "path": "/content/p.py"}],
+            )
+        )
+        loaded = asyncio.run(svc.load_tab_index("s1"))
+        assert loaded[0]["path"] == "/content/p.py"
+        assert loaded[0]["view"] == "script"
+    finally:
+        mod._STORAGE_DIR = orig

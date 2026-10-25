@@ -263,7 +263,13 @@ def test_payload_with_no_argv_defaults_to_empty_list():
 # ── source guards for the view wiring ─────────────────────────────────────
 
 
-def test_notebook_view_wires_script_view_and_toggle():
+def test_notebook_view_wires_script_tab_creation():
+    """A script is a tab you create, not a view you flip a notebook into.
+
+    The old wiring toggled one document between two renderers, which is what
+    made every edit a re-split-and-merge. The guards below are the shape that
+    replaced it.
+    """
     import pathlib
 
     src = pathlib.Path("src/screens/session/notebook_view.py").read_text(
@@ -271,13 +277,26 @@ def test_notebook_view_wires_script_view_and_toggle():
     )
     assert "from screens.session.script_view import ScriptView" in src
     assert "_on_script_change" in src
-    assert "_set_view" in src
-    # Toolbar swaps by view instead of always showing +Code/+Markdown.
+    # No projection: nothing converts the document into the other shape.
+    assert "_set_view" not in src
+    assert "merge_script_cells" not in src
+    # A script tab is created, with its own path.
+    assert "def _new_script_tab(" in src
+    assert "def _create_script_tab(" in src
+    assert "def _show_new_script_dialog(" in src
+    # Toolbar swaps by document kind instead of always showing +Code/+Markdown.
     assert "build_notebook_toolbar(" in src
     assert 'on_add_code=None,' in src
+    # A script tab has no cells, so the assistant's cell bridge refuses it.
+    assert '"view") == "script":' in src
+    # Storage knows the two document kinds.
+    assert "services.storage.save_script" in src
+    assert "services.storage.load_script" in src
 
 
-def test_script_view_uses_merge_and_caret():
+def test_script_view_edits_the_document_directly():
+    """The editor hands its text to the parent as-is: no re-splitting, no
+    merge, and the parent's copy stays current on every keystroke."""
     import pathlib
 
     src = pathlib.Path("src/screens/session/script_view.py").read_text(
@@ -286,5 +305,24 @@ def test_script_view_uses_merge_and_caret():
     assert "block_at_offset" in src
     assert "on_selection_change" in src
     assert "services.colab.exec_code" in src
+    assert "build_run_file_payload" in src
     # Re-seed only on tab change — not every render.
     assert "seeded_for != tab.get(" in src
+    # Every edit reaches the parent immediately; the debounce lives in the
+    # parent's save, so an export never reads a stale document.
+    assert "on_script_change(value)" in src
+    assert "merge_script_cells" not in src
+    assert "py_to_cells" not in src
+
+
+def test_script_view_writes_the_file_to_the_session():
+    """"Save to session" stages the text in a temp file and uploads it, the
+    only route the contents API offers to write a file."""
+    import pathlib
+
+    src = pathlib.Path("src/screens/session/script_view.py").read_text(
+        encoding="utf-8"
+    )
+    assert "tempfile.NamedTemporaryFile" in src
+    assert "services.colab.upload" in src
+    assert "Path(local).unlink" in src

@@ -60,8 +60,17 @@ def _publish_status(status: str, port: int | None) -> None:
         getattr(state, "ai_router_status", None) != status
         or getattr(state, "ai_router_port", None) != port
     ):
-        state.ai_router_status = status
-        state.ai_router_port = port
+        try:
+            state.ai_router_status = status
+            state.ai_router_port = port
+        except RuntimeError:
+            # A status publish after the app's session is gone — the
+            # interpreter-exit path, or a late watchdog tick after the user
+            # closed the window. Flet assigns the field BEFORE it notifies
+            # listeners (`components/observable.py:210-212`), so the state is
+            # already correct here; only the repaint could not happen, and
+            # there is no UI left to repaint.
+            logger.debug("router status publish skipped: no live session")
         _wake_watchdog()
 
 

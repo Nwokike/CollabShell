@@ -362,7 +362,13 @@ def test_list_tab_summaries_marks_the_active_tab():
     notebook_view._SESSION_BRIDGES["sess"] = {
         "list_tabs": lambda: [
             {"id": "nb1", "name": "Lesson 1", "view": "notebook", "cells": 3},
-            {"id": "nb2", "name": "Scratch", "view": "script", "cells": 1},
+            {
+                "id": "py1",
+                "name": "Scratch",
+                "view": "script",
+                "path": "/content/scratch.py",
+                "cells": 0,
+            },
         ],
         "active_tab_id": lambda: "nb1",
     }
@@ -370,7 +376,36 @@ def test_list_tab_summaries_marks_the_active_tab():
         summary = notebook_view.list_tab_summaries("sess")
         assert "Lesson 1" in summary and "[active]" in summary
         assert "Scratch" in summary
-        assert "script view" in summary
+        # A script tab is described by its path — it has no cells to count.
+        assert "Python script at /content/scratch.py" in summary
+    finally:
+        notebook_view._SESSION_BRIDGES.pop("sess", None)
+
+
+def test_read_notebook_points_at_the_script_when_one_is_active():
+    """A script tab has no cells; the tool says which file to read instead of
+    reporting an empty notebook."""
+    from screens.session import notebook_view
+
+    notebook_view._SESSION_BRIDGES["sess"] = {
+        "insert_cells": lambda tab_id, cells: cells,
+        "active_tab_id": lambda: "py1",
+        "active_tab": lambda: {
+            "id": "py1",
+            "name": "Scratch",
+            "view": "script",
+            "path": "/content/scratch.py",
+            "script": "print(1)",
+            "cells": [],
+        },
+        "read_cells": lambda tab_id=None: [],
+        "list_tabs": list,
+    }
+    try:
+        tools, _, _ = _tools()
+        out = _run(_by_name(tools)["read_notebook"]())
+        assert "Python script" in out, out
+        assert "/content/scratch.py" in out, out
     finally:
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 

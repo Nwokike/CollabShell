@@ -1,29 +1,37 @@
-"""Script view — the second renderer for a notebook tab.
+"""ScriptView — a Python document, edited as plain text.
 
-A tab is one document (a cell list). Notebook view draws it as cell boxes;
-this module draws the SAME cells as one plain ``# %%``-marked editor, so no
-conversion happens in either direction and a toggle loses nothing.
+A script tab is a FILE, not a view of a cell list. The text in the editor IS
+the tab's document: it is stored verbatim and handed to the kernel exactly as
+written, so nothing is converted in either direction and no edit can be lost
+in a round trip.
 
-Editing re-splits the text and merges it back through ``merge_script_cells``,
-which preserves the outputs of cells the user did not touch — the naive
-version would wipe every plot on the first keystroke.
+The earlier implementation drew a notebook tab as `# %%`-marked text and then
+re-split an edit back into cells. That projection is what made the script view
+broken in ways the user could feel: an empty cell disappeared on every toggle,
+a cell edited back to its earlier text got that cell's stale outputs back, and
+`# %%` markers appeared in a document nobody had marked up. One document, one
+renderer, no conversion.
+
+`# %%` is honoured only as a *convention the file itself uses* — when a file is
+marked that way, "Run Cell" runs the block under the caret; otherwise the caret
+block IS the whole file and Run Cell behaves like Run File.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import tempfile
+from pathlib import Path
 
 import flet as ft
 
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
-from services.ipynb_converter import block_at_offset, cells_to_py
+from services.ipynb_converter import block_at_offset
+from services.script_runner import build_run_file_payload
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("ScriptView")
-
-_SAVE_DEBOUNCE_SEC = 1.0
 
 
 @ft.component
@@ -33,39 +41,34 @@ def ScriptView(
     on_script_change=None,
     session_env_override: dict | None = None,
 ):
-    """Render and edit a tab's cells as one script.
+    """Render and edit one tab's Python text.
 
-    ``tab`` is the live tab dict (``id``/``name``/``view``/``cells``);
-    ``on_script_change(new_text)`` is called debounced with the edited script.
+    ``tab`` is the live tab dict (``id``/``name``/``view``/``path``/``script``);
+    ``on_script_change(new_text)`` is called on every edit, and the parent owns
+    saving it.
     """
     state = ft.use_context(AppStateCtx)
     services = ft.use_context(ServiceCtx)
     controller = ft.use_context(ControllerMethodsCtx)
     page = ft.context.page
 
-    text, set_text = ft.use_state(lambda: cells_to_py(tab.get("cells") or []))
+    # Seeded from the tab's document, and re-seeded ONLY when the tab changes —
+    # re-seeding on every parent render would overwrite the field mid-keystroke
+    # and move the caret.
+    text, set_text = ft.use_state(lambda: tab.get("script") or "")
     outputs, set_outputs = ft.use_state([])
     is_running, set_is_running = ft.use_state(False)
     caret, set_caret = ft.use_state(0)
-    debounce_ref = ft.use_ref(None)
-    # Re-seed the editor only when the TAB changes, never on every parent
-    # render — overwriting the field while the user types moves the caret.
+    is_saving, set_is_saving = ft.use_state(False)
     seeded_for, set_seeded_for = ft.use_state(tab.get("id"))
 
     if seeded_for != tab.get("id"):
         set_seeded_for(tab.get("id"))
-        set_text(cells_to_py(tab.get("cells") or []))
+        set_text(tab.get("script") or "")
         set_outputs([])
         set_caret(0)
 
-    def _flush_save():
-        if debounce_ref.current is not None:
-            debounce_ref.current.cancel()
-            debounce_ref.current = None
-        if on_script_change:
-            on_script_change(text)
-
-    ft.on_unmounted(_flush_save)
+    path = str(tab.get("path") or "").strip() or "/content/script.py"
 
     def _on_selection_change(e):
         sel = getattr(e, "selection", None)
@@ -122,37 +125,65 @@ def ScriptView(
             return
         source = block_at_offset(text, caret)
         if not source.strip():
-            controller.show_snack("Nothing to run in this cell.", is_error=True)
+            controller.show_snack("Nothing to run at the cursor.", is_error=True)
             return
         page.run_task(_run, source)
 
     def _run_file(e=None):
         if is_running:
             return
-        from services.script_runner import build_run_file_payload
-
         if not (text or "").strip():
             controller.show_snack("Script is empty.", is_error=True)
             return
         page.run_task(_run, build_run_file_payload(text))
 
-    def _emit_change():
-        debounce_ref.current = None
-        if on_script_change:
-            on_script_change(text)
+    async def _save_to_session(e=None):
+        """Write this document to its path on the session VM.
+
+        The VM only reaches a file through a local upload, so the text is
+        staged in a temp file and sent up. An explicit action, on purpose: the
+        editor's own storage is local and instant, and a background sync would
+        fail silently on a dropped connection.
+        """
+        if not (text or "").strip():
+            controller.show_snack("Script is empty.", is_error=True)
+            return
+        set_is_saving(True)
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".py", delete=False, encoding="utf-8"
+            ) as handle:
+                handle.write(text)
+                local = handle.name
+            try:
+                ok = await services.colab.upload(
+                    local,
+                    path,
+                    session_name=session_name,
+                    auth_method=state.auth_method,
+                )
+            finally:
+                try:
+                    Path(local).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if ok:
+                controller.show_snack(f"✅ Saved to {path}")
+            else:
+                controller.show_snack(
+                    f"❌ Could not save to {path}", is_error=True
+                )
+        except Exception as ex:
+            logger.warning("Script save failed: %s", ex)
+            controller.show_snack(f"❌ Save failed: {ex}", is_error=True)
+        finally:
+            set_is_saving(False)
 
     def _on_text_change(e):
         value = e.control.value or ""
         set_text(value)
-        try:
-            loop = asyncio.get_running_loop()
-            if debounce_ref.current is not None:
-                debounce_ref.current.cancel()
-            debounce_ref.current = loop.call_later(
-                _SAVE_DEBOUNCE_SEC, _emit_change
-            )
-        except RuntimeError:
-            _emit_change()
+        if on_script_change:
+            on_script_change(value)
 
     # ── Inline output panel ────────────────────────────────────────────────
     # Rendered through the same parser the notebook cells use, so ANSI colour,
@@ -179,12 +210,31 @@ def ScriptView(
         border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
         on_change=_on_text_change,
         on_selection_change=_on_selection_change,
-        hint_text="Write Python here. Use # %% to mark a cell, # %% [markdown] for notes.",
+        hint_text="Write Python here. A # %% line marks a block you can run alone.",
         expand=True,
     )
 
     return ft.Column(
         controls=[
+            ft.Row(
+                controls=[
+                    ft.Icon(
+                        ft.Icons.CODE_ROUNDED,
+                        size=tokens.ICON_SM,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    ft.Text(
+                        path,
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        expand=True,
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                ],
+                spacing=tokens.SPACE_XS,
+                tight=True,
+            ),
             editor,
             ft.Row(
                 controls=[
@@ -200,10 +250,16 @@ def ScriptView(
                         on_click=_run_file,
                         disabled=is_running,
                     ),
+                    ft.FilledTonalButton(
+                        "Save to session",
+                        icon=ft.Icons.CLOUD_UPLOAD_ROUNDED,
+                        on_click=lambda e: page.run_task(_save_to_session, e),
+                        disabled=is_running or is_saving,
+                    ),
                     ft.ProgressRing(
                         width=tokens.SPINNER_SM,
                         height=tokens.SPINNER_SM,
-                        visible=is_running,
+                        visible=is_running or is_saving,
                     ),
                 ],
                 spacing=tokens.SPACE_SM,
