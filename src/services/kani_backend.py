@@ -114,7 +114,10 @@ class _CountingTokenizer:
 
 
 def tool_specs(
-    specs: list[ToolSpec], *, on_step: Callable[[str, dict], None] | None = None
+    specs: list[ToolSpec],
+    *,
+    on_step: Callable[[str, dict], None] | None = None,
+    on_tool_output: Callable[[str, str], None] | None = None,
 ) -> list[ToolSpec]:
     """Adapt tool specs so each call emits its step row.
 
@@ -127,6 +130,10 @@ def tool_specs(
     ``{"name", "id", "args", "result", "error"}`` — ``id`` is kani's own
     ``tool_call_id`` (see :func:`call_id`), because a step row is only
     closed by the id that opened it.
+
+    ``on_tool_output(tool_name, output_chunk)`` is called for streaming tool
+    output (e.g., terminal stdout, notebook cell output) so the UI can show
+    live progress.
     """
     out: list[ToolSpec] = []
     for spec in specs:
@@ -143,7 +150,14 @@ def tool_specs(
             if on_step is not None:
                 on_step("start", dict(payload))
             try:
-                text = await run(**kwargs)
+                # Pass on_tool_output to the tool if it accepts it
+                import inspect
+
+                sig = inspect.signature(run)
+                if "on_tool_output" in sig.parameters:
+                    text = await run(**kwargs, on_tool_output=on_tool_output)
+                else:
+                    text = await run(**kwargs)
                 payload["result"] = text
                 return text
             except Exception as ex:
@@ -165,7 +179,9 @@ def tool_specs(
                     on_step("done", payload)
 
         out.append(
-            ToolSpec(name=spec.name, desc=spec.desc, parameters=spec.parameters, run=wrapped)
+            ToolSpec(
+                name=spec.name, desc=spec.desc, parameters=spec.parameters, run=wrapped
+            )
         )
     return out
 
@@ -311,7 +327,9 @@ async def _build_engine(
 
     base = base_url or await router.router_base()
     if base is None:
-        raise AIUnavailable("No local model router is running, and none could be started.")
+        raise AIUnavailable(
+            "No local model router is running, and none could be started."
+        )
     timeout = httpx.Timeout(CANDIDATE_READ_S, connect=4.0)
     tap = ThoughtTap(on_thought)
     client = openai.AsyncOpenAI(
@@ -321,9 +339,7 @@ async def _build_engine(
         timeout=timeout,
         # The tapping client replaces the SDK's default one; max_retries is not
         # forwarded because httpx has no such option and the SDK owns it.
-        http_client=build_thought_client(
-            timeout=timeout, max_retries=0, tap=tap
-        ),
+        http_client=build_thought_client(timeout=timeout, max_retries=0, tap=tap),
     )
     return ReasoningEngine(
         client=client,
@@ -380,7 +396,9 @@ def _map_failure(exc: BaseException, *, delivered: bool) -> Exception:
             # dropped, so the turn ends with what it got rather than walking
             # (there is nowhere to walk to) or discarding it.
             return AIMidStream(str(exc))
-        return AIUnavailable("Could not reach the Assistant.")
+        return AIUnavailable(
+            f"Could not reach the Assistant ({type(exc).__name__}): {str(exc)[:300]}"
+        )
     if isinstance(exc, openai.APIError):
         return RouterModelFailed(
             "The Assistant had a server problem. Trying another model."
@@ -399,6 +417,8 @@ async def run_turn(
     on_thought: Callable[[str], None] | None = None,
     on_round_reset: Callable[[], None] | None = None,
     on_model_step: Callable[[], Awaitable[None]] | None = None,
+    on_model_step_done: Callable[[], Awaitable[None]] | None = None,
+    on_tool_output: Callable[[str, str], None] | None = None,  # tool_name, output_chunk
     should_stop: Callable[[], bool] | None = None,
     base_url: str | None = None,
     model: str | None = None,
@@ -493,9 +513,7 @@ async def run_turn(
                 # Absent under "auto", so the gateway decides. A depth the
                 # router does not know is ignored upstream rather than fatal.
                 **(
-                    {"reasoning_effort": _thinking_depth()}
-                    if _thinking_depth()
-                    else {}
+                    {"reasoning_effort": _thinking_depth()} if _thinking_depth() else {}
                 ),
             ):
                 if _stopped():
@@ -529,7 +547,7 @@ async def run_turn(
                     kani.functions = {}
                     giving_final_answer = True
 
-                if model_steps and on_model_step is not None:
+                if on_model_step is not None:
                     await on_model_step()
                 model_steps += 1
 
@@ -569,6 +587,8 @@ async def run_turn(
                     # the turn would hang. The partial is the answer.
                     break
                 message = await manager.message()
+                if on_model_step_done is not None:
+                    await on_model_step_done()
                 if not getattr(message, "tool_calls", None):
                     answer = "".join(collected)
                     if not answer.strip():
@@ -628,7 +648,10 @@ async def run_turn(
         # never had — and ai_credits reads AIUnavailable as exactly that.
         if cancel.is_set():
             return {"text": "", "model_steps": model_steps, "model": last_model}
-        raise AIUnavailable("The Assistant did not answer. Try again.")
+        raise AIUnavailable(
+            f"The Assistant did not answer after trying {len(candidates)} "
+            "available model(s). Check the router/model status and retry."
+        )
     return {"text": text, "model_steps": model_steps, "model": last_model}
 
 

@@ -52,7 +52,6 @@ THINKING_DEPTHS = ("auto", "minimal", "low", "medium", "high")
 # The router URL is an ADVANCED OVERRIDE. When empty the app probes 8082..8092
 # and embeds its own router, which is the normal path — see services/router.py.
 STORAGE_AI_ROUTER_URL = "colab_ai_router_url"
-STORAGE_NOTIFY_ENABLED = "colab_notify_enabled"
 AI_DEFAULT_ROUTER_URL = "http://127.0.0.1:8082/v1"
 # How long a stop waits for the turn to notice its own flag before the UI
 # hard-cancels it. A model that stopped emitting has stopped polling too, so
@@ -177,6 +176,10 @@ ERR_NO_SESSION = "No active sessions. Create one first."
 ERR_SESSION_LOST = "Session appears to be lost. It may have timed out."
 ERR_AUTH_EXPIRED = "Authentication expired. Please sign in again."
 ERR_CLI_NOT_FOUND = "Google Colab CLI is not installed or not accessible."
+
+# ── Ad top-up ─────────────────────────────────────────────────────────────────
+AD_TOPUP_CREDITS = 2
+AD_TOPUP_COOLDOWN_SEC = 30.0
 
 # ── Help / tips (contextual guidance for non-developers) ──────────────────────
 TIP_CPU = "CPU sessions are always free and available. Great for light work."

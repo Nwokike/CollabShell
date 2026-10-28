@@ -6,7 +6,6 @@ stale catalog, a saved model can never outlive the router, and an empty menu
 always offers the action that helps.
 """
 
-
 import asyncio
 import sys
 from pathlib import Path
@@ -259,7 +258,11 @@ def test_a_dead_router_never_offers_its_stale_rows(tmp_path, monkeypatch):
     assert chip.tooltip == "Offline", chip.tooltip
     # One item only: the message and the action — no stale model rows.
     assert len(chip.items) == 1, chip.items
-    assert "Start router" in " ".join(str(getattr(i.content, "controls", [])) for i in chip.items) or True
+    assert (
+        "Start router"
+        in " ".join(str(getattr(i.content, "controls", [])) for i in chip.items)
+        or True
+    )
 
 
 def test_a_starting_router_offers_no_stale_rows(tmp_path, monkeypatch):

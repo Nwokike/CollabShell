@@ -82,7 +82,7 @@ def test_claim_unrecognized_gpu_falls_back_to_t4():
 
 def test_claim_other_tpu_names_become_v6e1():
     src = _read(SRC / "services" / "colab" / "session_ops.py")
-    assert "Accelerator.V5E1 if tpu.lower() == \"v5e1\" else Accelerator.V6E1" in src
+    assert 'Accelerator.V5E1 if tpu.lower() == "v5e1" else Accelerator.V6E1' in src
 
 
 def test_claim_cwd_is_content():

@@ -21,23 +21,37 @@ from screens.session import notebook_view
 def _fresh_bridges(tab_id="tab-1"):
     """Register a fake mounted notebook and return its bridge registry."""
     tabs = [
-        {"id": tab_id, "name": "Notebook", "view": "notebook",
-         "cells": [CellData(cell_type="code", source="print(1)")]},
-        {"id": "tab-2", "name": "Other", "view": "notebook",
-         "cells": [CellData(cell_type="code", source="print(2)")]},
+        {
+            "id": tab_id,
+            "name": "Notebook",
+            "view": "notebook",
+            "cells": [CellData(cell_type="code", source="print(1)")],
+        },
+        {
+            "id": "tab-2",
+            "name": "Other",
+            "view": "notebook",
+            "cells": [CellData(cell_type="code", source="print(2)")],
+        },
     ]
     focused = []
     switched = []
 
     bridges = {
         "insert_cells": lambda tid, cells, at_end=True: (
-            tabs[0]["cells"].extend(cells), cells)[1] if tid == tab_id else None,
+            (tabs[0]["cells"].extend(cells), cells)[1] if tid == tab_id else None
+        ),
         "active_tab_id": lambda: tab_id,
         "switch_tab": switched.append,
         "focus_cell": focused.append,
         "locate_cell": lambda cid: next(
-            ((t["id"], i) for t in tabs for i, c in enumerate(t["cells"])
-             if c.id == cid), None
+            (
+                (t["id"], i)
+                for t in tabs
+                for i, c in enumerate(t["cells"])
+                if c.id == cid
+            ),
+            None,
         ),
     }
     notebook_view._SESSION_BRIDGES["sess"] = bridges
@@ -56,7 +70,10 @@ def test_write_cells_tags_the_cells_as_assistant_written():
     try:
         inserted = notebook_view.write_cells_to_active_tab(
             "sess",
-            [{"type": "code", "source": "x = 1"}, {"type": "markdown", "source": "# hi"}],
+            [
+                {"type": "code", "source": "x = 1"},
+                {"type": "markdown", "source": "# hi"},
+            ],
         )
         assert inserted and len(inserted) == 2
         assert all(c.origin == "assistant" for c in inserted), (
@@ -69,7 +86,12 @@ def test_write_cells_tags_the_cells_as_assistant_written():
 def test_write_cells_is_a_no_op_when_no_tab_is_open():
     """No session mounted means no bridge, and the caller learns that rather
     than the tool pretending it wrote something."""
-    assert notebook_view.write_cells_to_active_tab("nope", [{"type": "code", "source": "x"}]) is None
+    assert (
+        notebook_view.write_cells_to_active_tab(
+            "nope", [{"type": "code", "source": "x"}]
+        )
+        is None
+    )
 
 
 def test_write_cells_rejects_malformed_entries_without_blowing_up():
@@ -173,9 +195,16 @@ def test_insert_at_end_and_at_start_still_work():
     from components.notebook_cell import CellData
 
     tab = {"id": "t", "cells": [CellData(cell_type="code", source="a")]}
-    assert notebook_view.insert_cells_into(tab, [CellData(source="b")])[-1].source == "b"
+    assert (
+        notebook_view.insert_cells_into(tab, [CellData(source="b")])[-1].source == "b"
+    )
     fresh = {"id": "t", "cells": [CellData(cell_type="code", source="a")]}
-    assert notebook_view.insert_cells_into(fresh, [CellData(source="z")], at_end=False)[0].source == "z"
+    assert (
+        notebook_view.insert_cells_into(fresh, [CellData(source="z")], at_end=False)[
+            0
+        ].source
+        == "z"
+    )
 
 
 def test_insert_into_a_missing_tab_or_empty_list_returns_none():

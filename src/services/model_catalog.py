@@ -191,7 +191,9 @@ def candidate_models(exclude: str | None = None) -> list[str]:
             continue
         if model_circuit_open(model_id):
             continue
-        ranked.append((0 if tier_of(entry) == "high" else 1, _latency_of(entry), model_id))
+        ranked.append(
+            (0 if tier_of(entry) == "high" else 1, _latency_of(entry), model_id)
+        )
     ranked.sort()
     return [model_id for _tier, _latency, model_id in ranked]
 

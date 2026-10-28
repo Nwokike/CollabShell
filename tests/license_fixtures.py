@@ -6,7 +6,6 @@ signatures against a real P-256 keypair — the same shape the license Worker
 emits. Regenerate with: node scripts/make_license_fixtures.mjs
 """
 
-
 PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEajTRwhybJ_PXG8MLDj-WvGOHROswZUQBziQP0e5gNfEK-fR539mO9WXMmteNKMZhq4qbF7qEbSuttrcqVL-kFQ"
 
 TOKENS = {

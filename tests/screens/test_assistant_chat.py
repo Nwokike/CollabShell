@@ -88,9 +88,7 @@ def _session(tmp_path, monkeypatch, controller=None):
     from services import conversation_service as conversations
 
     monkeypatch.setattr(conversations, "_tombstones", {})
-    monkeypatch.setattr(
-        conversations, "conversations_dir", lambda: tmp_path
-    )
+    monkeypatch.setattr(conversations, "conversations_dir", lambda: tmp_path)
     monkeypatch.setattr(conversations, "ensure_active", lambda: "chat1")
     state = _state()
     session = assistant_view.ChatSession(
@@ -135,8 +133,11 @@ def test_state_accumulates_even_when_repaint_is_throttled(tmp_path, monkeypatch)
     session = _session(tmp_path, monkeypatch)
     turn = _drive(
         session,
-        [("text_partial", {"text": "a"}), ("text_partial", {"text": "b"}),
-         ("text_partial", {"text": "c"})],
+        [
+            ("text_partial", {"text": "a"}),
+            ("text_partial", {"text": "b"}),
+            ("text_partial", {"text": "c"}),
+        ],
     )
     # All three events land inside the 0.2s text window, so only one repaint
     # happened — but nothing may be dropped.
@@ -303,9 +304,9 @@ def test_restore_reuses_the_same_session(tmp_path, monkeypatch):
 
     assert first is second, "re-opening must reuse the retained session"
     assert len(page.views) == 1, "re-open must not stack a second view"
-    assert any(
-        t.get("text") == "still here" for t in second._turns
-    ), "the transcript survives minimize/restore"
+    assert any(t.get("text") == "still here" for t in second._turns), (
+        "the transcript survives minimize/restore"
+    )
 
 
 def test_shutdown_stops_the_turn_and_marks_closed(tmp_path, monkeypatch):
@@ -328,9 +329,9 @@ def test_shutdown_stops_the_turn_and_marks_closed(tmp_path, monkeypatch):
     assert session._closing is True
     # After teardown, nothing may push to the UI.
     session._emit("text_partial", {"text": "ghost"})
-    assert all(
-        "ghost" not in str(t.get("text", "")) for t in session._turns
-    ), "a closed session must not accept events"
+    assert all("ghost" not in str(t.get("text", "")) for t in session._turns), (
+        "a closed session must not accept events"
+    )
 
 
 # ── approval gate ────────────────────────────────────────────────────────────
@@ -344,7 +345,9 @@ def test_approval_denies_and_returns_false(tmp_path, monkeypatch):
     session = _session(tmp_path, monkeypatch)
 
     async def _scenario():
-        task = asyncio.ensure_future(session.ask_confirm("Delete file", "/content/x.csv"))
+        task = asyncio.ensure_future(
+            session.ask_confirm("Delete file", "/content/x.csv")
+        )
         await asyncio.sleep(0)
         session._confirm_decision("deny")
         return await task
@@ -356,7 +359,9 @@ def test_approval_allows_and_returns_true(tmp_path, monkeypatch):
     session = _session(tmp_path, monkeypatch)
 
     async def _scenario():
-        task = asyncio.ensure_future(session.ask_confirm("Restart kernel", "all vars lost"))
+        task = asyncio.ensure_future(
+            session.ask_confirm("Restart kernel", "all vars lost")
+        )
         await asyncio.sleep(0)
         session._confirm_decision("allow")
         return await task
@@ -529,7 +534,10 @@ def test_two_calls_to_the_same_tool_get_two_rows(tmp_path, monkeypatch):
             ("step_start", {"label": "Running code", "id": "call_1", "name": "_exec"}),
             ("step_done", {"label": "Running code", "id": "call_1", "result": "first"}),
             ("step_start", {"label": "Running code", "id": "call_2", "name": "_exec"}),
-            ("step_done", {"label": "Running code", "id": "call_2", "result": "second"}),
+            (
+                "step_done",
+                {"label": "Running code", "id": "call_2", "result": "second"},
+            ),
         ],
     )
     rows = session._turns[-1]["steps_rows"]
@@ -572,8 +580,14 @@ def test_a_row_left_spinning_is_closed_when_the_turn_ends(tmp_path, monkeypatch)
     _drive(
         session,
         [
-            ("step_start", {"label": "Reading the notebook", "id": "c1", "name": "read_notebook"}),
-            ("error", {"kind": "unavailable", "message": "Could not reach the Assistant."}),
+            (
+                "step_start",
+                {"label": "Reading the notebook", "id": "c1", "name": "read_notebook"},
+            ),
+            (
+                "error",
+                {"kind": "unavailable", "message": "Could not reach the Assistant."},
+            ),
         ],
     )
     row = session._turns[-1]["steps_rows"][0]
@@ -629,7 +643,10 @@ def test_a_long_tool_output_does_not_become_a_long_label(tmp_path, monkeypatch):
         session,
         [
             ("step_start", {"label": "Running code", "id": "call_1", "name": "_exec"}),
-            ("step_done", {"label": "Running code", "id": "call_1", "result": "x" * 5000}),
+            (
+                "step_done",
+                {"label": "Running code", "id": "call_1", "result": "x" * 5000},
+            ),
         ],
     )
     row = session._turns[-1]["steps_rows"][0]
@@ -650,10 +667,19 @@ def test_write_cells_step_row_carries_its_cell_refs(tmp_path, monkeypatch):
     turn = _drive(
         session,
         [
-            ("step_start", {"label": "Writing cells", "id": step["id"], "name": step["name"]}),
-            ("step_done", {"label": "Writing cells", "id": step["id"],
-                           "result": step["result"],
-                           "refs": assistant_view._cell_refs(step)}),
+            (
+                "step_start",
+                {"label": "Writing cells", "id": step["id"], "name": step["name"]},
+            ),
+            (
+                "step_done",
+                {
+                    "label": "Writing cells",
+                    "id": step["id"],
+                    "result": step["result"],
+                    "refs": assistant_view._cell_refs(step),
+                },
+            ),
         ],
     )
     assert turn["steps_rows"][0]["refs"] == ["abc123", "def456"]
@@ -667,17 +693,27 @@ def test_non_write_cells_steps_have_no_refs(tmp_path, monkeypatch):
         session,
         [
             ("step_start", {"label": "Running code", "id": "c", "name": "_exec"}),
-            ("step_done", {"label": "Running code", "id": "c", "result": "1",
-                           "refs": assistant_view._cell_refs(step)}),
+            (
+                "step_done",
+                {
+                    "label": "Running code",
+                    "id": "c",
+                    "result": "1",
+                    "refs": assistant_view._cell_refs(step),
+                },
+            ),
         ],
     )
     assert turn["steps_rows"][0]["refs"] == []
 
 
 def test_a_ref_without_a_marker_parses_to_nothing():
-    assert assistant_view._cell_refs(
-        {"name": "write_cells", "id": "c", "result": "Wrote 0 cell(s)."}
-    ) == []
+    assert (
+        assistant_view._cell_refs(
+            {"name": "write_cells", "id": "c", "result": "Wrote 0 cell(s)."}
+        )
+        == []
+    )
 
 
 def test_tapping_a_ref_calls_the_controller_with_the_session(tmp_path, monkeypatch):
@@ -686,11 +722,19 @@ def test_tapping_a_ref_calls_the_controller_with_the_session(tmp_path, monkeypat
     session = _session(tmp_path, monkeypatch, controller=controller)
     _drive(
         session,
-        [("step_done", {"label": "write_cells", "id": "c",
-                        "result": "x. Cells: zz99",
-                        "refs": assistant_view._cell_refs(
-                            {"name": "write_cells", "id": "c",
-                             "result": "x. Cells: zz99"})})],
+        [
+            (
+                "step_done",
+                {
+                    "label": "write_cells",
+                    "id": "c",
+                    "result": "x. Cells: zz99",
+                    "refs": assistant_view._cell_refs(
+                        {"name": "write_cells", "id": "c", "result": "x. Cells: zz99"}
+                    ),
+                },
+            )
+        ],
     )
     session._reveal_cell("zz99")
     assert controller.revealed == [("sess", "zz99")]
@@ -733,7 +777,6 @@ def test_load_conversation_replaces_the_transcript(tmp_path, monkeypatch):
     assert [t.get("text") for t in session._turns] == ["saved"]
 
 
-
 # ── round-trip through the real service ──────────────────────────────────────
 
 
@@ -743,8 +786,10 @@ def test_a_turn_round_trips_through_conversation_service(tmp_path, monkeypatch):
     session = _session(tmp_path, monkeypatch)
     _drive(
         session,
-        [("text_partial", {"text": "The answer is 42."}),
-         ("text_final", {"text": "The answer is 42.", "model": "qwen", "cost": 1})],
+        [
+            ("text_partial", {"text": "The answer is 42."}),
+            ("text_final", {"text": "The answer is 42.", "model": "qwen", "cost": 1}),
+        ],
     )
     session._persist_history()
     # A fresh session on the same saved id reads the whole pair back.
@@ -788,8 +833,10 @@ def test_a_streaming_event_does_not_refresh_the_chip(tmp_path, monkeypatch):
     """A per-token refresh would read the credit service at the token rate."""
     session = _session(tmp_path, monkeypatch)
     _watch_credits(session, monkeypatch)
-    _drive(session, [("text_partial", {"text": "tok"}),
-                     ("step_start", {"label": "x", "id": "1"})])
+    _drive(
+        session,
+        [("text_partial", {"text": "tok"}), ("step_start", {"label": "x", "id": "1"})],
+    )
     assert _credit_reads(session) == 0
 
 
@@ -829,7 +876,11 @@ def test_the_gate_the_chat_binds_really_asks(tmp_path, monkeypatch):
         holder["fn"] = ask_confirm
 
         async def restart_kernel() -> str:
-            return "restarted" if await ask_confirm("Restart kernel", "vars lost") else "declined"
+            return (
+                "restarted"
+                if await ask_confirm("Restart kernel", "vars lost")
+                else "declined"
+            )
 
         restart_kernel.__name__ = "restart_kernel"
         return [restart_kernel]
@@ -894,14 +945,20 @@ def test_refresh_model_chip_short_circuits_on_an_unchanged_signature(
     assert rebuilt == [], "an unchanged signature must not rebuild"
 
     # A different one must rebuild.
-    session._pill_signature = ("Offline", False, "unavailable", "auto", "", "Start router", ())
+    session._pill_signature = (
+        "Offline",
+        False,
+        "unavailable",
+        "auto",
+        "",
+        "Start router",
+        (),
+    )
     session.refresh_model_chip()
     assert rebuilt == ["built"], rebuilt
 
 
-def test_refresh_model_chip_rebuilds_when_only_the_menu_changed(
-    tmp_path, monkeypatch
-):
+def test_refresh_model_chip_rebuilds_when_only_the_menu_changed(tmp_path, monkeypatch):
     """A catalog change with an unchanged label must still rebuild the items.
 
     The pill bakes its menu in, so a label-only signature would leave a stale
@@ -999,7 +1056,8 @@ def test_every_tool_is_reachable_from_a_starter():
     tools = {
         t.__name__
         for t in ai_tools.build_tools(
-            "sess", NS(colab=NS(), storage=None),
+            "sess",
+            NS(colab=NS(), storage=None),
             NS(auth_method="oauth2", default_timeout=30.0),
         )
     }
@@ -1017,12 +1075,20 @@ def test_the_starters_are_prompts_not_tool_names():
     """A row is a sentence a user would say. The tool is the model's business."""
     from services import ai_tools
 
-    tool_names = {t.__name__ for t in ai_tools.build_tools(
-        "sess", NS(colab=NS(), storage=None),
-        NS(auth_method="oauth2", default_timeout=30.0),
-    )}
+    tool_names = {
+        t.__name__
+        for t in ai_tools.build_tools(
+            "sess",
+            NS(colab=NS(), storage=None),
+            NS(auth_method="oauth2", default_timeout=30.0),
+        )
+    }
     for _icon, label, prompt in assistant_view._starter_rows():
         for name in tool_names:
-            assert name not in prompt, f"starter leaks the tool name {name!r}: {prompt!r}"
+            assert name not in prompt, (
+                f"starter leaks the tool name {name!r}: {prompt!r}"
+            )
         assert label and prompt, (label, prompt)
-        assert not prompt.endswith("."), f"prompts are sentences, not instructions: {prompt!r}"
+        assert not prompt.endswith("."), (
+            f"prompts are sentences, not instructions: {prompt!r}"
+        )

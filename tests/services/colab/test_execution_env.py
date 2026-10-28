@@ -6,6 +6,7 @@ validation, history redaction (values never logged), and timeout parity.
 
 import asyncio
 import sys
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,7 @@ def _session():
         token="tok",
         url="https://8080-m.example.dev",
         endpoint="m-s-abc",
-        token_expires_at=None,
+        token_expires_at=datetime.now(UTC) + timedelta(hours=1),
         variant="DEFAULT",
         accelerator="NONE",
         machine_shape="STANDARD",
@@ -38,6 +39,9 @@ class FakeStore:
 
     def add(self, s):
         self.added.append(s.name)
+
+    def get(self, name):
+        return self.session if self.session.name == name else None
 
 
 def _make_state(session):

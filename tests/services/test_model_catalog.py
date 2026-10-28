@@ -14,8 +14,14 @@ sys.path.insert(0, "src")
 from services import model_catalog as mc
 
 
-def _row(model_id, tier=None, latency=None, status="active",
-         endpoint="chat.completion", label=None):
+def _row(
+    model_id,
+    tier=None,
+    latency=None,
+    status="active",
+    endpoint="chat.completion",
+    label=None,
+):
     entry = {"id": model_id, "status": status, "endpoint_type": endpoint}
     if latency is not None:
         entry["latency_ms"] = latency
@@ -61,14 +67,16 @@ def test_tier_of_a_bool_latency_is_not_used_for_tiering():
 
 
 def test_pickable_keeps_active_chat_high_and_medium():
-    _fresh([
-        _row("a", tier="high", latency=100),
-        _row("b", tier="medium", latency=50),
-        _row("c", tier="low", latency=10),
-        _row("d", tier="minimal", latency=1),
-        _row("e", tier="high", status="stopped"),
-        _row("f", tier="high", endpoint="response"),
-    ])
+    _fresh(
+        [
+            _row("a", tier="high", latency=100),
+            _row("b", tier="medium", latency=50),
+            _row("c", tier="low", latency=10),
+            _row("d", tier="minimal", latency=1),
+            _row("e", tier="high", status="stopped"),
+            _row("f", tier="high", endpoint="response"),
+        ]
+    )
     ids = [e["id"] for e in mc.pickable_models()]
     assert ids == ["a", "b"], ids
 
@@ -81,8 +89,12 @@ def test_auto_is_excluded_from_pickable_models():
 
 
 def test_row_without_an_id_is_dropped():
-    _fresh([{"status": "active", "endpoint_type": "chat.completion"},
-            _row("ok", tier="high")])
+    _fresh(
+        [
+            {"status": "active", "endpoint_type": "chat.completion"},
+            _row("ok", tier="high"),
+        ]
+    )
     ids = [e["id"] for e in mc.pickable_models()]
     assert ids == ["ok"], ids
 
@@ -96,36 +108,45 @@ def test_non_dict_rows_are_ignored():
 
 
 def test_ranking_is_tier_then_latency_then_id():
-    _fresh([
-        _row("slow-high", tier="high", latency=900),
-        _row("fast-high", tier="high", latency=100),
-        _row("fast-medium", tier="medium", latency=10),
-        _row("auto"),
-    ])
+    _fresh(
+        [
+            _row("slow-high", tier="high", latency=900),
+            _row("fast-high", tier="high", latency=100),
+            _row("fast-medium", tier="medium", latency=10),
+            _row("auto"),
+        ]
+    )
     ids = [e["id"] for e in mc.pickable_models()]
     assert ids == ["fast-high", "slow-high", "fast-medium"], ids
 
 
 def test_unknown_latency_sorts_last():
-    _fresh([
-        _row("unknown", tier="high"),
-        _row("known", tier="high", latency=5000),
-    ])
+    _fresh(
+        [
+            _row("unknown", tier="high"),
+            _row("known", tier="high", latency=5000),
+        ]
+    )
     ids = [e["id"] for e in mc.pickable_models()]
     assert ids == ["known", "unknown"], ids
 
 
 def test_bool_latency_is_treated_as_unknown():
-    _fresh([_row("weird", tier="high", latency=True),
-            _row("ok", tier="high", latency=1)])
+    _fresh(
+        [_row("weird", tier="high", latency=True), _row("ok", tier="high", latency=1)]
+    )
     assert [e["id"] for e in mc.pickable_models()] == ["ok", "weird"]
 
 
 def test_renaming_models_changes_nothing_structural():
     """The whole point: a different catalog with the same shape ranks the
     same way, so the router can rotate models freely."""
-    _fresh([_row("brand-new-model", tier="high", latency=250),
-            _row("another-new-one", tier="high", latency=100)])
+    _fresh(
+        [
+            _row("brand-new-model", tier="high", latency=250),
+            _row("another-new-one", tier="high", latency=100),
+        ]
+    )
     assert mc.candidate_models() == ["another-new-one", "brand-new-model"]
 
 
@@ -143,9 +164,13 @@ def test_turn_candidates_auto_falls_back_to_ranked_pool():
 
 
 def test_turn_candidates_explicit_pick_goes_first_verbatim():
-    _fresh([_row("auto"),
+    _fresh(
+        [
+            _row("auto"),
             _row("fast", tier="high", latency=10),
-            _row("slow", tier="high", latency=900)])
+            _row("slow", tier="high", latency=900),
+        ]
+    )
     assert mc.turn_candidates("slow") == ["slow", "fast"]
 
 
@@ -241,9 +266,9 @@ def test_hint_formats_seconds_over_one_second():
 
 def test_hint_marks_rate_limited_and_failed():
     assert "rate limited right now" in mc.model_hint(
-        _row("m", tier="high", status="rate limited"))
-    assert "failing right now" in mc.model_hint(
-        _row("m", tier="high", status="failed"))
+        _row("m", tier="high", status="rate limited")
+    )
+    assert "failing right now" in mc.model_hint(_row("m", tier="high", status="failed"))
 
 
 def test_hint_falls_back_to_free_tier():
@@ -255,14 +280,22 @@ def test_hint_falls_back_to_free_tier():
 
 
 def test_non_chat_rows_are_never_candidates():
-    _fresh([_row("a", tier="high", endpoint="chat.completion"),
+    _fresh(
+        [
+            _row("a", tier="high", endpoint="chat.completion"),
             _row("b", tier="high", endpoint="systemone"),
-            _row("c", tier="high", endpoint="response")])
+            _row("c", tier="high", endpoint="response"),
+        ]
+    )
     assert mc.candidate_models() == ["a"]
 
 
 def test_active_only():
-    _fresh([_row("a", tier="high", status="active"),
+    _fresh(
+        [
+            _row("a", tier="high", status="active"),
             _row("b", tier="high", status="stopped"),
-            _row("c", tier="high", status="")])
+            _row("c", tier="high", status=""),
+        ]
+    )
     assert mc.candidate_models() == ["a"]

@@ -38,9 +38,9 @@ class _FakePage:
     """
 
     def __init__(self, mobile: bool = True):
-        self.platform = (
-            ft.PagePlatform.ANDROID if mobile else ft.PagePlatform.WINDOWS
-        )
+        self.platform = ft.PagePlatform.ANDROID if mobile else ft.PagePlatform.WINDOWS
+        self.web = False  # AdService._is_mobile checks page.web
+        self.services = []  # AdService checks page.services
 
     def run_task(self, fn, *args):
         import asyncio
@@ -194,13 +194,18 @@ def test_settings_ai_section_reports_the_premium_cap():
 
     credits.get_balance = _balance
     credits.daily_cap = _cap
-    services = types.SimpleNamespace(credits=credits, storage=None, ad_service=None,
-                                     premium=types.SimpleNamespace(available=True))
+    services = types.SimpleNamespace(
+        credits=credits,
+        storage=None,
+        ad_service=None,
+        premium=types.SimpleNamespace(available=True),
+    )
     state_ = types.SimpleNamespace(
-        ai_model="auto", ai_router_url="x",
+        ai_model="auto",
+        ai_router_url="x",
         is_premium=True,
     )
-    ai_section.build_ai_section(page, state_, services)   # schedules the load
+    ai_section.build_ai_section(page, state_, services)  # schedules the load
     column = ai_section.build_ai_section(page, state_, services)  # rebuild
     texts = _flatten(column)
     assert any("500" in t for t in texts), texts

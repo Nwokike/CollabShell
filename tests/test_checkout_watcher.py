@@ -342,9 +342,7 @@ def test_reconcile_loop_survives_failure(env, monkeypatch):
     monkeypatch.setattr(premium, "reconcile", _boom_once)
     premium.start_reconcile_loop()
     try:
-        env.loop.run_until_complete(
-            asyncio.wait_for(second_tick.wait(), timeout=5.0)
-        )
+        env.loop.run_until_complete(asyncio.wait_for(second_tick.wait(), timeout=5.0))
     except TimeoutError:
         raise AssertionError(
             "the loop did not tick again after a failing tick — it died"
@@ -356,6 +354,7 @@ def test_reconcile_loop_survives_failure(env, monkeypatch):
 
 def test_reconcile_stamps_after_work(env, monkeypatch):
     """An unreadable recovery ID must not raise, and must stamp the clock."""
+
     async def _bad_get(*_a, **_k):
         raise OSError("unreadable")
 

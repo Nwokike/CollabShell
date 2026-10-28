@@ -11,6 +11,7 @@ from core import constants, tokens
 from core.styles import build_banner_ad, glass_card
 from core.theme import AppColors, adaptive_glass_bg
 from screens.home.cards import action_button, feature_card, step_row
+from services.colab.session_ops import SessionListError
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("HomeScreen")
@@ -26,27 +27,37 @@ def HomeScreen() -> ft.Control:
 
     sessions, set_sessions = ft.use_state([])
     is_loading, set_loading = ft.use_state(False)
+    sessions_error, set_sessions_error = ft.use_state("")
 
     async def _load_sessions():
         set_loading(True)
         try:
             data = await services.colab.list_sessions(auth_method=state.auth_method)
+            set_sessions_error("")
             state.active_sessions = data or []
             set_sessions(list(state.active_sessions))
-            # Clean up orphaned notebooks
-            try:
-                names = [s.get("name") for s in state.active_sessions if s.get("name")]
-                await services.storage.cleanup_orphaned_notebooks(names)
-            except Exception as ex:
-                logger.warning("Orphaned notebook cleanup non-fatal error: %s", ex)
-        except Exception:
-            logger.exception("Failed to load active sessions")
+        except SessionListError as ex:
+            logger.warning("Could not verify active sessions: %s", ex)
             state.active_sessions = []
             set_sessions([])
+            set_sessions_error(
+                "Could not verify Colab sessions. Saved runtimes are not shown as "
+                "active until Colab confirms they are available."
+            )
+        except Exception:
+            logger.exception("Failed to load active sessions")
+            set_sessions_error("Could not load Colab sessions. Try again.")
         finally:
             set_loading(False)
 
-    ft.on_mounted(lambda: page.run_task(_load_sessions))
+    ft.use_effect(
+        lambda: (
+            page.run_task(_load_sessions)
+            if state.is_online and state.is_authenticated
+            else None
+        ),
+        [state.is_online, state.is_authenticated],
+    )
 
     def _on_session_tap(session: dict):
         controller.open_session(session.get("name", ""), "notebook")
@@ -142,15 +153,19 @@ def HomeScreen() -> ft.Control:
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     ft.Text(
-                        "No active sessions",
+                        "Could not verify sessions"
+                        if sessions_error
+                        else "No active sessions",
                         size=tokens.FONT_MD,
                         color=ft.Colors.ON_SURFACE_VARIANT,
                         weight=ft.FontWeight.W_500,
                     ),
                     ft.Text(
-                        "Tap New Notebook, Terminal, or Files to create one.",
+                        sessions_error
+                        or "Tap New Notebook, Terminal, or Files to create one.",
                         size=tokens.FONT_XS,
                         color=ft.Colors.ON_SURFACE_VARIANT,
+                        text_align=ft.TextAlign.CENTER,
                     ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,

@@ -52,6 +52,10 @@ class ControllerMethods:
     open_assistant_history: Callable[[list], None] = field(default=_noop)
     # Bring an assistant-written cell into view (step→cell tap-through)
     reveal_cell: Callable[[str, str], None] = field(default=_noop)
+    # Open terminal tab for a session
+    open_terminal: Callable[[str], None] = field(default=_noop)
+    # Open notebook tab for a session
+    open_notebook: Callable[[str], None] = field(default=_noop)
 
 
 ControllerMethodsCtx = ft.create_context(ControllerMethods())

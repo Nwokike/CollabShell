@@ -44,7 +44,6 @@ def cache_dir() -> str:
     return os.path.join(project_root, "storage", "cache")
 
 
-
 class MemoryLogHandler(logging.Handler):
     """In-memory ring-buffer log handler for live Activity Terminal."""
 

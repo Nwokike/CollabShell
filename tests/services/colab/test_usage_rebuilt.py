@@ -198,8 +198,6 @@ def test_usage_card_helpers():
     assert rows[1] == ("Usage rate", "1.23/hr")
     assert rows[2] == ("Active assignments", "2")
     assert needs_copy is False
-    _, needs_copy = format_usage_values(
-        {"balance": 0.0, "rate": 0.0, "assignments": 0}
-    )
+    _, needs_copy = format_usage_values({"balance": 0.0, "rate": 0.0, "assignments": 0})
     assert needs_copy is True
     assert "free-tier" in free_tier_copy()

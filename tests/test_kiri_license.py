@@ -57,6 +57,7 @@ def _fresh():
 
 def _client(handler):
     """Patch the service's http seam to a mock transport."""
+
     def factory(timeout=None):
         return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
@@ -91,8 +92,13 @@ def test_catalog_parses_products_and_prices(monkeypatch):
         return _response(
             {
                 "products": [
-                    {"id": "monthly", "amount": 4.99, "currency": "USD",
-                     "kind": "recurring", "description": "Renews monthly"},
+                    {
+                        "id": "monthly",
+                        "amount": 4.99,
+                        "currency": "USD",
+                        "kind": "recurring",
+                        "description": "Renews monthly",
+                    },
                     {"id": "lifetime", "amount": 49.99, "currency": "USD"},
                 ]
             }
@@ -448,7 +454,9 @@ def test_transient_failure_retries_once_then_succeeds(monkeypatch):
 
 
 def test_double_transient_failure_does_not_store_or_revoke(monkeypatch):
-    _patch_http(monkeypatch, lambda r: (_ for _ in ()).throw(httpx.TimeoutException("x")))
+    _patch_http(
+        monkeypatch, lambda r: (_ for _ in ()).throw(httpx.TimeoutException("x"))
+    )
     svc, store = _fresh()
     store["kiri_token"] = TOKENS["LIFETIME"]
     store["kiri_recovery_id"] = "KIRI-L-1"

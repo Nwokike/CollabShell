@@ -62,12 +62,24 @@ def make_actions_row(
 # action key (what the service dispatches on), its label, its icon, and a line
 # of help so the menu explains itself without a tour.
 AI_CELL_ACTIONS = (
-    ("explain", "Explain this cell", ft.Icons.MENU_BOOK_OUTLINED,
-     "What it does and why, in plain language"),
-    ("fix", "Fix the error", ft.Icons.BUG_REPORT_OUTLINED,
-     "Diagnose the output and write the corrected code"),
-    ("suggest", "Suggest next cell", ft.Icons.LIGHTBULB_OUTLINE_ROUNDED,
-     "The most useful thing to run next"),
+    (
+        "explain",
+        "Explain this cell",
+        ft.Icons.MENU_BOOK_OUTLINED,
+        "What it does and why, in plain language",
+    ),
+    (
+        "fix",
+        "Fix the error",
+        ft.Icons.BUG_REPORT_OUTLINED,
+        "Diagnose the output and write the corrected code",
+    ),
+    (
+        "suggest",
+        "Suggest next cell",
+        ft.Icons.LIGHTBULB_OUTLINE_ROUNDED,
+        "The most useful thing to run next",
+    ),
 )
 
 
@@ -86,8 +98,11 @@ def ai_menu(page: ft.Page, cell_id: str, on_pick) -> None:
                         ft.Icon(icon, size=tokens.ICON_SM),
                         ft.Column(
                             [
-                                ft.Text(label, size=tokens.FONT_SM,
-                                        weight=ft.FontWeight.W_600),
+                                ft.Text(
+                                    label,
+                                    size=tokens.FONT_SM,
+                                    weight=ft.FontWeight.W_600,
+                                ),
                                 ft.Text(
                                     help_text,
                                     size=tokens.FONT_XS,

@@ -119,7 +119,11 @@ class ColabTerminalClient:
 
         try:
             creds = await asyncio.to_thread(_read)
-        except Exception:
+        except Exception as exc:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(exc, SessionEndedError):
+                raise
             logger.debug(
                 "credential re-read failed for %s",
                 self.session_name,
@@ -271,6 +275,8 @@ class ColabTerminalClient:
             self._reconnecting = False
 
     async def _reconnect_attempts(self, max_attempts: int, base_delay: float):
+        from services.colab.session_ops import SessionEndedError
+
         for attempt in range(1, max_attempts + 1):
             delay = min(base_delay * (2 ** (attempt - 1)), 15.0)
             if self.on_status:
@@ -296,6 +302,11 @@ class ColabTerminalClient:
                 )
                 return
             except Exception as ex:
+                if isinstance(ex, SessionEndedError):
+                    logger.warning("Terminal runtime unavailable: %s", ex)
+                    if self.on_status:
+                        self.on_status(str(ex), False)
+                    break
                 status = getattr(getattr(ex, "response", None), "status_code", None)
                 logger.warning(
                     "Terminal reconnect attempt %d/%d failed: %s%s",
@@ -336,6 +347,10 @@ class ColabTerminalClient:
             logger.info("Terminal '%s' resumed with fresh connection.", self.term_name)
             return True
         except Exception as ex:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(ex, SessionEndedError) and self.on_status:
+                self.on_status(str(ex), False)
             logger.warning("Manual terminal reconnect failed: %s", ex)
             return False
         finally:

@@ -69,7 +69,9 @@ async def _ensure_router_for_turn() -> str | None:
     return await router.router_base()
 
 
-def configure_provider(base_url: str, api_key: str = "any", scope: str = "openai/") -> None:
+def configure_provider(
+    base_url: str, api_key: str = "any", scope: str = "openai/"
+) -> None:
     """Point the model client at a router.
 
     The turn path builds its own client per candidate
@@ -141,8 +143,10 @@ async def run_turn(
     on_thought: Callable[[str], None] | None = None,
     on_tool_start: Callable[[str, dict], None] | None = None,
     on_tool_done: Callable[[str, dict], None] | None = None,
+    on_tool_output: Callable[[str, str], None] | None = None,  # tool_name, output_chunk
     on_round_reset: Callable[[], None] | None = None,
     on_model_step: Callable[[], None] | None = None,
+    on_model_step_done: Callable[[], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     max_rounds: int = MAX_TOOL_ROUNDS,
 ) -> dict:
@@ -195,22 +199,20 @@ async def run_turn(
     if should_stop is not None and should_stop():
         cancel.set()
 
-    query = ""
-    history = [m for m in (messages or []) if m.get("role") != "user"]
-    for entry in reversed(messages or []):
-        if entry.get("role") == "user":
-            query = str(entry.get("content") or "")
-            break
-
+    # Pass the full ordered transcript (user + assistant) to kani.
+    # kani's full_round_stream expects the conversation history including
+    # the current user message as the last entry. The caller already provides
+    # messages in the correct format: [{"role": "user", "content": "..."}, ...]
     result = await kani_backend.run_turn(
-        query,
-        history,
+        "",  # user_text not used when history contains the current turn
+        messages or [],
         system_prompt=system or "",
         # Two passes, one job each: the closures become specs with schemas,
         # then each call gets its step row and its text for the wire.
         specs=with_step_rows(
             build_tool_specs(tools),
             on_step=_step_emitter(on_tool_start, on_tool_done),
+            on_tool_output=on_tool_output,
         ),
         cancel=cancel,
         on_token=on_token or (lambda _t: None),
@@ -219,7 +221,11 @@ async def run_turn(
         # Stop mid-stream must notice between tokens, not at the next round.
         should_stop=should_stop or (lambda: False),
         on_model_step=(lambda: on_model_step()) if on_model_step else None,
+        on_model_step_done=(
+            (lambda: on_model_step_done()) if on_model_step_done else None
+        ),
         on_round_reset=on_round_reset,
+        on_tool_output=on_tool_output,
         base_url=base_url,
         model=model,
         max_rounds=max_rounds,
@@ -259,5 +265,3 @@ def _step_emitter(on_tool_start, on_tool_done):
             )
 
     return emit
-
-

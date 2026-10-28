@@ -12,6 +12,26 @@ below mirror upstream exactly.
 
 from __future__ import annotations
 
+import posixpath
+import re
+
+
+def build_script_destination(name: str, extension: str = ".py") -> str:
+    """Build a safe `/content` destination from a basename and extension."""
+    name = (name or "").strip()
+    extension = (extension or "").strip()
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError("Enter a file name, not a path.")
+    if not extension.startswith("."):
+        extension = f".{extension}"
+    if not re.fullmatch(r"\.[A-Za-z0-9][A-Za-z0-9_-]*", extension):
+        raise ValueError("Enter a valid extension, such as .py.")
+    if name.lower().endswith(extension.lower()):
+        name = name[: -len(extension)]
+    if not name:
+        raise ValueError("Enter a file name.")
+    return posixpath.join("/content", f"{name}{extension}")
+
 
 def _strip_shebang(body: str) -> str:
     """Drop a leading ``#!`` line so it is not sent as Python source."""
@@ -39,7 +59,7 @@ def build_run_file_payload(source: str, argv: list[str] | None = None) -> str:
         "import sys, warnings\n"
         f"sys.argv = {argv_literal}\n"
         "__name__ = '__main__'\n"
-        'warnings.filterwarnings(\'ignore\', message="To exit: use")\n'
+        "warnings.filterwarnings('ignore', message=\"To exit: use\")\n"
         f"{body}"
     )
 

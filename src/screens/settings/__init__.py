@@ -48,7 +48,9 @@ def _section_error(label: str, ex: BaseException) -> ft.Control:
             ],
             spacing=tokens.SPACE_XS,
         ),
-        padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM),
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_SM
+        ),
         border_radius=tokens.RADIUS_MD,
         bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.ERROR),
     )
@@ -90,11 +92,7 @@ def SettingsScreen() -> ft.Control:
         ("AUTHENTICATION", build_account_section),
         ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
         ("ASSISTANT", build_ai_section),
-        *(
-            []
-            if CHANNEL == "play"
-            else [("PREMIUM", build_premium_section)]
-        ),
+        *([] if CHANNEL == "play" else [("PREMIUM", build_premium_section)]),
         ("HARDWARE DEFAULTS", build_hardware_section),
         ("EXECUTION", build_execution_section),
         ("SESSION BEHAVIOR", build_behavior_section),

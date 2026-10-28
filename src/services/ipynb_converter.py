@@ -253,9 +253,8 @@ def merge_script_cells(old_cells: list, new_cells: list[dict]) -> list[dict]:
     for new in new_cells or []:
         carry = None
         for index, old in enumerate(remaining):
-            if (
-                old.get("type") == new.get("type")
-                and (old.get("source") or "") == (new.get("source") or "")
+            if old.get("type") == new.get("type") and (old.get("source") or "") == (
+                new.get("source") or ""
             ):
                 carry = remaining.pop(index)
                 break
@@ -332,7 +331,9 @@ def _outputs_from_ipynb(outputs: list[dict]) -> list[dict]:
         if ot == "stream":
             text_raw = out.get("text", "")
             text = "".join(text_raw) if isinstance(text_raw, list) else str(text_raw)
-            result.append({"type": "stream", "text": text, "name": out.get("name", "stdout")})
+            result.append(
+                {"type": "stream", "text": text, "name": out.get("name", "stdout")}
+            )
         elif ot == "error":
             result.append(
                 {

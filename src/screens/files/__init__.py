@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import posixpath
 
@@ -25,6 +26,7 @@ from screens.files.components import (
     build_empty_dir_view,
     parent_path,
 )
+from screens.files.text_editor import is_python_file, open_text_file_editor
 from state import AppStateCtx, ServiceCtx
 
 logger = logging.getLogger("files")
@@ -101,16 +103,21 @@ def FilesScreen(session_name: str) -> ft.Control:
     async def _fetch(path: str):
         set_is_loading(True)
         set_error_msg("")
+        cancelled = False
         try:
             files = await services.colab.ls(
                 path, session_name=session_name, auth_method=state.auth_method
             )
             set_listing(files or [])
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         except Exception as ex:
             set_error_msg(str(ex))
             set_listing([])
         finally:
-            set_is_loading(False)
+            if not cancelled:
+                set_is_loading(False)
 
     ft.use_effect(
         lambda: page.run_task(_fetch, current_path), [current_path, session_name]
@@ -133,6 +140,16 @@ def FilesScreen(session_name: str) -> ft.Control:
             _toggle_select(item["name"])
         elif is_dir:
             _navigate(posixpath.normpath(posixpath.join(current_path, item["name"])))
+        elif is_python_file(item["name"]):
+            remote_path = posixpath.normpath(posixpath.join(current_path, item["name"]))
+            page.run_task(
+                open_text_file_editor,
+                page,
+                services.colab,
+                session_name,
+                state.auth_method,
+                remote_path,
+            )
         else:
             set_selection_mode(True)
             set_selected({item["name"]})
@@ -325,9 +342,7 @@ def FilesScreen(session_name: str) -> ft.Control:
                     width=440,
                     height=320,
                 ),
-                actions=[
-                    ft.TextButton("Close", on_click=lambda e: page.pop_dialog())
-                ],
+                actions=[ft.TextButton("Close", on_click=lambda e: page.pop_dialog())],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
         )

@@ -85,7 +85,9 @@ def _session(tmp_path, monkeypatch, controller=None, **state_kw):
     monkeypatch.setattr(conversations, "conversations_dir", lambda: tmp_path)
     monkeypatch.setattr(conversations, "ensure_active", lambda: "chat1")
     session = assistant_view.ChatSession(
-        FakePage(), _state(**state_kw), NS(credits=None, storage=None),
+        FakePage(),
+        _state(**state_kw),
+        NS(credits=None, storage=None),
         controller,
     )
     return session
@@ -153,7 +155,9 @@ def test_the_balance_is_tappable_and_opens_the_wallet(tmp_path, monkeypatch):
     from components import wallet_dialog
 
     monkeypatch.setattr(
-        wallet_dialog, "show_wallet_dialog", lambda page, state, services: wallet.append(1)
+        wallet_dialog,
+        "show_wallet_dialog",
+        lambda page, state, services: wallet.append(1),
     )
     session._open_wallet()
     assert wallet == [1], "tapping the balance must open the wallet dialog"

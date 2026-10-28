@@ -29,7 +29,11 @@ async def _run_with_token_heal(service, session_name: str, auth_method: str, op)
         healed = False
         try:
             healed = await service.refresh_session_token(session_name, auth_method)
-        except Exception:
+        except Exception as refresh_error:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(refresh_error, SessionEndedError):
+                raise
             logger.debug("token heal failed for %s", session_name, exc_info=True)
         if not healed:
             raise

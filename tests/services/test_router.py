@@ -92,7 +92,6 @@ def _patch_probe(monkeypatch, ports):
         made.append(client)
         return client
 
-
     monkeypatch.setattr(router.httpx, "AsyncClient", factory)
     return made
 
@@ -105,10 +104,13 @@ def test_a_foreign_service_on_8082_is_not_adopted(monkeypatch):
     Adopting whatever happens to be listening would point the assistant at
     something that is not a router at all."""
     # A service on 8082 that is NOT a router, and a real one on 8083.
-    _patch_probe(monkeypatch, [
-        (8082, 200, {"adapter": "some-other-server"}),
-        (8083, 200, {"adapter": "kiri-router"}),
-    ])
+    _patch_probe(
+        monkeypatch,
+        [
+            (8082, 200, {"adapter": "some-other-server"}),
+            (8083, 200, {"adapter": "kiri-router"}),
+        ],
+    )
     found = _run(router._probe_existing_router())
     assert found == 8083, "a foreign service must be skipped"
 
@@ -136,7 +138,6 @@ def test_a_broken_probe_is_not_a_miss(monkeypatch):
 
     def boom(**kw):
         raise RuntimeError("no CA store")
-
 
     monkeypatch.setattr(router.httpx, "AsyncClient", boom)
     assert _run(router._probe_existing_router()) is None
@@ -223,7 +224,6 @@ def test_verify_forgets_a_dead_port_and_re_attaches(monkeypatch):
                 state["dead"] = False
                 raise OSError("gone")
             return _FakeResponse(200, {"adapter": "kiri-router"})
-
 
     monkeypatch.setattr(router.httpx, "AsyncClient", Client)
     router._probe_miss_until = 1e18  # a stale miss must be cleared too

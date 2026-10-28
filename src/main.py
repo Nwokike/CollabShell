@@ -202,7 +202,9 @@ class AppController:
                     if name:
                         try:
                             await self.colab_service.stop_session(
-                                name, auth_method=state.auth_method
+                                name,
+                                auth_method=state.auth_method,
+                                reason="window_close",
                             )
                         except Exception as exc:
                             logger.warning(
@@ -240,10 +242,20 @@ class AppController:
 
         def _on_connectivity_change(e):
             try:
-                types = getattr(e, "connectivity", None) or [e.data]
-                state.is_online = ft.ConnectivityType.NONE not in types
+                types = getattr(e, "connectivity", None)
+                if types is None:
+                    data = getattr(e, "data", None)
+                    types = [data] if data is not None else None
             except Exception:
-                state.is_online = True
+                types = None
+            if types is not None and (not types or ft.ConnectivityType.NONE in types):
+                state.is_online = False
+                state.connectivity_status = "offline"
+                if state.auth_status == "unavailable":
+                    state.auth_status = "unknown"
+            else:
+                state.connectivity_status = "checking"
+                page.run_task(self._bootstrap_state)
             page.update()
 
         connectivity.on_change = _on_connectivity_change
@@ -264,22 +276,6 @@ class AppController:
         self.credit_service = CreditService()
         self.license_service = KiriLicenseService(self.storage)
         self.premium_service = PremiumService(page, state, self.storage)
-        # OS notifications: a finished cell, a ready runtime, a drained credit
-        # balance. Constructed here so it is on the Services bundle the whole
-        # tree already reads, and so permission can be asked once at boot.
-        from services.notify import NotifyService
-
-        self.notify_service = NotifyService(
-            state=state,
-            # The deep-link router. Without it the payloads the service builds
-            # are dead strings: on_tap resolves them, but nothing was
-            # registered to act on the result, so every tap dropped.
-            router=self._route_notification_payload,
-        )
-        page.run_task(self.notify_service.initialise)
-        # A tap that happened while the app was dead is replayed on the next
-        # start by the plugin; without this the notification looks inert.
-        page.run_task(self.notify_service.replay_launch)
         # Unlock from the cached token, then start the hourly re-check.
         page.run_task(self.premium_service.load_local)
         self.premium_service.start_reconcile_loop()
@@ -460,7 +456,22 @@ class AppController:
 
             if reveal_cell(session_name, cell_id):
                 return
-            show_notification(page, "That cell is no longer in the notebook.", is_warning=True)
+            show_notification(
+                page, "That cell is no longer in the notebook.", is_warning=True
+            )
+
+        def _open_terminal(session_name: str):
+            """Switch to the terminal tab for a session."""
+            # Navigate to the session screen with terminal mode
+            state.active_session_name = session_name
+            state.session_mode = "terminal"
+            _navigate_tab(2)  # Terminal tab
+
+        def _open_notebook(session_name: str):
+            """Switch to the notebook tab for a session."""
+            state.active_session_name = session_name
+            state.session_mode = "notebook"
+            _navigate_tab(1)  # Notebooks tab
 
         def _toggle_theme():
             if page.theme_mode == ft.ThemeMode.SYSTEM:
@@ -496,6 +507,8 @@ class AppController:
             open_assistant=_open_assistant,
             open_assistant_history=_open_assistant_history,
             reveal_cell=_reveal_cell,
+            open_terminal=_open_terminal,
+            open_notebook=_open_notebook,
         )
 
         services = Services(
@@ -505,7 +518,6 @@ class AppController:
             page=page,
             credits=self.credit_service,
             premium=self.premium_service,
-            notify=self.notify_service,
         )
 
         # ── Register Lifecycle & Disconnect Handlers ──────────────────────────
@@ -597,7 +609,6 @@ class AppController:
             saved_ai_router = await self.storage.get(constants.STORAGE_AI_ROUTER_URL)
             state.ai_router_url = saved_ai_router or ""
 
-
             saved_thinking = await self.storage.get(constants.STORAGE_AI_THINKING)
             if saved_thinking in constants.THINKING_DEPTHS:
                 state.ai_thinking = saved_thinking
@@ -615,10 +626,6 @@ class AppController:
                 except Exception as ex:
                     logger.warning("AI provider configuration skipped: %s", ex)
 
-            saved_notify = await self.storage.get(constants.STORAGE_NOTIFY_ENABLED)
-            if saved_notify is not None:
-                state.notify_enabled = saved_notify == "true"
-
             saved_logtostderr = await self.storage.get(constants.STORAGE_LOGTOSTDERR)
             if saved_logtostderr is not None:
                 state.logtostderr = saved_logtostderr == "true"
@@ -627,35 +634,63 @@ class AppController:
         except Exception as e:
             logger.warning("Failed to restore some preferences: %s", e)
 
+    async def _refresh_auth_state(self) -> bool:
+        """Verify Google reachability and auth without treating timeouts as sign-out."""
+        try:
+            await self.colab_service._ensure_online()
+        except Exception as exc:
+            state.is_online = False
+            state.connectivity_status = "offline"
+            if state.auth_status == "unavailable":
+                state.auth_status = "unknown"
+            state.auth_error = (
+                "Could not reach Google services. Check your connection and retry."
+            )
+            logger.warning("Google reachability check failed (%s)", type(exc).__name__)
+            return False
+
+        state.is_online = True
+        state.connectivity_status = "online"
+        try:
+            auth_info = await self.colab_service.check_auth()
+        except Exception as exc:
+            state.auth_status = "unavailable"
+            state.auth_error = (
+                "Could not verify sign-in with Google "
+                f"({type(exc).__name__}). Check your connection and retry."
+            )
+            logger.warning("Auth verification failed (%s)", type(exc).__name__)
+            return False
+
+        auth_status = auth_info.get("status")
+        if auth_status is None:
+            auth_status = (
+                "authenticated"
+                if auth_info.get("authenticated", False)
+                else "unauthenticated"
+            )
+        state.auth_status = auth_status
+        state.auth_error = auth_info.get("error", "")
+        if auth_status == "unavailable":
+            logger.warning("Google sign-in verification is temporarily unavailable")
+            return False
+
+        state.is_authenticated = bool(auth_info.get("authenticated", False))
+        state.auth_email = auth_info.get("email", "")
+        return True
+
     async def _bootstrap_state(self):
         """Check initial connectivity and authenticate."""
         try:
-            try:
-                connectivity = await self.page.connectivity.get_connectivity()
-                state.is_online = ft.ConnectivityType.NONE not in connectivity
-            except Exception as exc:
-                logger.warning("Connectivity check failed: %s", exc)
-                state.is_online = True
-
-            if not state.is_online:
+            if not await self._refresh_auth_state():
+                state.active_sessions = []
                 return
 
-            try:
-                auth_info = await self.colab_service.check_auth()
-                state.is_authenticated = auth_info.get("authenticated", False)
-                state.auth_email = auth_info.get("email", "")
-                if state.is_authenticated:
-                    state.onboarding_done = True
-                    await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
-                else:
-                    onboarding_done = await self.storage.get(
-                        constants.STORAGE_ONBOARDING_DONE
-                    )
-                    state.onboarding_done = onboarding_done == "true"
-            except Exception as ex:
-                logger.warning("Auth check failed: %s", ex)
-                state.is_authenticated = False
-                state.onboarding_done = False
+            onboarding_done = await self.storage.get(constants.STORAGE_ONBOARDING_DONE)
+            state.onboarding_done = onboarding_done == "true"
+            if state.is_authenticated:
+                state.onboarding_done = True
+                await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
 
             # Preload active sessions ONLY if authenticated
             if state.is_authenticated:
@@ -667,7 +702,16 @@ class AppController:
                         or []
                     )
                 except Exception as ex:
-                    logger.warning("Preload sessions failed: %s", ex)
+                    from services.colab.session_ops import SessionListError
+
+                    if isinstance(ex, SessionListError):
+                        logger.warning(
+                            "Preload session assignments could not be verified"
+                        )
+                    else:
+                        logger.warning(
+                            "Preload sessions failed (%s)", type(ex).__name__
+                        )
                     state.active_sessions = []
                 # Fire-and-forget usage prefetch (warms the shared 24h cache
                 # for Home chip + sheet dialog; never blocks app_ready).
@@ -699,70 +743,6 @@ class AppController:
             except Exception as exc:
                 logger.debug("Bootstrap page update skipped: %s", exc)
 
-    def _route_notification_payload(self, path: str, params: dict, action: str = "") -> None:
-        """Resolve a notification tap into real navigation.
-
-        The payloads are built in services/notify.py as
-        ``collabshell://<path>?k=v&k=v``; this turns them into the app's own
-        navigation, so tapping "Open" lands on the exact tab and cell that
-        finished rather than on the front door.
-
-        ``action`` is the button pressed: ``open`` (just go there) or ``fix``
-        (a failed cell — open it and hand it to the in-cell Fix). Handling only
-        one would make the other button decorative: "Ask AI to fix" used to do
-        exactly what "Open" did, which is worse than not offering it.
-        """
-        import urllib.parse
-
-        try:
-            if path == "session":
-                name = params.get("name", "")
-                if not name:
-                    return
-                encoded = urllib.parse.quote(name)
-                self._navigate(f"/session?session={encoded}")
-                cell_id = params.get("cell", "")
-                tab_id = params.get("tab", "")
-                if cell_id:
-                    # Land on the cell after the tab has mounted, and for the
-                    # fix action ask the assistant to repair it once it is
-                    # there — the cell is the context the fixer needs.
-                    self._pending_reveal = (encoded, tab_id, cell_id)
-                    if action == "fix":
-                        self._pending_fix = (encoded, tab_id, cell_id)
-            elif path == "assistant":
-                self._open_assistant()
-            elif path == "home":
-                self._navigate("/home")
-        except Exception:
-            logger.debug("notification route failed", exc_info=True)
-
-    def consume_pending_reveal(self) -> tuple[str, str, str] | None:
-        """Take the tab+cell a notification deep-linked to, once.
-
-        Called by the notebook view after it has restored its tabs: the cells
-        do not exist before then, so revealing earlier would silently fail.
-        Cleared on take so a stale tap cannot fire twice.
-        """
-        pending = getattr(self, "_pending_reveal", None)
-        if pending is None:
-            return None
-        self._pending_reveal = None
-        return pending
-
-    def consume_pending_fix(self) -> tuple[str, str, str] | None:
-        """Take the cell the "Ask AI to fix" button named, once.
-
-        Called by the notebook view after the tab has mounted: it reveals the
-        cell and returns its coordinates so the caller can run the fix. Cleared
-        on take, so a stale tap cannot fire twice.
-        """
-        pending = getattr(self, "_pending_fix", None)
-        if pending is None:
-            return None
-        self._pending_fix = None
-        return pending
-
     def _register_lifecycle_handlers(self):
         page = self.page
 
@@ -792,7 +772,9 @@ class AppController:
                         try:
                             loop.run_until_complete(
                                 self.colab_service.stop_session(
-                                    name, auth_method=state.auth_method
+                                    name,
+                                    auth_method=state.auth_method,
+                                    reason="process_exit",
                                 )
                             )
                         except Exception as exc:
@@ -822,19 +804,9 @@ class AppController:
             from screens.assistant_view import shutdown_assistant
 
             shutdown_assistant(page)
-            if state.keep_alive_on_disconnect or not state.active_sessions:
-                return
-            for s in state.active_sessions:
-                name = s.get("name")
-                if name:
-                    try:
-                        await self.colab_service.stop_session(
-                            name, auth_method=state.auth_method
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "Disconnect cleanup failed for %s: %s", name, exc
-                        )
+            # A transport disconnect can be a temporary web refresh or network
+            # drop, not an explicit request to terminate remote compute. The
+            # confirmed native-window close and process-exit hooks own auto-stop.
 
         page.on_disconnect = on_disconnect
 
@@ -851,26 +823,34 @@ class AppController:
                 return
 
             logger.info("[lifecycle] app resumed — re-probing connectivity")
-            try:
-                connectivity = await page.connectivity.get_connectivity()
-                state.is_online = ft.ConnectivityType.NONE not in connectivity
-            except Exception as exc:
-                logger.warning("[lifecycle] connectivity probe failed: %s", exc)
+            await self._refresh_auth_state()
 
-            if state.is_online and state.is_authenticated and state.active_sessions:
+            if (
+                state.is_online
+                and state.is_authenticated
+                and state.auth_status == "authenticated"
+            ):
                 # Re-sync assignments first: it re-mints the short-lived
                 # runtime-proxy tokens in the local store, so the terminal
                 # re-attach below (and any new tab the user opens) presents
                 # a fresh token instead of the expired one.
                 try:
-                    state.active_sessions = (
-                        await self.colab_service.list_sessions(
-                            auth_method=state.auth_method
-                        )
-                        or state.active_sessions
+                    state.active_sessions = await self.colab_service.list_sessions(
+                        auth_method=state.auth_method
                     )
                 except Exception as exc:
-                    logger.debug("[lifecycle] session re-sync skipped: %s", exc)
+                    from services.colab.session_ops import SessionListError
+
+                    if isinstance(exc, SessionListError):
+                        logger.warning(
+                            "[lifecycle] session assignments could not be verified"
+                        )
+                    else:
+                        logger.warning(
+                            "[lifecycle] session re-sync failed (%s)",
+                            type(exc).__name__,
+                        )
+                    state.active_sessions = []
 
             # Terminal WebSockets die while the app is backgrounded (Colab's
             # proxy closes idle sockets) but the PTYs stay alive — re-attach.
@@ -898,10 +878,10 @@ class AppController:
                 session = getattr(page, "_assistant_session", None)
                 if session is not None:
                     session.close()  # minimize, not shut down
-                else:
-                    shutdown_assistant(page)
-                page.update()
-                return
+            else:
+                shutdown_assistant(page)
+            page.update()
+            return
             if state.active_subview:
                 self._navigate("/home")
             elif len(page.views) > 1:

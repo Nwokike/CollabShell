@@ -19,8 +19,6 @@ CHANGELOG: dict[str, str] = {
         "- Multiple notebooks per session, each with isolated saves/exports,\n"
         "  plus Python script tabs — plain .py files you edit, run, and save\n"
         "  back to the session\n"
-        "- OS notifications when a long cell finishes, a runtime is ready, or\n"
-        "  credits run out\n"
         "- Command palette (Ctrl+K) and Ctrl+I to ask about the active cell\n"
         "- Premium: restore purchases, the recovery ID shown with copy, and\n"
         "  honest pricing from the licence service"

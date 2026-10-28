@@ -135,9 +135,7 @@ def test_tampered_payload_is_rejected():
     claims = json.loads(raw)
     claims["status"] = "active"
     claims["ent"] = "stolen"
-    forged = (
-        base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
-    )
+    forged = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
     with pytest.raises(TokenRejected) as info:
         verify_token(f"{head}.{forged}.{sig}", PUBLIC_KEY, APP)
     assert info.value.reason == "bad_signature"

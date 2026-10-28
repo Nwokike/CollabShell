@@ -19,7 +19,7 @@ from core import constants, tokens
 from core.shortcuts import Binding, shortcuts_router
 from core.theme import brand_color
 from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
-from state import AppStateCtx, ControllerMethodsCtx
+from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("AppShell")
 
@@ -45,6 +45,7 @@ def AppShell() -> Control:
     """Top-level shell. Reads observable state; renders Onboarding, Subview, or Dashboard."""
     controller = ft.use_context(ControllerMethodsCtx)
     state = ft.use_context(AppStateCtx)
+    services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
     # ── 0. Global keyboard shortcuts (desktop) ────────────────────────────────
@@ -83,9 +84,18 @@ def AppShell() -> Control:
         """Global commands. Session actions are contributed by the session
         screen; these are the ones available everywhere."""
         commands = [
-            ("Command palette", ft.Icons.KEYBOARD_COMMAND_KEY_ROUNDED, "Ctrl+K", _open_palette),
-            ("Keyboard shortcuts", ft.Icons.KEYBOARD_ROUNDED, "F1",
-             lambda: open_shortcuts_help(page, "global")),
+            (
+                "Command palette",
+                ft.Icons.KEYBOARD_COMMAND_KEY_ROUNDED,
+                "Ctrl+K",
+                _open_palette,
+            ),
+            (
+                "Keyboard shortcuts",
+                ft.Icons.KEYBOARD_ROUNDED,
+                "F1",
+                lambda: open_shortcuts_help(page, "global"),
+            ),
         ]
         commands.append(
             (
@@ -96,13 +106,21 @@ def AppShell() -> Control:
             )
         )
         commands.extend(
-            ("Go to " + name, ft.Icons.LAUNCH_ROUNDED, f"Ctrl+{i + 1}",
-             lambda i=i: controller.navigate_tab(i))
+            (
+                "Go to " + name,
+                ft.Icons.LAUNCH_ROUNDED,
+                f"Ctrl+{i + 1}",
+                lambda i=i: controller.navigate_tab(i),
+            )
             for i, name in enumerate(_TAB_NAMES)
         )
         commands.append(
-            ("Toggle theme", ft.Icons.BRIGHTNESS_6_ROUNDED, "Light / dark / system",
-             controller.toggle_theme)
+            (
+                "Toggle theme",
+                ft.Icons.BRIGHTNESS_6_ROUNDED,
+                "Light / dark / system",
+                controller.toggle_theme,
+            )
         )
         return commands
 
@@ -211,7 +229,9 @@ def AppShell() -> Control:
         if ours:
             # Only the meaning changes between "new chat" and "restore", so
             # relabel in place rather than rebuilding the button.
-            wanted = "Back to Assistant" if state.assistant_minimized else "Ask Assistant"
+            wanted = (
+                "Back to Assistant" if state.assistant_minimized else "Ask Assistant"
+            )
             if current.tooltip != wanted:
                 current.tooltip = wanted
                 try:
@@ -283,23 +303,89 @@ def AppShell() -> Control:
         )
 
     # ── 3. Offline Mode ───────────────────────────────────────────────────────
-    if not state.is_online:
+    if (not state.is_online or state.auth_status == "unavailable") and not (
+        state.active_subview
+    ):
 
         async def _on_retry():
             try:
-                connectivity = await page.connectivity.get_connectivity()
-                state.is_online = ft.ConnectivityType.NONE not in connectivity
-                if state.is_online:
-                    controller.show_snack("Back online!")
-                else:
-                    controller.show_snack(constants.ERR_NETWORK)
-            except Exception:
-                logger.exception("Suppressed exception")
+                await services.colab._ensure_online()
+            except Exception as exc:
+                state.is_online = False
+                state.connectivity_status = "offline"
+                if state.auth_status == "unavailable":
+                    state.auth_status = "unknown"
+                logger.warning(
+                    "Retry could not reach Google services (%s)",
+                    type(exc).__name__,
+                )
+                controller.show_snack(constants.ERR_NETWORK, is_error=True)
+                page.update()
+                return
 
-        return OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
+            state.is_online = True
+            state.connectivity_status = "online"
+            try:
+                auth_info = await services.colab.check_auth()
+            except Exception as exc:
+                state.auth_status = "unavailable"
+                state.auth_error = (
+                    "Could not verify sign-in with Google "
+                    f"({type(exc).__name__}). Check your connection and retry."
+                )
+                logger.warning(
+                    "Retry auth verification failed (%s)", type(exc).__name__
+                )
+                controller.show_snack(state.auth_error, is_error=True)
+                page.update()
+                return
+
+            auth_status = auth_info.get("status")
+            if auth_status is None:
+                auth_status = (
+                    "authenticated"
+                    if auth_info.get("authenticated", False)
+                    else "unauthenticated"
+                )
+            state.auth_status = auth_status
+            state.auth_error = auth_info.get("error", "")
+            if auth_status == "unavailable":
+                controller.show_snack(state.auth_error, is_error=True)
+            else:
+                state.is_authenticated = bool(auth_info.get("authenticated", False))
+                state.auth_email = auth_info.get("email", "")
+                if state.is_authenticated:
+                    state.onboarding_done = True
+                    await services.storage.set(
+                        constants.STORAGE_ONBOARDING_DONE, "true"
+                    )
+                controller.show_snack(
+                    "Back online!"
+                    if state.is_authenticated
+                    else "Connection restored. Sign in to continue."
+                )
+            page.update()
+
+        verification_unavailable = state.auth_status == "unavailable"
+        return OfflineFlow(
+            on_retry=lambda: page.run_task(_on_retry),
+            title=(
+                "Sign-in verification unavailable"
+                if verification_unavailable
+                else "No internet connection"
+            ),
+            message=(
+                state.auth_error
+                if verification_unavailable
+                else "Check your network and try again.\n"
+                "You need a connection to sign in and manage sessions."
+            ),
+        )
 
     # ── 4. Onboarding Presentation ────────────────────────────────────────────
-    if not state.onboarding_done or not state.is_authenticated:
+    if not state.active_subview and (
+        not state.onboarding_done or not state.is_authenticated
+    ):
         from screens.onboarding import OnboardingScreen
 
         return OnboardingScreen(key=ft.ValueKey("onboarding"))

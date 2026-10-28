@@ -25,6 +25,7 @@ from screens.files.components import (
     build_empty_dir_view,
     parent_path,
 )
+from screens.files.text_editor import is_python_file, open_text_file_editor
 
 logger = logging.getLogger("ManageFilesModal")
 
@@ -342,6 +343,16 @@ def show_manage_files_modal(
         elif is_dir:
             new_path = posixpath.normpath(posixpath.join(current_path, item["name"]))
             page.run_task(_fetch_listing, new_path)
+        elif is_python_file(item["name"]):
+            remote_path = posixpath.normpath(posixpath.join(current_path, item["name"]))
+            page.run_task(
+                open_text_file_editor,
+                page,
+                colab,
+                session_name,
+                auth_method,
+                remote_path,
+            )
         else:
             selected_files.clear()
             selected_files.add(item["name"])

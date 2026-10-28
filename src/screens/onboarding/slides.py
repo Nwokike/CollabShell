@@ -258,7 +258,8 @@ def build_page_3(
                             # in it, the same rule "Get Started" follows on the
                             # last slide: a button for an empty field can only
                             # answer "paste something first".
-                            disabled=is_loading_auth or not (auth_code_val or "").strip(),
+                            disabled=is_loading_auth
+                            or not (auth_code_val or "").strip(),
                             width=300,
                             height=46,
                             style=ft.ButtonStyle(

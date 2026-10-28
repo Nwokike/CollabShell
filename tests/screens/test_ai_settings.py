@@ -133,9 +133,9 @@ def test_ai_section_shows_premium_cap_when_premium():
     from screens.settings.ai_section import build_ai_section
 
     page, state, services, _ = _stubs(is_premium=True)
-    build_ai_section(page, state, services)   # schedules the credits load
+    build_ai_section(page, state, services)  # schedules the credits load
     page.wait_idle() if hasattr(page, "wait_idle") else None
-    column = build_ai_section(page, state, services)   # rebuild after the load
+    column = build_ai_section(page, state, services)  # rebuild after the load
     texts = _flatten_texts(column)
     assert any("500" in t for t in texts), texts
 
@@ -147,7 +147,9 @@ def test_ai_section_is_safe_without_services():
     page = _FakePage()
     state = NS(
         ai_model="auto",
-        ai_router_url="x", ai_help=True, is_premium=False,
+        ai_router_url="x",
+        ai_help=True,
+        is_premium=False,
     )
     services = NS(credits=None, premium=None, storage=None, ad_service=None)
     column = build_ai_section(page, state, services)
@@ -302,11 +304,11 @@ def test_catalog_ranks_by_tier_then_latency(monkeypatch):
 
     _with_transport(monkeypatch, handler)
     model_catalog.apply_catalog([])  # force a real fetch, not stale rows
-    entries = asyncio.run(
-        model_catalog.refresh_catalog("http://router/v1")
-    )
+    entries = asyncio.run(model_catalog.refresh_catalog("http://router/v1"))
     assert [e["id"] for e in entries] == [
-        "fast-high", "slow-high", "fast-medium",
+        "fast-high",
+        "slow-high",
+        "fast-medium",
     ]
 
 
@@ -321,9 +323,7 @@ def test_unreachable_router_returns_no_pickable_rows(monkeypatch):
     _with_transport(monkeypatch, handler)
     model_catalog.apply_catalog([_row("stale", "high")])
     model_catalog._catalog_fetched_at = 0.0
-    entries = asyncio.run(
-        model_catalog.refresh_catalog("http://router/v1")
-    )
+    entries = asyncio.run(model_catalog.refresh_catalog("http://router/v1"))
     # The stale catalog is kept for display, so pickable still reports it —
     # the picker shows a message only when nothing is pickable at all.
     assert [e["id"] for e in entries] == ["stale"]
@@ -337,16 +337,21 @@ def test_untiered_rows_are_not_offered(monkeypatch):
     def handler(request):
         return httpx.Response(
             200,
-            json={"data": [{"id": "no-tier", "status": "active",
-                            "endpoint_type": "chat.completion"}]},
+            json={
+                "data": [
+                    {
+                        "id": "no-tier",
+                        "status": "active",
+                        "endpoint_type": "chat.completion",
+                    }
+                ]
+            },
         )
 
     _with_transport(monkeypatch, handler)
     model_catalog._catalog = []
     model_catalog._catalog_fetched_at = 0.0
-    entries = asyncio.run(
-        model_catalog.refresh_catalog("http://router/v1")
-    )
+    entries = asyncio.run(model_catalog.refresh_catalog("http://router/v1"))
     assert entries == [], entries
 
 
@@ -403,7 +408,8 @@ def test_picker_shows_tier_and_latency(monkeypatch):
 
     def handler(request):
         return httpx.Response(
-            200, json={"data": [_row("fast", "high", 120), _row("slow", "medium", 2400)]}
+            200,
+            json={"data": [_row("fast", "high", 120), _row("slow", "medium", 2400)]},
         )
 
     _with_transport(monkeypatch, handler)
@@ -491,10 +497,18 @@ def test_wallet_shows_ad_topup_on_mobile():
     from components.wallet_dialog import show_wallet_dialog
 
     page, state, services, _ = _stubs()
+    # Add ad_cooldown_end to state for the wallet dialog
+    state.ad_cooldown_end = 0.0
+
+    # Create a proper ad_service stub with _is_mobile method
+    class _AdServiceStub:
+        def _is_mobile(self):
+            return True
+
     services = NS(
         credits=services.credits,
         storage=None,
-        ad_service=NS(_is_mobile=True),
+        ad_service=_AdServiceStub(),
         premium=services.premium,
     )
     show_wallet_dialog(page, state, services)
@@ -507,8 +521,10 @@ def test_premium_user_sees_no_ad_topup():
 
     page, state, services, _ = _stubs(is_premium=True)
     services = NS(
-        credits=services.credits, storage=None,
-        ad_service=NS(_is_mobile=True), premium=services.premium,
+        credits=services.credits,
+        storage=None,
+        ad_service=NS(_is_mobile=True),
+        premium=services.premium,
     )
     show_wallet_dialog(page, state, services)
     texts = _flatten_texts(page.dialogs[-1])
@@ -639,7 +655,9 @@ def test_premium_render_takes_the_recovery_id_as_an_argument():
     src = pathlib.Path("src/screens/settings/premium_section.py").read_text(
         encoding="utf-8"
     )
-    assert "storage.data" not in src, "StorageService has no .data — read via the service"
+    assert "storage.data" not in src, (
+        "StorageService has no .data — read via the service"
+    )
     assert "recovery" in src, "the recovery id must still be surfaced"
 
 

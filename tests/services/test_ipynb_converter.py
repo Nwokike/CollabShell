@@ -64,9 +64,7 @@ def test_py_roundtrip_multiline_and_blank_lines_inside_cells():
 
 
 def test_cells_to_py_emits_expected_markers():
-    out = cells_to_py(
-        [_cell("a = 1"), _cell("hello **world**", cell_type="markdown")]
-    )
+    out = cells_to_py([_cell("a = 1"), _cell("hello **world**", cell_type="markdown")])
     assert "# %%\na = 1" in out
     assert "# %% [markdown]\nhello **world**" in out
 
@@ -277,9 +275,7 @@ def test_exported_notebook_is_valid_nbformat_shape():
         assert "metadata" in c and "source" in c
         if c["cell_type"] == "code":
             assert "outputs" in c
-            assert c["execution_count"] is None or isinstance(
-                c["execution_count"], int
-            )
+            assert c["execution_count"] is None or isinstance(c["execution_count"], int)
 
 
 def test_exported_stream_text_is_list_of_lines():

@@ -43,7 +43,7 @@ def _row(title: str, subtitle: str, trailing=None, icon=None) -> ft.Row:
                 spacing=tokens.SPACE_XXS,
                 expand=True,
             ),
-            *( [trailing] if trailing is not None else [] ),
+            *([trailing] if trailing is not None else []),
         ],
         spacing=tokens.SPACE_LG,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -194,7 +194,9 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         write into them — it writes observable state and lets the section
         rebuild, the way the credits line does.
         """
-        state.router_status_revision = (getattr(state, "router_status_revision", 0) or 0) + 1
+        state.router_status_revision = (
+            getattr(state, "router_status_revision", 0) or 0
+        ) + 1
 
     # The address the app is actually talking to. Shown, not editable: neither
     # DDGS nor lm-router exposes a router URL in Settings (DDGS has no router
@@ -211,7 +213,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         selectable=True,
         font_family="monospace",
     )
-
 
     # How hard the model thinks before answering. Both DDGS and lm-router expose
     # this dropdown with these exact options; "auto" sends no `reasoning_effort`
@@ -248,7 +249,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         on_select=lambda e: page.run_task(_save_thinking, e.control.value),
     )
 
-
     def _pick_model(pg, st, svcs):
         from components.model_picker import show_model_picker
 
@@ -282,7 +282,6 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
         ),
         icon=ft.Icons.MEMORY_ROUNDED,
     )
-
 
     return ft.Column(
         controls=[
@@ -342,6 +341,3 @@ def _model_subtitle(state) -> str:
     from components.model_picker import model_subtitle
 
     return model_subtitle(state)
-
-
-

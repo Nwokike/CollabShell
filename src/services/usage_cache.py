@@ -32,7 +32,7 @@ async def read_cached_usage(storage) -> dict | None:
         data = json.loads(raw)
         try:
             data["fetched_at"] = float(ts) if ts else 0.0
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             data["fetched_at"] = 0.0
         return data
     except Exception:
@@ -46,7 +46,7 @@ def is_fresh(cached: dict | None) -> bool:
         return False
     try:
         age = time.time() - float(cached.get("fetched_at", 0.0))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return age <= CACHE_TTL_SEC
 
@@ -93,12 +93,16 @@ async def get_usage_cached(services, auth_method: str = "oauth2") -> dict | None
             "cached": True,
             "reason": "ok",
         }
-    payload = {k: cached[k] for k in ("balance", "rate", "assignments")} if cached else None
+    payload = (
+        {k: cached[k] for k in ("balance", "rate", "assignments")} if cached else None
+    )
     fresh = await get_usage_impl(colab, auth_method, cached_fallback=payload)
     if fresh is not None and not fresh.get("cached", True):
         if storage is not None:
             await write_cached_usage(storage, fresh)
-        return {k: fresh[k] for k in ("balance", "rate", "assignments", "cached", "reason")}
+        return {
+            k: fresh[k] for k in ("balance", "rate", "assignments", "cached", "reason")
+        }
     if fresh is not None:
         return fresh
     if cached is not None:

@@ -68,11 +68,23 @@ def test_full_tool_set_is_exposed():
     names = {t.__name__ for t in tools}
     for expected in (
         # Sessions first: without these the rest are unreachable on a fresh app.
-        "list_sessions", "create_session",
-        "_exec", "read_notebook", "read_terminal", "install_package",
-        "list_variables", "read_file", "list_files", "upload_file",
-        "write_cells", "list_notebook_tabs", "get_usage", "get_log",
-        "restart_kernel", "stop_session", "delete_file",
+        "list_sessions",
+        "create_session",
+        "_exec",
+        "read_notebook",
+        "read_terminal",
+        "install_package",
+        "list_variables",
+        "read_file",
+        "list_files",
+        "upload_file",
+        "write_cells",
+        "list_notebook_tabs",
+        "get_usage",
+        "get_log",
+        "restart_kernel",
+        "stop_session",
+        "delete_file",
     ):
         assert expected in names, f"missing tool: {expected}"
 
@@ -238,9 +250,8 @@ def test_destructive_tools_run_when_allowed():
         calls["rm"] += 1
         return True
 
-    services.colab = NS(
-        restart_kernel=_restart, stop_session=_stop, rm=_rm
-    )
+    services.colab = NS(restart_kernel=_restart, stop_session=_stop, rm=_rm)
+
     async def _allow(label, detail=""):
         return True
 
@@ -303,7 +314,9 @@ def test_write_cells_reaches_the_notebook_bridge():
 
     inserted = []
     notebook_view._SESSION_BRIDGES["sess"] = {
-        "insert_cells": lambda tab_id, cells: (inserted.append((tab_id, cells)), cells)[1],
+        "insert_cells": lambda tab_id, cells: (inserted.append((tab_id, cells)), cells)[
+            1
+        ],
         "active_tab_id": lambda: "nb1",
     }
     try:
@@ -561,7 +574,7 @@ def test_every_parameter_type_matches_its_annotation():
     for fn in ai_tools.build_tools("sess", *_fresh()):
         signature = inspect.signature(fn, eval_str=True)
         for name, param in signature.parameters.items():
-            if name == "ask_confirm":
+            if name in {"ask_confirm", "on_tool_output"}:
                 continue
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
@@ -608,7 +621,7 @@ def test_the_shapes_that_need_explaining_have_it():
 
     for fn in ai_tools.build_tools("sess", *_fresh()):
         for name, param in inspect.signature(fn, eval_str=True).parameters.items():
-            if name == "ask_confirm":
+            if name in {"ask_confirm", "on_tool_output"}:
                 continue
             annotated = typing.get_origin(param.annotation) is Annotated
             description = _props_for(fn)[name]["description"]
@@ -674,8 +687,14 @@ def test_every_vm_reading_tool_warns_about_untrusted_content():
     """
     from services import ai_tools as mod
 
-    readers = ("_exec", "read_notebook", "read_terminal", "list_variables",
-               "read_file", "list_files")
+    readers = (
+        "_exec",
+        "read_notebook",
+        "read_terminal",
+        "list_variables",
+        "read_file",
+        "list_files",
+    )
     non_readers = ("get_log", "get_usage", "install_package", "list_notebook_tabs")
     built = {fn.__name__: fn for fn in mod.build_tools("sess", *_fresh())}
     for name in readers:
@@ -718,7 +737,13 @@ def test_every_array_parameter_declares_its_items():
 
     # kani's own renderer is the proof: it is what crashed.
     tools = [
-        {"function": {"name": s.name, "description": s.desc, "parameters": s.parameters}}
+        {
+            "function": {
+                "name": s.name,
+                "description": s.desc,
+                "parameters": s.parameters,
+            }
+        }
         for s in specs
     ]
     assert function_calling.render_tool_namespace("functions", tools)

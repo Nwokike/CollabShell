@@ -19,8 +19,8 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-_HERE = Path(__file__).resolve().parent          # tests/e2e
-_REPO = _HERE.parent.parent                       # repo root
+_HERE = Path(__file__).resolve().parent  # tests/e2e
+_REPO = _HERE.parent.parent  # repo root
 # Only `src` goes on the path. Adding `tests/` itself would let
 # `tests/services/` shadow the real `services` package.
 if str(_REPO / "src") not in sys.path:
@@ -138,7 +138,12 @@ def _patch_bridges(monkeypatch) -> None:
 
 
 def _state(**overrides) -> NS:
-    d = {"auth_method": "oauth2", "default_timeout": 30.0, "is_premium": False, "credits_revision": 0}
+    d = {
+        "auth_method": "oauth2",
+        "default_timeout": 30.0,
+        "is_premium": False,
+        "credits_revision": 0,
+    }
     d.update(overrides)
     return NS(**d)
 
@@ -215,9 +220,7 @@ def test_a_tool_round_bills_one_step_per_model_call(monkeypatch):
     # row-identity contract is proven against the real emitter rather than a
     # stub that fabricates ids.
     def on_start(name, payload):
-        rows.append(
-            {"id": payload["id"], "label": name, "state": "running"}
-        )
+        rows.append({"id": payload["id"], "label": name, "state": "running"})
 
     def on_done(name, payload):
         rows.append({"id": payload["id"], "label": name, "state": "done", **payload})

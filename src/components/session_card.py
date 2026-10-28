@@ -4,7 +4,7 @@ import flet as ft
 
 from core import tokens
 from core.styles import hardware_badge, shape_chip, status_dot
-from core.theme import adaptive_glass_bg, adaptive_glass_border
+from core.theme import AppColors, adaptive_glass_bg, adaptive_glass_border
 
 
 def build_session_card(
@@ -19,22 +19,28 @@ def build_session_card(
     variant = session.get("variant", "DEFAULT")
     accel_str = session.get("accelerator_label") or session.get("accelerator", "NONE")
     status = session.get("status", "IDLE")
+    is_unverified = status == "UNVERIFIED"
     running = session.get("running")
     last_exec = session.get("last_execution")
     is_running = running is not None
 
     # Last execution subtitle
     subtitle = ""
-    if last_exec:
+    if is_unverified:
+        subtitle = "Colab has not confirmed this runtime. Local documents are kept."
+    elif last_exec:
         subtitle = f"Last: {last_exec.get('file', '')} at {last_exec.get('time', '')}"
     elif status == "IDLE":
         subtitle = "Ready for commands"
+    status_indicator = status_dot(is_running)
+    if is_unverified:
+        status_indicator.bgcolor = AppColors.WARNING
 
     return ft.Container(
         content=ft.Row(
             controls=[
                 # Status dot
-                status_dot(is_running),
+                status_indicator,
                 # Session info
                 ft.Column(
                     controls=[

@@ -207,7 +207,9 @@ def _seed_state(status="starting", port=None):
     state.ai_router_port = port
 
 
-def test_a_transition_notifies_open_session(monkeypatch, probe, instant_event, clean_router_state):
+def test_a_transition_notifies_open_session(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     _seed_state()
     probe(("starting", None), ("ready", 8083))
     session = _FakeSession()
@@ -217,7 +219,9 @@ def test_a_transition_notifies_open_session(monkeypatch, probe, instant_event, c
     assert watchdog._last == ("ready", 8083), watchdog._last
 
 
-def test_the_first_probe_corrects_the_boot_guess(monkeypatch, probe, instant_event, clean_router_state):
+def test_the_first_probe_corrects_the_boot_guess(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     """The app boots guessing "starting"; the first probe replaces the guess.
 
     Seeding a private baseline instead would leave a router that was already up
@@ -232,7 +236,9 @@ def test_the_first_probe_corrects_the_boot_guess(monkeypatch, probe, instant_eve
     assert watchdog._last == ("unavailable", None), watchdog._last
 
 
-def test_a_first_probe_matching_the_boot_guess_is_silent(monkeypatch, probe, instant_event, clean_router_state):
+def test_a_first_probe_matching_the_boot_guess_is_silent(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     """Nothing changed, so nothing is painted."""
     _seed_state("starting", None)
     probe(("starting", None))
@@ -242,7 +248,9 @@ def test_a_first_probe_matching_the_boot_guess_is_silent(monkeypatch, probe, ins
     assert session.nudges == 0, session.nudges
 
 
-def test_a_repeated_status_is_not_a_transition(monkeypatch, probe, instant_event, clean_router_state):
+def test_a_repeated_status_is_not_a_transition(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     _seed_state()
     probe(("starting", None), ("ready", 8083), ("ready", 8083))
     session = _FakeSession()
@@ -251,7 +259,9 @@ def test_a_repeated_status_is_not_a_transition(monkeypatch, probe, instant_event
     assert session.nudges == 1, session.nudges
 
 
-def test_a_router_coming_back_is_a_transition(monkeypatch, probe, instant_event, clean_router_state):
+def test_a_router_coming_back_is_a_transition(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     # The app already knows there is no router, so every nudge below is a real
     # transition rather than the correction of a boot-time guess.
     _seed_state("unavailable", None)
@@ -380,7 +390,9 @@ def test_the_watchdog_publishes_a_passive_transition(
     assert state.ai_router_status == "unavailable", state.ai_router_status
 
 
-def test_the_first_tick_publishes_the_state_it_reads(monkeypatch, probe, instant_event, clean_router_state):
+def test_the_first_tick_publishes_the_state_it_reads(
+    monkeypatch, probe, instant_event, clean_router_state
+):
     """The first observation must reach state, not only a private baseline.
 
     The app boots guessing "starting" whether or not a router is already up;

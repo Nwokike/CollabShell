@@ -59,9 +59,7 @@ async def ask(
     if result.get("out_of_credits"):
         raise OutOfCredits(result.get("error") or "Out of assistant credits.")
     if not result.get("ok"):
-        raise ai_service.AIUnavailable(
-            result.get("error") or "Assistant unavailable"
-        )
+        raise ai_service.AIUnavailable(result.get("error") or "Assistant unavailable")
     return result.get("text", "")
 
 

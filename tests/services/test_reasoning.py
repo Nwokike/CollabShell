@@ -37,9 +37,7 @@ def test_reasoning_is_read_from_every_field_seen_in_the_wild():
 def test_reasoning_details_as_a_list_of_parts():
     """`reasoning_details` is sometimes structured parts, not a string."""
     payload = {
-        "choices": [
-            {"delta": {"reasoning_details": [{"text": "a"}, {"text": "b"}]}}
-        ]
+        "choices": [{"delta": {"reasoning_details": [{"text": "a"}, {"text": "b"}]}}]
     }
     assert _reasoning_from_frame(payload) == "ab"
 
@@ -139,12 +137,12 @@ def test_reasoning_reaches_the_callback_while_kani_still_gets_the_answer(router)
             base_url=router,
             max_retries=0,
             timeout=timeout,
-            http_client=build_thought_client(
-                timeout=timeout, max_retries=0, tap=tap
-            ),
+            http_client=build_thought_client(timeout=timeout, max_retries=0, tap=tap),
         )
         engine = ReasoningEngine(
-            client=client, model="m", api_type="chat_completions",
+            client=client,
+            model="m",
+            api_type="chat_completions",
             max_context_size=4096,
         )
         out = []
@@ -179,7 +177,11 @@ def test_an_error_frame_is_recorded_not_swallowed():
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
             self.wfile.write(
-                ("data: " + json.dumps({"error": {"message": "upstream died"}}) + "\n\n").encode()
+                (
+                    "data: "
+                    + json.dumps({"error": {"message": "upstream died"}})
+                    + "\n\n"
+                ).encode()
             )
             self.wfile.write(b"data: [DONE]\n\n")
 
@@ -196,11 +198,16 @@ def test_an_error_frame_is_recorded_not_swallowed():
     async def go():
         timeout = httpx.Timeout(20.0, connect=4.0)
         client = openai.AsyncOpenAI(
-            api_key="any", base_url=base, max_retries=0, timeout=timeout,
+            api_key="any",
+            base_url=base,
+            max_retries=0,
+            timeout=timeout,
             http_client=build_thought_client(timeout=timeout, max_retries=0, tap=tap),
         )
         engine = ReasoningEngine(
-            client=client, model="m", api_type="chat_completions",
+            client=client,
+            model="m",
+            api_type="chat_completions",
             max_context_size=4096,
         )
         async for _ in engine.stream(messages=[ChatMessage.user("hi")]):

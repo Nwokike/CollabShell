@@ -142,7 +142,9 @@ def build_session_fab(
         if has_cells:
             menu_items.extend(
                 [
-                    _item("Export Notebook…", ft.Icons.DOWNLOAD_ROUNDED, on_export_ipynb),
+                    _item(
+                        "Export Notebook…", ft.Icons.DOWNLOAD_ROUNDED, on_export_ipynb
+                    ),
                     _item(
                         "Clear All Outputs",
                         ft.Icons.DELETE_SWEEP_ROUNDED,

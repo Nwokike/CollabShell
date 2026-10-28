@@ -24,6 +24,7 @@ import asyncio
 import inspect
 import logging
 import typing
+from collections.abc import Callable
 from typing import Annotated
 
 from kani import AIParam
@@ -114,7 +115,10 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         """
         return bool(_live_session())
 
-    async def _exec(code: str) -> str:
+    async def _exec(
+        code: str,
+        on_tool_output: Callable[[str, str], None] | None = None,
+    ) -> str:
         """Run Python on the session's kernel and return its output.
 
         Use this to load data, compute, plot, or inspect anything. The kernel
@@ -130,15 +134,15 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             chunks: list[str] = []
 
             def _on_output(payload):
-                entry = (
-                    payload
-                    if isinstance(payload, dict)
-                    else {"text": str(payload)}
-                )
+                entry = payload if isinstance(payload, dict) else {"text": str(payload)}
                 if "traceback" in entry:
                     chunks.append("\n".join(map(str, entry["traceback"])))
                 else:
-                    chunks.append(str(entry.get("text", "")))
+                    text = str(entry.get("text", ""))
+                    chunks.append(text)
+                    # Stream to UI in real-time
+                    if on_tool_output and text:
+                        on_tool_output("_exec", text)
 
             # exec_code is a ColabService method — it owns the timeout and
             # OAuth-intercept defaults. Importing it from the package module
@@ -182,9 +186,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             # reporting an empty notebook.
             active_tab = bridges.get("active_tab")
             active_tab = active_tab() if callable(active_tab) else None
-            if isinstance(active_tab, dict) and (
-                active_tab.get("view") == "script"
-            ):
+            if isinstance(active_tab, dict) and (active_tab.get("view") == "script"):
                 script_path = active_tab.get("path") or "the script's path"
                 return (
                     f"The active tab is a Python script ({script_path}), not a "
@@ -216,7 +218,9 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return f"Could not read the notebook: {ex}"
 
     async def read_terminal(
-        lines: Annotated[int, AIParam("How many of the most recent lines to read.")] = 60,
+        lines: Annotated[
+            int, AIParam("How many of the most recent lines to read.")
+        ] = 60,
     ) -> str:
         """Read the last lines of the session's terminal output.
 
@@ -253,9 +257,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
                 [package],
                 state.auth_method,
             )
-            return (
-                f"Installed {package}." if ok else f"Could not install {package}."
-            )
+            return f"Installed {package}." if ok else f"Could not install {package}."
         except Exception as ex:
             logger.warning("AI tool install_package failed: %s", ex)
             return f"Install failed for {package}: {ex}"
@@ -426,7 +428,9 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return f"Could not read usage: {ex}"
 
     async def get_log(
-        lines: Annotated[int, AIParam("How many of the most recent events to read.")] = 40,
+        lines: Annotated[
+            int, AIParam("How many of the most recent events to read.")
+        ] = 40,
     ) -> str:
         """Read the session's recent activity log. Read-only."""
         if not _has_session():
@@ -453,9 +457,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         user who already has a session does not want a second VM. Read-only.
         """
         try:
-            sessions = await services.colab.list_sessions(
-                auth_method=state.auth_method
-            )
+            sessions = await services.colab.list_sessions(auth_method=state.auth_method)
         except Exception as ex:
             logger.warning("AI tool list_sessions failed: %s", ex)
             return f"Could not list sessions: {ex}"
@@ -573,9 +575,7 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         if not _has_session():
             return NO_SESSION
         try:
-            ok = await services.colab.restart_kernel(
-                _live_session(), state.auth_method
-            )
+            ok = await services.colab.restart_kernel(_live_session(), state.auth_method)
             return (
                 "Kernel restarted. Variables are gone; cells are intact."
                 if ok
@@ -602,10 +602,10 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         if not _has_session():
             return NO_SESSION
         try:
-            ok = await services.colab.stop_session(
-                target, state.auth_method
+            ok = await services.colab.stop_session(target, state.auth_method)
+            return (
+                f"Session '{target}' stopped." if ok else f"Could not stop '{target}'."
             )
-            return f"Session '{target}' stopped." if ok else f"Could not stop '{target}'."
         except Exception as ex:
             logger.warning("AI tool stop_session failed: %s", ex)
             return f"Stop failed for '{target}': {ex}"
@@ -718,7 +718,10 @@ def _param_schema(annotation) -> dict:
     if inner in (list, tuple):  # a bare `list` — nothing says what is inside
         return {"type": "array", "items": {"type": "string"}}
     args = typing.get_args(inner)
-    return {"type": "array", "items": _param_schema(args[0]) if args else {"type": "string"}}
+    return {
+        "type": "array",
+        "items": _param_schema(args[0]) if args else {"type": "string"},
+    }
 
 
 def _param_description(name: str, param) -> str:
@@ -767,14 +770,14 @@ def tool_specs(tools: list, *, on_step=None) -> list:
             # at runtime, and a lookup against the string "int" would silently
             # fall back to "string" for every parameter.
             signature = inspect.signature(fn, eval_str=True)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         properties: dict[str, dict] = {}
         required: list[str] = []
         for name, param in signature.parameters.items():
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
-            if name == "ask_confirm":  # bound, never schema-visible
+            if name in {"ask_confirm", "on_tool_output"}:
                 continue
             properties[name] = {
                 **_param_schema(param.annotation),
@@ -791,7 +794,12 @@ def tool_specs(tools: list, *, on_step=None) -> list:
         desc = (inspect.getdoc(fn) or fn.__name__).strip()
         run = fn
 
-        async def wrapped(spec_run=run, spec_name=fn.__name__, **kwargs):
+        async def wrapped(
+            spec_run=run,
+            spec_name=fn.__name__,
+            on_tool_output: Callable[[str, str], None] | None = None,
+            **kwargs,
+        ):
             if on_step is not None:
                 on_step("start", spec_name)
             try:
@@ -799,6 +807,8 @@ def tool_specs(tools: list, *, on_step=None) -> list:
                 # the model reads and what the step row renders. A failure is
                 # NOT caught here — that would turn it into an ordinary string
                 # and the step row would lose the error it needs to show.
+                if "on_tool_output" in inspect.signature(spec_run).parameters:
+                    kwargs["on_tool_output"] = on_tool_output
                 return await spec_run(**kwargs)
             finally:
                 if on_step is not None:

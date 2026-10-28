@@ -44,7 +44,9 @@ def test_the_assistant_switches_are_gone():
         "_save_help",
     ):
         text = (_SRC / "screens/settings/ai_section.py").read_text(encoding="utf-8")
-        assert needle not in text, f"the Settings assistant section still has {needle!r}"
+        assert needle not in text, (
+            f"the Settings assistant section still has {needle!r}"
+        )
 
 
 def test_no_source_file_names_the_removed_flags():

@@ -99,7 +99,7 @@ def _format_updated(store: dict) -> str:
         return ""
     try:
         age = time.time() - float(ts)
-    except (TypeError, ValueError, OSError, OverflowError):
+    except TypeError, ValueError, OSError, OverflowError:
         return ""
     if age < 0:
         age = 0.0
@@ -126,7 +126,7 @@ def _usage_is_stale(store: dict) -> bool:
         return False
     try:
         return (time.time() - float(ts)) > USAGE_STALE_SEC
-    except (TypeError, ValueError, OSError, OverflowError):
+    except TypeError, ValueError, OSError, OverflowError:
         return False
 
 
@@ -357,8 +357,14 @@ def reset_usage_card() -> None:
     """Forget card state + autoload marker (used on re-auth/sign-out paths)."""
     global _USAGE_AUTOLOAD_KEY
     _USAGE.update(
-        {"usage": None, "error": False, "loading": False, "loaded": False,
-         "reason": "no-cache", "updated_at": ""}
+        {
+            "usage": None,
+            "error": False,
+            "loading": False,
+            "loaded": False,
+            "reason": "no-cache",
+            "updated_at": "",
+        }
     )
     _USAGE_AUTOLOAD_KEY = object()
 

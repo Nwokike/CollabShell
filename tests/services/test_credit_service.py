@@ -182,7 +182,9 @@ def test_sweep_does_not_void_a_real_charge():
     # A sweep that touches nothing must not mark anything settled, or a later
     # commit silently charges zero.
     asyncio.run(svc.sweep_expired_holds(max_age_sec=1000))
-    assert asyncio.run(svc.commit(tx, 3)) == before - 3, "an untouched sweep voided a charge"
+    assert asyncio.run(svc.commit(tx, 3)) == before - 3, (
+        "an untouched sweep voided a charge"
+    )
 
 
 def test_cost_step_is_one_credit():

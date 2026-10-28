@@ -181,8 +181,10 @@ def test_unsafe_ids_are_rejected(conv_dir):
 def test_model_history_is_flat_and_capped(conv_dir):
     cs.save_conversation(
         "c1",
-        [{"role": "user" if i % 2 == 0 else "assistant", "content": str(i)}
-         for i in range(50)],
+        [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": str(i)}
+            for i in range(50)
+        ],
     )
     history = cs.model_history("c1", limit=10)
     assert len(history) == 10

@@ -7,6 +7,7 @@ where the client calls it (module-level import in terminal_client).
 
 import asyncio
 import sys
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
@@ -36,7 +37,19 @@ def _store_with(session):
 
 
 def _session_record(token="tok-fresh", url="https://8080-m.example.dev"):
-    return NS(token=token, url=url)
+    return NS(
+        token=token,
+        url=url,
+        endpoint="m-s-abc",
+        token_expires_at=datetime.now(UTC) + timedelta(hours=1),
+        variant="DEFAULT",
+        accelerator="NONE",
+        machine_shape="STANDARD",
+        kernel_id=None,
+        session_id=None,
+        last_execution=None,
+        running=None,
+    )
 
 
 def test_refresh_credentials_picks_up_fresh_token():

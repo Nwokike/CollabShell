@@ -57,7 +57,6 @@ def test_changelog_covers_phases_and_fallback_intact():
         "High-RAM",
         "environment variables",
         "router",
-        "notifications",
         "Assistant",
     ):
         assert needle.lower() in entry.lower(), f"missing: {needle}"

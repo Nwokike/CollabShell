@@ -80,11 +80,14 @@ class ColabService:
         return await refresh_session_token_impl(self, session_name, auth_method)
 
     async def stop_session(
-        self, session_name: str, auth_method: str = "oauth2"
+        self,
+        session_name: str,
+        auth_method: str = "oauth2",
+        reason: str = "user_requested",
     ) -> bool:
         from services.colab.session_ops import stop_session_impl
 
-        return await stop_session_impl(self, session_name, auth_method)
+        return await stop_session_impl(self, session_name, auth_method, reason)
 
     async def restart_kernel(
         self, session_name: str, auth_method: str = "oauth2"

@@ -59,7 +59,6 @@ def _restore_process_globals():
             "ai_router_status",
             "ai_router_port",
             "credits_revision",
-            "notify_enabled",
         )
         if hasattr(state, field)
     }

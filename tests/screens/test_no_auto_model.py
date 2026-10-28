@@ -58,18 +58,34 @@ def test_no_preference_means_the_ranked_head_serves():
 
     state.ai_model = ""
     rows = [
-        {"id": "fast-high", "status": "active",
-         "endpoint_type": "chat.completion", "latency_ms": 100,
-         "rate_hint": {"tier": "high"}},
-        {"id": "slow-high", "status": "active",
-         "endpoint_type": "chat.completion", "latency_ms": 900,
-         "rate_hint": {"tier": "high"}},
-        {"id": "fast-medium", "status": "active",
-         "endpoint_type": "chat.completion", "latency_ms": 50,
-         "rate_hint": {"tier": "medium"}},
-        {"id": "low-tier", "status": "active",
-         "endpoint_type": "chat.completion", "latency_ms": 10,
-         "rate_hint": {"tier": "low"}},
+        {
+            "id": "fast-high",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 100,
+            "rate_hint": {"tier": "high"},
+        },
+        {
+            "id": "slow-high",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 900,
+            "rate_hint": {"tier": "high"},
+        },
+        {
+            "id": "fast-medium",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 50,
+            "rate_hint": {"tier": "medium"},
+        },
+        {
+            "id": "low-tier",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 10,
+            "rate_hint": {"tier": "low"},
+        },
     ]
     model_catalog.apply_catalog(rows)
     try:
@@ -87,10 +103,20 @@ def test_turn_candidates_never_contain_a_rotation_entry():
 
     state.ai_model = ""
     rows = [
-        {"id": "auto", "status": "active", "endpoint_type": "chat.completion",
-         "latency_ms": 5, "rate_hint": {"tier": "high"}},
-        {"id": "m1", "status": "active", "endpoint_type": "chat.completion",
-         "latency_ms": 100, "rate_hint": {"tier": "high"}},
+        {
+            "id": "auto",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 5,
+            "rate_hint": {"tier": "high"},
+        },
+        {
+            "id": "m1",
+            "status": "active",
+            "endpoint_type": "chat.completion",
+            "latency_ms": 100,
+            "rate_hint": {"tier": "high"},
+        },
     ]
     model_catalog.apply_catalog(rows)
     try:

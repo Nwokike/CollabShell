@@ -91,7 +91,9 @@ def test_recovery_id_row_shows_the_id():
     """The subtitle is the ID itself, not a sentence about it."""
     from screens.settings import premium_section as ps
 
-    fake_state = NS(is_premium=False, license_prices={}, license_recovery_id="KIRI-L-ABC")
+    fake_state = NS(
+        is_premium=False, license_prices={}, license_recovery_id="KIRI-L-ABC"
+    )
     fake_premium = NS(
         available=True,
         license=NS(claims=None, recovery_id=_async_return("KIRI-L-ABC")),

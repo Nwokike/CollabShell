@@ -117,10 +117,6 @@ class AppState:
     # One of: ready | stopped | unavailable | starting
     ai_router_status: str = "starting"
     ai_router_port: int | None = None
-    # OS notifications for finished work. On by default once the user grants
-    # permission (granting IS the opt-in), with a Settings switch to turn the
-    # channel off without revoking the OS permission.
-    notify_enabled: bool = True
     # The open conversation (single owner: conversation_service).
     active_assistant_conversation: str = ""
     # Cached list for the history dialog (refreshed by conversation_service).
@@ -137,6 +133,8 @@ class AppState:
 
     # ── Connectivity ─────────────────────────────────────────────────────────
     is_online: bool = True
+    connectivity_status: str = "checking"
+    auth_status: str = "unknown"
 
     # ── Services ──────────────────────────────────────────────────────────────
     ad_service = None
@@ -157,6 +155,8 @@ class AppState:
         self.app_ready = False
         self.is_online = True
         self.ad_service = None
+        self.ad_cooldown_end: float = 0.0
+        self.last_interstitial_ts: float = 0.0  # central 60s gap guard
         self.notebook_cells = []
 
 

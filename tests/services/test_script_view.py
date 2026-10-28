@@ -21,6 +21,7 @@ from services.ipynb_converter import (
 )
 from services.script_runner import (
     build_run_file_payload,
+    build_script_destination,
     payload_line_offset,
 )
 
@@ -240,7 +241,7 @@ def test_payload_strips_shebang():
 
 def test_payload_silences_ipython_exit_warning():
     out = build_run_file_payload("x = 1")
-    assert 'warnings.filterwarnings(\'ignore\', message="To exit: use")' in out
+    assert "warnings.filterwarnings('ignore', message=\"To exit: use\")" in out
 
 
 def test_payload_line_offset_matches_actual_prelude():
@@ -258,6 +259,21 @@ def test_payload_preserves_source_verbatim_after_prelude():
 def test_payload_with_no_argv_defaults_to_empty_list():
     out = build_run_file_payload("x = 1")
     assert "sys.argv = []" in out
+
+
+def test_script_destination_uses_content_and_selected_extension():
+    assert build_script_destination("py2", ".py") == "/content/py2.py"
+    assert build_script_destination("py2.py", ".py") == "/content/py2.py"
+    assert build_script_destination("analysis", "ipynb") == "/content/analysis.ipynb"
+
+
+def test_script_destination_rejects_paths_and_invalid_extensions():
+    import pytest
+
+    with pytest.raises(ValueError, match="not a path"):
+        build_script_destination("../py2", ".py")
+    with pytest.raises(ValueError, match="valid extension"):
+        build_script_destination("py2", "py/")
 
 
 # ── source guards for the view wiring ─────────────────────────────────────
@@ -286,7 +302,7 @@ def test_notebook_view_wires_script_tab_creation():
     assert "def _show_new_script_dialog(" in src
     # Toolbar swaps by document kind instead of always showing +Code/+Markdown.
     assert "build_notebook_toolbar(" in src
-    assert 'on_add_code=None,' in src
+    assert "on_add_code=None," in src
     # A script tab has no cells, so the assistant's cell bridge refuses it.
     assert '"view") == "script":' in src
     # Storage knows the two document kinds.
@@ -295,15 +311,12 @@ def test_notebook_view_wires_script_tab_creation():
 
 
 def test_script_view_edits_the_document_directly():
-    """The editor hands its text to the parent as-is: no re-splitting, no
-    merge, and the parent's copy stays current on every keystroke."""
+    """The editor treats the script as one document, not a projected notebook."""
     import pathlib
 
-    src = pathlib.Path("src/screens/session/script_view.py").read_text(
-        encoding="utf-8"
-    )
-    assert "block_at_offset" in src
-    assert "on_selection_change" in src
+    src = pathlib.Path("src/screens/session/script_view.py").read_text(encoding="utf-8")
+    assert "block_at_offset" not in src
+    assert "on_selection_change" not in src
     assert "services.colab.exec_code" in src
     assert "build_run_file_payload" in src
     # Re-seed only on tab change — not every render.
@@ -316,13 +329,19 @@ def test_script_view_edits_the_document_directly():
 
 
 def test_script_view_writes_the_file_to_the_session():
-    """"Save to session" stages the text in a temp file and uploads it, the
-    only route the contents API offers to write a file."""
+    """Saving a script uses the same remote text-file path as file-manager edits."""
     import pathlib
 
-    src = pathlib.Path("src/screens/session/script_view.py").read_text(
-        encoding="utf-8"
-    )
-    assert "tempfile.NamedTemporaryFile" in src
-    assert "services.colab.upload" in src
-    assert "Path(local).unlink" in src
+    src = pathlib.Path("src/screens/session/script_view.py").read_text(encoding="utf-8")
+    assert "from services.colab.text_files import upload_text_file" in src
+    assert "await upload_text_file(" in src
+    assert '"Save to Colab"' in src
+
+
+def test_plain_script_does_not_offer_run_cell():
+    import pathlib
+
+    src = pathlib.Path("src/screens/session/script_view.py").read_text(encoding="utf-8")
+    assert '"Run Cell"' not in src
+    assert "block_at_offset" not in src
+    assert "has_cell_markers" not in src

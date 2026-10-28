@@ -165,18 +165,18 @@ async def exec_code_impl(
 
                 if not is_terminal_error(e):
                     raise
-                # 404/401: the cached runtime-proxy token may simply have
-                # expired while the assignment stayed alive. Heal it once
-                # before pruning a session that may still be server-side.
+                # 404/401 can mean a stale proxy token or an unavailable
+                # runtime. Refresh once, but never infer assignment death here.
                 if attempt == 0 and _heal_runtime_token(st, session_name):
                     fresh = load_session_fresh(st, session_name)
                     if fresh:
                         s = fresh
                         runtime = _new_runtime()
                         continue
-                st.prune_session(session_name)
                 raise ValueError(
-                    "Session lost (404/401). It may have timed out."
+                    "Colab could not reach this runtime (401/404). "
+                    "The local session record and documents were kept; "
+                    "verify the runtime in Colab before retrying."
                 ) from e
 
         s.running = "exec(code)"
@@ -386,11 +386,14 @@ async def exec_code_impl(
                                 runtime.colab_request_hook = drivefs_hook
                             continue
                     logger.warning(
-                        f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+                        "Kernel execution returned 404 for session %s; "
+                        "preserving its local record",
+                        session_name,
                     )
-                    st.store.remove(session_name)
                     raise RuntimeError(
-                        "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
+                        "Colab could not reach this runtime (404 Not Found). "
+                        "The local session record and documents were kept; "
+                        "verify the runtime in Colab before retrying."
                     ) from e
                 st.history.log_event(
                     session_name,
@@ -410,8 +413,16 @@ async def exec_code_impl(
             if intercept_oauth and runtime:
                 runtime.colab_request_hook = None
             s.running = None
-            if load_session_fresh(st, session_name):
-                st.store.add(s)
-            runtime.stop()
+            try:
+                if load_session_fresh(st, session_name):
+                    st.store.add(s)
+            except Exception:
+                logger.warning(
+                    "Could not refresh session state during execution cleanup; "
+                    "preserving its local record",
+                    exc_info=True,
+                )
+            finally:
+                runtime.stop()
 
     return await asyncio.to_thread(_exec)

@@ -21,7 +21,6 @@ class Services:
     page: object = None  # ft.Page ref for services that need it directly
     credits: object = None  # assistant credit metering (CreditService)
     premium: object = None  # entitlement reconciliation (PremiumService)
-    notify: object = None  # OS notifications (NotifyService)
 
 
 ServiceCtx = ft.create_context(Services())

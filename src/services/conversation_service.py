@@ -124,7 +124,7 @@ def _read(path: Path) -> dict | None:
         return None
     try:
         payload = json.loads(raw)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         logger.debug("unreadable conversation file: %s", path.name)
         return None
     return payload if isinstance(payload, dict) else None

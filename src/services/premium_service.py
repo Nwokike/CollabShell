@@ -44,9 +44,7 @@ class PremiumService:
         self.storage = storage
         self.backend: str = "none"  # "kiri" | "none"
         self._listeners: list[Callable[[], None]] = []
-        self.license = KiriLicenseService(
-            storage, on_change=self._recompute_premium
-        )
+        self.license = KiriLicenseService(storage, on_change=self._recompute_premium)
         self._checkout_watch_task: asyncio.Task | None = None
         self._reconcile_task: asyncio.Task | None = None
         # Negative so the first resume is never debounced.
@@ -148,8 +146,9 @@ class PremiumService:
             return
         self.stop_reconcile_loop()
         self._reconcile_task = self.page.run_task(self._reconcile_loop)
-        logger.info("Hourly license reconcile started (interval %.0fs)",
-                    RECONCILE_INTERVAL)
+        logger.info(
+            "Hourly license reconcile started (interval %.0fs)", RECONCILE_INTERVAL
+        )
 
     def stop_reconcile_loop(self) -> None:
         task = self._reconcile_task
@@ -177,8 +176,9 @@ class PremiumService:
         self._checkout_watch_task = self.page.run_task(
             self._checkout_watch_loop, recovery_id
         )
-        logger.info("Checkout watcher started (interval %.0fs)",
-                    CHECKOUT_WATCH_INTERVAL)
+        logger.info(
+            "Checkout watcher started (interval %.0fs)", CHECKOUT_WATCH_INTERVAL
+        )
 
     def stop_checkout_watch(self) -> None:
         task = self._checkout_watch_task
@@ -211,8 +211,9 @@ class PremiumService:
                     if ex.is_refusal and ex.status_code in WATCHER_ABORT_CODES:
                         # A payment problem will not fix itself; 404 is NOT
                         # here because a webhook lag looks like a 404.
-                        logger.info("Checkout watcher refused, stopping: %s",
-                                    ex.status_code)
+                        logger.info(
+                            "Checkout watcher refused, stopping: %s", ex.status_code
+                        )
                         return
                     failures += 1
                     logger.info("Checkout watcher waiting: %s", ex)
@@ -222,8 +223,7 @@ class PremiumService:
                 except Exception:
                     # A DB hiccup must not kill the loop.
                     failures += 1
-                    logger.debug("Checkout watcher error, continuing",
-                                 exc_info=True)
+                    logger.debug("Checkout watcher error, continuing", exc_info=True)
                     continue
 
                 if self.license.unlocked:

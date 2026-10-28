@@ -153,7 +153,7 @@ def _ecdsa_verify(public_point, message: bytes, signature: bytes) -> bool:
     u2 = r * w % _N
     try:
         point = _point_add(_scale((_GX, _GY), u1), _scale(public_point, u2))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
     if point is None or point is False:
         return False

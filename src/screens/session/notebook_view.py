@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import os
-import time
+import posixpath
 from pathlib import Path
 
 import flet as ft
@@ -156,9 +156,12 @@ def list_tab_summaries(session_name: str) -> str:
         return f"- {t['name']} (notebook, {t.get('cells', 0)} cells)"
 
     return "\n".join(
-        _describe(t) + (" [active]" if t["id"] == bridges.get("active_tab_id")() else "")
+        _describe(t)
+        + (" [active]" if t["id"] == bridges.get("active_tab_id")() else "")
         for t in tabs
     )
+
+
 # Per-cell cap on rendered base64 image bytes (~4 MiB). See enforce_image_budget.
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
@@ -301,9 +304,7 @@ def NotebookView(
         # fallback covers installs whose tabs predate the index.
         index = await services.storage.load_tab_index(session_name)
         saved_ids = await services.storage.list_notebooks(session_name)
-        meta_by_id = {
-            str(t["id"]): t for t in (index or []) if t.get("id")
-        }
+        meta_by_id = {str(t["id"]): t for t in (index or []) if t.get("id")}
         if saved_ids:
             restored = []
             for tid in saved_ids:
@@ -359,53 +360,6 @@ def NotebookView(
             set_active_tab_id(tab["id"])
             _save_index()
 
-    async def _finish_pending_reveal():
-        """Land on a cell a notification deep-linked to, once it exists.
-
-        A notification tap names the exact tab and cell that finished, but the
-        tab's cells only exist after `_load` restores them — so the reveal is
-        deferred to here. Taking the pending intent (rather than polling state)
-        means a stale tap cannot fire twice.
-        """
-        pending = getattr(controller, "consume_pending_reveal", None)
-        take = None
-        if callable(pending):
-            take = pending()
-        if take is None:
-            return
-        _encoded, tab_id, cell_id = take
-        if tab_id:
-            target = _get_tab(tab_id)
-            if target is not None and tab_id != active_tab_id:
-                _switch_tab(tab_id)
-        if cell_id:
-            _focus_cell(cell_id)
-
-    async def _finish_pending_fix():
-        """A failed cell tapped with "Ask AI to fix": reveal it, then fix it.
-
-        Without this the fix button did exactly what "Open" did — decorative,
-        which is worse than not offering it.
-        """
-        take_fn = getattr(controller, "consume_pending_fix", None)
-        take = take_fn() if callable(take_fn) else None
-        if take is None:
-            return
-        _encoded, _tab_id, cell_id = take
-        fixed = False
-        for cell in _active_cells():
-            if cell.id == cell_id:
-                await _run_cell_ai("fix", cell_id, "code")
-                fixed = True
-                break
-        if not fixed:
-            controller.show_snack("That cell is no longer in the notebook.")
-
-    async def _consume_notification_intents():
-        await _finish_pending_reveal()
-        await _finish_pending_fix()
-
-    ft.on_mounted(lambda: page.run_task(_consume_notification_intents))
     ft.on_mounted(lambda: page.run_task(_load))
 
     # ── Persistence (per active tab) ────────────────────────────────────────
@@ -494,9 +448,6 @@ def NotebookView(
         cell.is_running = True
         cell.outputs.clear()
         cell.outputs_rev += 1
-        # Elapsed time decides whether a finished cell is worth an OS
-        # notification at all — a two-second cell must not ping anyone.
-        started = time.monotonic()
 
         def _on_output(text_or_dict):
             page.loop.call_soon_threadsafe(_append_output, cell, text_or_dict)
@@ -506,7 +457,6 @@ def NotebookView(
                 page, prompt, controller.show_snack, *args, **kwargs
             )
 
-        ok = True
         try:
             await services.colab.exec_code(
                 cell.source,
@@ -519,48 +469,10 @@ def NotebookView(
                 env=_effective_env() or None,
             )
         except Exception as ex:
-            ok = False
             _append_output(cell, {"type": "error", "traceback": [str(ex)]})
         finally:
             cell.is_running = False
             _save()
-            # Tell the OS. A cell can train for twenty minutes; without this the
-            # only way to learn it finished is to come back and look.
-            await _notify_cell_done(cell, ok, time.monotonic() - started)
-
-    async def _notify_cell_done(cell: CellData, ok: bool, duration_sec: float = 0.0):
-        """Post the OS notification for a finished cell. Never raises."""
-        notify = getattr(services, "notify", None)
-        if notify is None:
-            return
-        tab = _get_tab()
-        try:
-            await notify.cell_done(
-                session_name=session_name,
-                tab_id=tab["id"] if tab else "",
-                cell_id=cell.id,
-                ok=ok,
-                duration_sec=duration_sec,
-                detail=_first_error_line(cell) if not ok else _output_digest(cell),
-            )
-        except Exception as ex:
-            logger.debug("cell notify failed: %s", ex)
-
-    def _first_error_line(cell) -> str:
-        for entry in getattr(cell, "outputs", None) or []:
-            if isinstance(entry, dict) and entry.get("type") == "error":
-                traceback = entry.get("traceback") or []
-                return str(traceback[-1] if traceback else entry)[:180]
-        return ""
-
-    def _output_digest(cell) -> str:
-        """A short, honest digest of what the cell produced."""
-        for entry in reversed(list(getattr(cell, "outputs", None) or [])):
-            if isinstance(entry, dict):
-                text = entry.get("text") or entry.get("output")
-                if text:
-                    return " ".join(str(text).split())[:180]
-        return ""
 
     def _stop_cell(cell: CellData):
         services.colab.cancel()
@@ -708,9 +620,13 @@ def NotebookView(
         """The Ask-AI menu: Explain / Fix error / Suggest next."""
         from components.notebook_cell.actions import ai_menu
 
-        ai_menu(page, cell_id, on_pick=lambda action, cid=cell_id: page.run_task(
-            _run_cell_ai, action, cid, "markdown" if action == "explain" else "code"
-        ))
+        ai_menu(
+            page,
+            cell_id,
+            on_pick=lambda action, cid=cell_id: page.run_task(
+                _run_cell_ai, action, cid, "markdown" if action == "explain" else "code"
+            ),
+        )
 
     # ── Cell list operations (active tab) ───────────────────────────────────
     def _active_cells() -> list:
@@ -893,42 +809,69 @@ def NotebookView(
         set_active_cell_id("")
 
     def _show_new_script_dialog(e=None):
-        """Ask for the script's name and path before creating the tab.
+        """Create a local script draft with an explicit Colab destination."""
+        from core.notifications import show_notification
+        from services.script_runner import build_script_destination
 
-        Both fields are real: the name labels the tab, and the path is where
-        the file lives on the session VM and where "Save to session" writes.
-        """
         name_ref = ft.Ref[ft.TextField]()
-        path_ref = ft.Ref[ft.TextField]()
+        extension_ref = ft.Ref[ft.TextField]()
         next_id = f"py{tab_seq_ref.current[0] + 1}"
 
         def _commit(ev=None):
-            name = (name_ref.current.value if name_ref.current else "") or ""
-            path = (path_ref.current.value if path_ref.current else "") or ""
+            name = ((name_ref.current.value if name_ref.current else "") or "").strip()
+            extension = (
+                (extension_ref.current.value if extension_ref.current else "") or ""
+            ).strip()
+            if not name:
+                name = next_id
+            try:
+                path = build_script_destination(name, extension)
+            except ValueError as ex:
+                show_notification(page, str(ex), is_warning=True)
+                return
+            filename = path.rsplit("/", 1)[-1]
             page.pop_dialog()
             _create_script_tab(
-                name=name.strip() or None,
-                path=path.strip() or f"/content/{next_id}.py",
+                name=filename,
+                path=posixpath.join("/content", filename),
             )
 
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text("New Python script"),
+                title=ft.Text("Create a file"),
                 content=ft.Column(
                     controls=[
+                        ft.Text(
+                            "Creates a local draft. Use Save to Colab to write it "
+                            "to /content.",
+                            size=tokens.FONT_SM,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
                         ft.TextField(
                             ref=name_ref,
-                            label="Tab name",
-                            hint_text="Pipeline",
+                            label="File name",
+                            hint_text="analysis",
                             autofocus=True,
                             on_submit=lambda ev: _commit(),
                         ),
-                        ft.TextField(
-                            ref=path_ref,
-                            label="Path on the session",
-                            hint_text=f"/content/{next_id}.py",
-                            prefix_text="/content/",
-                            on_submit=lambda ev: _commit(),
+                        ft.Row(
+                            controls=[
+                                ft.TextField(
+                                    ref=extension_ref,
+                                    label="Extension",
+                                    value=".py",
+                                    hint_text=".py",
+                                    on_submit=lambda ev: _commit(),
+                                    expand=True,
+                                ),
+                            ],
+                            spacing=tokens.SPACE_XS,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Text(
+                            "Colab destination: /content",
+                            size=tokens.FONT_XS,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                     ],
                     spacing=tokens.SPACE_SM,
@@ -1093,9 +1036,7 @@ def NotebookView(
             else:
                 from services.ipynb_converter import cells_to_ipynb
 
-                body = json.dumps(
-                    cells_to_ipynb(c_list), ensure_ascii=False, indent=2
-                )
+                body = json.dumps(cells_to_ipynb(c_list), ensure_ascii=False, indent=2)
             Path(path).write_text(body, encoding="utf-8")
             controller.show_snack(f"✅ Exported as {fmt}")
         except Exception as ex:
@@ -1226,20 +1167,20 @@ def NotebookView(
                 "clear_all": _clear_all_outputs,
                 "new_notebook": lambda: _create_tab(),
                 "new_script": lambda: _show_new_script_dialog(),
-                "rename_notebook": lambda: _show_rename_dialog(active_tab_id)
-                if active_tab_id
-                else None,
-                "close_notebook": lambda: _close_tab(active_tab_id)
-                if active_tab_id
-                else None,
+                "rename_notebook": lambda: (
+                    _show_rename_dialog(active_tab_id) if active_tab_id else None
+                ),
+                "close_notebook": lambda: (
+                    _close_tab(active_tab_id) if active_tab_id else None
+                ),
                 "switch_notebook": lambda tid: _switch_tab(tid),
                 "insert_cells": _insert_cells,
                 # The FAB's "Ask AI about this cell" and Ctrl+I both target
                 # the active cell, so there is one path to build.
                 "ask_ai_active": (
-                    lambda: _show_cell_ai_menu(active_cell_id)
-                    if active_cell_id
-                    else None
+                    lambda: (
+                        _show_cell_ai_menu(active_cell_id) if active_cell_id else None
+                    )
                 ),
                 # Notebook-scoped: "what runtime shape should I use for this?"
                 "suggest_hardware": lambda: page.run_task(_suggest_hardware),
@@ -1261,11 +1202,11 @@ def NotebookView(
             }
             for t in (tabs_ref.current or [])
         ],
-        "read_cells": lambda tab_id=None: [
-            c.to_dict() for c in (_get_tab(tab_id)["cells"] or [])
-        ]
-        if _get_tab(tab_id) is not None
-        else [],
+        "read_cells": lambda tab_id=None: (
+            [c.to_dict() for c in (_get_tab(tab_id)["cells"] or [])]
+            if _get_tab(tab_id) is not None
+            else []
+        ),
         # The active tab itself, so a caller can tell a Python script tab from
         # a notebook before asking it for cells it does not have.
         "active_tab": lambda: _get_tab(),
@@ -1306,9 +1247,11 @@ def NotebookView(
                 (
                     Binding("i", ctrl=True),
                     (
-                        lambda: _show_cell_ai_menu(active_cell_id)
-                        if active_cell_id
-                        else None
+                        lambda: (
+                            _show_cell_ai_menu(active_cell_id)
+                            if active_cell_id
+                            else None
+                        )
                     ),
                 ),
                 (Binding("Escape"), _blur_editor),
@@ -1595,7 +1538,9 @@ def NotebookView(
                     on_script_change=_on_script_change,
                     session_env_override=session_env_override,
                 ),
-                padding=ft.Padding(tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL),
+                padding=ft.Padding(
+                    tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL
+                ),
                 expand=True,
             )
         return ft.Container(
@@ -1603,9 +1548,7 @@ def NotebookView(
             # (terminal panel host_{id} pattern).
             key=ft.ValueKey(f"notebook_{(active_tab or {}).get('id', 'none')}"),
             content=ft.Column(controls=cell_controls, spacing=0),
-            padding=ft.Padding(
-                tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL
-            ),
+            padding=ft.Padding(tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL),
         )
 
     notebook_body = ft.Column(

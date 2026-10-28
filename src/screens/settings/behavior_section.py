@@ -9,33 +9,6 @@ from core.styles import glass_card, section_header, tip_text
 
 
 def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
-    async def _on_notify_change(e):
-        """Turn OS notifications on or off.
-
-        The OS permission is asked once and survives, so this is a channel
-        switch, not a permission request: off means the app stays quiet without
-        the user having to revoke anything in system settings.
-
-        Safe to write observable state here: this is an async handler, so it
-        runs after the render has returned. A write in the builder body itself
-        is what froze the Settings screen.
-        """
-        from services.notify import NotifyService
-
-        state.notify_enabled = bool(e.control.value)
-        storage = getattr(services, "storage", None)
-        if storage is not None:
-            await storage.set(
-                constants.STORAGE_NOTIFY_ENABLED,
-                "true" if state.notify_enabled else "false",
-            )
-        notify = getattr(services, "notify", None)
-        if isinstance(notify, NotifyService):
-            if state.notify_enabled:
-                page.run_task(notify.initialise)
-            else:
-                notify.disable()
-
     async def _on_auto_stop_change(e):
         # Inverted copy: the switch shows "auto-stop", the flag stores
         # "keep alive on disconnect" (default True = sessions survive).
@@ -67,9 +40,9 @@ def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
                                             weight=ft.FontWeight.W_500,
                                         ),
                                         tip_text(
-                                            "Stop all sessions when the app closes "
-                                            "or disconnects. Off by default — "
-                                            "sessions survive."
+                                            "Stop sessions only when you close the "
+                                            "app. A temporary connection drop never "
+                                            "stops them. Off by default."
                                         ),
                                     ],
                                     spacing=tokens.SPACE_XXS,
@@ -96,37 +69,6 @@ def build_behavior_section(page: ft.Page, state, services) -> ft.Column:
                             on_blur=lambda e: page.run_task(_on_drive_path_change, e),
                         ),
                         tip_text(constants.TIP_DRIVE_MOUNT),
-                        ft.Divider(height=tokens.SPACE_SM),
-                        ft.Row(
-                            controls=[
-                                ft.Column(
-                                    controls=[
-                                        ft.Text(
-                                            "Notify me when work finishes",
-                                            size=tokens.FONT_MD,
-                                            weight=ft.FontWeight.W_500,
-                                        ),
-                                        tip_text(
-                                            "A desktop or phone notification when a "
-                                            "long cell finishes, a runtime is ready, "
-                                            "or the assistant replies. Short runs stay "
-                                            "quiet. The OS still asks once."
-                                        ),
-                                    ],
-                                    spacing=tokens.SPACE_XXS,
-                                    expand=True,
-                                ),
-                                ft.Switch(
-                                    value=bool(
-                                        getattr(state, "notify_enabled", True)
-                                    ),
-                                    on_change=lambda e: page.run_task(
-                                        _on_notify_change, e
-                                    ),
-                                ),
-                            ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
                     ],
                     spacing=tokens.SPACE_SM,
                 ),

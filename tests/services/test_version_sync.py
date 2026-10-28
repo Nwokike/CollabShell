@@ -130,9 +130,9 @@ def test_build_breaking_dependency_pins_are_present():
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     deps = pyproject["project"]["dependencies"]
     for name, constraint in CRITICAL_PINS.items():
-        assert any(
-            d.startswith(f"{name}") and constraint in d for d in deps
-        ), f"{name}{constraint} is required by colab-cli — dropping it breaks the CI build"
+        assert any(d.startswith(f"{name}") and constraint in d for d in deps), (
+            f"{name}{constraint} is required by colab-cli — dropping it breaks the CI build"
+        )
 
 
 def test_the_installed_version_satisfies_each_pin():

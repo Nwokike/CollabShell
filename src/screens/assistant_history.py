@@ -139,7 +139,10 @@ def show_history_dialog(page: ft.Page, state, services, rows: list[dict]) -> Non
                 ft.TextButton("Close", on_click=lambda e: _close()),
                 ft.TextButton(
                     "New chat",
-                    on_click=lambda e: (_close(), _open_fresh(conversations.new_conversation_id())),
+                    on_click=lambda e: (
+                        _close(),
+                        _open_fresh(conversations.new_conversation_id()),
+                    ),
                 ),
             ],
             actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN,

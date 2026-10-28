@@ -12,22 +12,18 @@ a cell edited back to its earlier text got that cell's stale outputs back, and
 `# %%` markers appeared in a document nobody had marked up. One document, one
 renderer, no conversion.
 
-`# %%` is honoured only as a *convention the file itself uses* — when a file is
-marked that way, "Run Cell" runs the block under the caret; otherwise the caret
-block IS the whole file and Run Cell behaves like Run File.
+Scripts run as files. Notebook cells are available in notebook tabs.
 """
 
 from __future__ import annotations
 
 import logging
-import tempfile
-from pathlib import Path
 
 import flet as ft
 
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
-from services.ipynb_converter import block_at_offset
+from services.colab.text_files import upload_text_file
 from services.script_runner import build_run_file_payload
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
@@ -58,7 +54,6 @@ def ScriptView(
     text, set_text = ft.use_state(lambda: tab.get("script") or "")
     outputs, set_outputs = ft.use_state([])
     is_running, set_is_running = ft.use_state(False)
-    caret, set_caret = ft.use_state(0)
     is_saving, set_is_saving = ft.use_state(False)
     seeded_for, set_seeded_for = ft.use_state(tab.get("id"))
 
@@ -66,17 +61,8 @@ def ScriptView(
         set_seeded_for(tab.get("id"))
         set_text(tab.get("script") or "")
         set_outputs([])
-        set_caret(0)
 
     path = str(tab.get("path") or "").strip() or "/content/script.py"
-
-    def _on_selection_change(e):
-        sel = getattr(e, "selection", None)
-        if sel is not None:
-            try:
-                set_caret(int(sel.base_offset))
-            except (TypeError, ValueError):
-                pass
 
     def _effective_env() -> dict:
         merged = dict(getattr(state, "default_env", None) or {})
@@ -120,15 +106,6 @@ def ScriptView(
         finally:
             set_is_running(False)
 
-    def _run_cell(e=None):
-        if is_running:
-            return
-        source = block_at_offset(text, caret)
-        if not source.strip():
-            controller.show_snack("Nothing to run at the cursor.", is_error=True)
-            return
-        page.run_task(_run, source)
-
     def _run_file(e=None):
         if is_running:
             return
@@ -150,29 +127,14 @@ def ScriptView(
             return
         set_is_saving(True)
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".py", delete=False, encoding="utf-8"
-            ) as handle:
-                handle.write(text)
-                local = handle.name
-            try:
-                ok = await services.colab.upload(
-                    local,
-                    path,
-                    session_name=session_name,
-                    auth_method=state.auth_method,
-                )
-            finally:
-                try:
-                    Path(local).unlink(missing_ok=True)
-                except OSError:
-                    pass
-            if ok:
-                controller.show_snack(f"✅ Saved to {path}")
-            else:
-                controller.show_snack(
-                    f"❌ Could not save to {path}", is_error=True
-                )
+            await upload_text_file(
+                services.colab,
+                path,
+                text,
+                session_name=session_name,
+                auth_method=state.auth_method,
+            )
+            controller.show_snack(f"✅ Saved to {path}")
         except Exception as ex:
             logger.warning("Script save failed: %s", ex)
             controller.show_snack(f"❌ Save failed: {ex}", is_error=True)
@@ -209,8 +171,7 @@ def ScriptView(
         text_style=ft.TextStyle(font_family="RobotoMono", size=tokens.FONT_SM),
         border=ft.OutlineInputBorder(border_radius=tokens.RADIUS_MD),
         on_change=_on_text_change,
-        on_selection_change=_on_selection_change,
-        hint_text="Write Python here. A # %% line marks a block you can run alone.",
+        hint_text="Write Python here. Run File executes the complete script.",
         expand=True,
     )
 
@@ -239,19 +200,13 @@ def ScriptView(
             ft.Row(
                 controls=[
                     ft.FilledButton(
-                        "Run Cell",
-                        icon=ft.Icons.PLAY_ARROW_ROUNDED,
-                        on_click=_run_cell,
-                        disabled=is_running,
-                    ),
-                    ft.FilledButton(
                         "Run File",
                         icon=ft.Icons.PLAY_CIRCLE_ROUNDED,
                         on_click=_run_file,
                         disabled=is_running,
                     ),
                     ft.FilledTonalButton(
-                        "Save to session",
+                        "Save to Colab",
                         icon=ft.Icons.CLOUD_UPLOAD_ROUNDED,
                         on_click=lambda e: page.run_task(_save_to_session, e),
                         disabled=is_running or is_saving,

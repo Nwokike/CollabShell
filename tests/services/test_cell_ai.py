@@ -76,8 +76,12 @@ def test_no_credit_service_raises_disabled_and_never_calls_the_model(monkeypatch
     try:
         asyncio.run(
             cell_ai.run_cell_action(
-                action="explain", state=_state(), credits=None,
-                services=NS(), source="x=1", notebook_cells=[],
+                action="explain",
+                state=_state(),
+                credits=None,
+                services=NS(),
+                source="x=1",
+                notebook_cells=[],
             )
         )
         raise AssertionError("no credits must not reach the model")
@@ -91,8 +95,12 @@ def test_no_credit_service_raises_disabled(monkeypatch):
     try:
         asyncio.run(
             cell_ai.run_cell_action(
-                action="explain", state=_state(), credits=None, services=NS(),
-                source="x=1", notebook_cells=[],
+                action="explain",
+                state=_state(),
+                credits=None,
+                services=NS(),
+                source="x=1",
+                notebook_cells=[],
             )
         )
         raise AssertionError("no credit service must not reach the model")
@@ -108,8 +116,12 @@ def test_zero_balance_raises_out_of_credits(monkeypatch):
     try:
         asyncio.run(
             cell_ai.run_cell_action(
-                action="explain", state=_state(), credits=object(), services=NS(),
-                source="x=1", notebook_cells=[],
+                action="explain",
+                state=_state(),
+                credits=object(),
+                services=NS(),
+                source="x=1",
+                notebook_cells=[],
             )
         )
         raise AssertionError("a zero balance must block, not answer")
@@ -124,8 +136,12 @@ def test_unavailable_propagates_for_the_caller_to_surface(monkeypatch):
     try:
         asyncio.run(
             cell_ai.run_cell_action(
-                action="explain", state=_state(), credits=object(), services=NS(),
-                source="x=1", notebook_cells=[],
+                action="explain",
+                state=_state(),
+                credits=object(),
+                services=NS(),
+                source="x=1",
+                notebook_cells=[],
             )
         )
         raise AssertionError("an unavailable router must surface")
@@ -141,8 +157,12 @@ def test_the_action_sends_no_tools(monkeypatch):
     captured = _patch_turn(monkeypatch, {"ok": True, "text": "hi"})
     asyncio.run(
         cell_ai.run_cell_action(
-            action="explain", state=_state(), credits=object(), services=NS(),
-            source="x=1", notebook_cells=[FakeCell("import os")],
+            action="explain",
+            state=_state(),
+            credits=object(),
+            services=NS(),
+            source="x=1",
+            notebook_cells=[FakeCell("import os")],
         )
     )
     assert captured["tools"] == []
@@ -152,14 +172,19 @@ def test_the_prompt_carries_the_notebook_digest(monkeypatch):
     captured = _patch_turn(monkeypatch, {"ok": True, "text": "hi"})
     asyncio.run(
         cell_ai.run_cell_action(
-            action="explain", state=_state(), credits=object(), services=NS(),
+            action="explain",
+            state=_state(),
+            credits=object(),
+            services=NS(),
             source="plt.plot(x)",
             notebook_cells=[FakeCell("import pandas"), FakeCell("x = 1")],
         )
     )
     content = captured["messages"][0]["content"]
     assert "import pandas" in content, "the model needs the rest of the notebook"
-    assert "cell 0" in content and "cell 1" in content, "cells are numbered so the model can cite one"
+    assert "cell 0" in content and "cell 1" in content, (
+        "cells are numbered so the model can cite one"
+    )
     assert "plt.plot(x)" in content, "the cell under the cursor must be marked"
 
 
@@ -168,8 +193,13 @@ def test_the_prompt_carries_the_error_for_fix(monkeypatch):
     failing = FakeCell("1/0", outputs=[FakeOut("Traceback... ZeroDivisionError")])
     asyncio.run(
         cell_ai.run_cell_action(
-            action="fix", state=_state(), credits=object(), services=NS(),
-            source="1/0", notebook_cells=[failing], output=cell_ai._output_digest(failing),
+            action="fix",
+            state=_state(),
+            credits=object(),
+            services=NS(),
+            source="1/0",
+            notebook_cells=[failing],
+            output=cell_ai._output_digest(failing),
         )
     )
     content = captured["messages"][0]["content"]
@@ -183,8 +213,12 @@ def test_the_digest_is_bounded(monkeypatch):
     big = [FakeCell("x = 1\n" * 200) for _ in range(20)]
     asyncio.run(
         cell_ai.run_cell_action(
-            action="explain", state=_state(), credits=object(), services=NS(),
-            source="x", notebook_cells=big,
+            action="explain",
+            state=_state(),
+            credits=object(),
+            services=NS(),
+            source="x",
+            notebook_cells=big,
         )
     )
     content = captured["messages"][0]["content"]
@@ -196,9 +230,9 @@ def test_the_digest_is_bounded(monkeypatch):
 
 
 def test_extract_code_pulls_the_first_fenced_block():
-    assert cell_ai.extract_code("Sure!\n```python\ndef f():\n    return 1\n```\nHope that helps.") == (
-        "def f():\n    return 1"
-    )
+    assert cell_ai.extract_code(
+        "Sure!\n```python\ndef f():\n    return 1\n```\nHope that helps."
+    ) == ("def f():\n    return 1")
 
 
 def test_extract_code_handles_a_missing_close_fence():
@@ -223,7 +257,9 @@ def test_extract_code_strips_a_language_tag_from_the_first_line():
 
 
 def test_looks_like_error_spots_tracebacks():
-    assert cell_ai.looks_like_error("Traceback (most recent call last):\nValueError: bad")
+    assert cell_ai.looks_like_error(
+        "Traceback (most recent call last):\nValueError: bad"
+    )
     assert cell_ai.looks_like_error("SyntaxError: invalid syntax")
     assert cell_ai.looks_like_error("[Errno 2] No such file")
     assert cell_ai.looks_like_error("Exception in cell")
@@ -254,8 +290,11 @@ def test_ai_quick_ask_refuses_without_credits(monkeypatch):
     try:
         asyncio.run(
             ai_quick.ask(
-                action="explain", state=_state(), credits=None,
-                services=NS(), prompt="hi",
+                action="explain",
+                state=_state(),
+                credits=None,
+                services=NS(),
+                prompt="hi",
             )
         )
         raise AssertionError("no credits must not reach the model")
@@ -276,7 +315,10 @@ def test_ai_quick_ask_sends_no_tools_and_one_message(monkeypatch):
     monkeypatch.setattr(ai_credits, "run_metered_turn", fake)
     out = asyncio.run(
         ai_quick.ask(
-            action="explain", state=_state(), credits=object(), services=NS(),
+            action="explain",
+            state=_state(),
+            credits=object(),
+            services=NS(),
             prompt="the prompt",
         )
     )
@@ -309,8 +351,12 @@ def test_hardware_prompt_lists_only_selectable_options(monkeypatch):
     monkeypatch.setattr(ai_quick, "ask", _recording_turn(captured))
     asyncio.run(
         cell_ai.run_cell_action(
-            action="hardware", state=_state(), credits=object(), services=NS(),
-            source="", notebook_cells=[FakeCell("import torch; torch.cuda.is_available()")],
+            action="hardware",
+            state=_state(),
+            credits=object(),
+            services=NS(),
+            source="",
+            notebook_cells=[FakeCell("import torch; torch.cuda.is_available()")],
         )
     )
     prompt = captured["prompt"]

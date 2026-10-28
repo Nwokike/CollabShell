@@ -146,12 +146,70 @@ def test_run_turn_streams_and_returns_the_model_that_answered():
     assert result["text"] == "Cell c7 sets X = 1", result
     assert result["model_steps"] == 1, result
     assert result["cancelled"] is False
-    assert _RouterState.calls[0]["path"].endswith("/chat/completions"), _RouterState.calls[0]
+    assert _RouterState.calls[0]["path"].endswith("/chat/completions"), (
+        _RouterState.calls[0]
+    )
     # The system prompt really reached the model.
     sysmsg = next(
         m for m in _RouterState.calls[0]["body"]["messages"] if m["role"] == "system"
     )
     assert sysmsg["content"] == "SYS", sysmsg
+
+
+def test_two_turn_conversation_second_user_message_reaches_model():
+    """Regression: second user message must be included in the model request.
+
+    The bug was that ai_service.run_turn() filtered out all user messages from
+    history and only passed the last one as `query`, while kani_backend only
+    used `user_text` when history was empty. This meant turn 2's user message
+    was dropped while turn 1's assistant message remained.
+    """
+    from services import ai_service
+
+    # Clear router state before test
+    _RouterState.calls.clear()
+
+    # First turn
+    async def turn1():
+        return await ai_service.run_turn(
+            model="m",
+            tools=[],
+            messages=[{"role": "user", "content": "what does c7 do?"}],
+            system="SYS",
+        )
+
+    result1 = _run(turn1())
+    assert result1["text"] == "Cell c7 sets X = 1", result1
+    assert result1["model_steps"] == 1
+
+    # Second turn - the conversation history now has user + assistant
+    async def turn2():
+        return await ai_service.run_turn(
+            model="m",
+            tools=[],
+            messages=[
+                {"role": "user", "content": "what does c7 do?"},
+                {"role": "assistant", "content": "Cell c7 sets X = 1"},
+                {"role": "user", "content": "now print X"},
+            ],
+            system="SYS",
+        )
+
+    result2 = _run(turn2())
+    assert result2["text"] == "Cell c7 sets X = 1", result2
+    assert result2["model_steps"] == 1
+    # Verify the second user message reached the model
+    # The router should have received the full conversation including "now print X"
+    assert len(_RouterState.calls) == 2
+    second_call_messages = _RouterState.calls[1]["body"]["messages"]
+    # Find the last user message in the request
+    user_messages = [m for m in second_call_messages if m["role"] == "user"]
+    assert len(user_messages) >= 2, (
+        f"Expected at least 2 user messages, got {user_messages}"
+    )
+    assert user_messages[-1]["content"] == "now print X", (
+        f"Last user message should be 'now print X', got {user_messages[-1]}"
+    )
 
 
 def test_the_settings_override_reaches_the_turn():

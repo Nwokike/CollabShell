@@ -93,7 +93,7 @@ def shell():
     # Authenticated and onboarded: otherwise the shell renders OnboardingScreen
     # instead of the Settings tab this test is about.
     state = app_state(current_tab=4, is_authenticated=True)
-    services = NS(storage=None, colab=None, credits=None, premium=None, notify=None)
+    services = NS(storage=None, colab=None, credits=None, premium=None)
     return page, state, services
 
 
@@ -147,7 +147,6 @@ def test_the_settings_screen_is_a_component():
 
 def test_every_screen_app_shell_builds_is_a_component():
     """The same contract for every screen the shell switches between."""
-
 
     from screens.files import FilesScreen
     from screens.history import HistoryScreen

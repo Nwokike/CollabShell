@@ -154,11 +154,11 @@ def extract_code(text: str) -> str:
     fence = "```"
     start = stripped.find(fence)
     if start != -1:
-        tail = stripped[start + len(fence):]
+        tail = stripped[start + len(fence) :]
         # Skip a language tag ("```python").
         newline = tail.find("\n")
         if newline != -1:
-            tail = tail[newline + 1:]
+            tail = tail[newline + 1 :]
         end = tail.find(fence)
         if end != -1:
             return tail[:end].strip()

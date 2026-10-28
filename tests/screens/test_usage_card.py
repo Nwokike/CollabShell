@@ -139,9 +139,7 @@ def test_format_helpers():
     assert rows[1] == ("Usage rate", "1.23/hr")
     assert rows[2] == ("Active assignments", "2")
     assert needs_copy is False
-    _, needs_copy = format_usage_values(
-        {"balance": 0.0, "rate": 0.0, "assignments": 0}
-    )
+    _, needs_copy = format_usage_values({"balance": 0.0, "rate": 0.0, "assignments": 0})
     assert needs_copy is True
     assert "free-tier" in free_tier_copy()
 
@@ -180,7 +178,9 @@ def test_values_render_with_timestamp_and_cache_footnote():
     from core import constants
 
     page, state, services, storage = _fresh()
-    storage.data[constants.STORAGE_USAGE_CACHE] = '{"balance": 4.5, "rate": 0.5, "assignments": 2}'
+    storage.data[constants.STORAGE_USAGE_CACHE] = (
+        '{"balance": 4.5, "rate": 0.5, "assignments": 2}'
+    )
     storage.data[constants.STORAGE_USAGE_UPDATED_AT] = str(time.time())
     build_account_section(page, state, services)
     page.wait_idle()
@@ -210,7 +210,9 @@ def test_refresh_disables_button_and_shows_spinner_over_old_values():
     from core import constants
 
     page, state, services, storage = _fresh()
-    storage.data[constants.STORAGE_USAGE_CACHE] = '{"balance": 9.0, "rate": 1.0, "assignments": 1}'
+    storage.data[constants.STORAGE_USAGE_CACHE] = (
+        '{"balance": 9.0, "rate": 1.0, "assignments": 1}'
+    )
     storage.data[constants.STORAGE_USAGE_UPDATED_AT] = str(time.time())
 
     calls = {"n": 0}
@@ -338,7 +340,9 @@ def test_state_survives_parent_rebuild_without_reloading():
 def test_spinner_row_keeps_previous_values():
     from screens.settings.account_section import _usage_spinner_row
 
-    rows = _usage_spinner_row({"usage": {"balance": 5.0, "rate": 1.0, "assignments": 1}})
+    rows = _usage_spinner_row(
+        {"usage": {"balance": 5.0, "rate": 1.0, "assignments": 1}}
+    )
     texts = _texts(rows)
     assert "Loading usage…" in texts
     assert "5.00 compute units" in texts

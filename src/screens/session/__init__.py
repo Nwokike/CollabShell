@@ -31,9 +31,62 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
 
     active_tab, set_tab = ft.use_state(0 if mode == "notebook" else 1)
     terminal_ready, set_terminal_ready = ft.use_state(mode == "terminal")
+    runtime_status, set_runtime_status = ft.use_state("checking")
     # Stable panel state survives re-renders; the TerminalPanel component
     # subscribes to it and manages its own WebSocket lifecycle.
     terminal_ps_ref = ft.use_ref(lambda: TerminalPanelState())
+
+    async def _verify_runtime():
+        from services.colab.session_ops import SessionListError
+
+        try:
+            sessions = await services.colab.list_sessions(auth_method=state.auth_method)
+        except SessionListError:
+            set_runtime_status("unknown")
+        except Exception:
+            logger.exception("Could not verify runtime assignment")
+            set_runtime_status("unknown")
+        else:
+            state.active_sessions = sessions or []
+            if any(session.get("name") == session_name for session in sessions or []):
+                set_runtime_status("active")
+            else:
+                set_runtime_status("ended")
+
+    ft.use_effect(
+        lambda: page.run_task(_verify_runtime),
+        [session_name],
+    )
+
+    # ── Session ended modal ──────────────────────────────────────────────────
+    # When the runtime is authoritatively confirmed as ended (not just unknown),
+    # show a modal that forces the user back to Home. This replaces the passive
+    # banner-only behavior.
+    ended_modal_shown, set_ended_modal_shown = ft.use_state(False)
+
+    def _show_ended_modal():
+        if runtime_status == "ended" and not ended_modal_shown:
+            set_ended_modal_shown(True)
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text("Session Not Found"),
+                    content=ft.Text(
+                        "This Colab runtime no longer exists on the server. "
+                        "Its kernel and remote files are unavailable. "
+                        "Local notebook and script drafts are preserved on this screen."
+                    ),
+                    actions=[
+                        ft.FilledButton(
+                            "Return to Home",
+                            on_click=lambda e: (page.pop_dialog(), on_back()),
+                        ),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                    modal=True,
+                )
+            )
+
+        ft.use_effect(_show_ended_modal, [runtime_status, ended_modal_shown])
 
     # ── Keyboard shortcut context ────────────────────────────────────────────
     # While the Terminal tab is active the page-level handler must ignore ALL
@@ -336,6 +389,42 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
         expand=True,
     )
 
+    is_offline = not state.is_online
+    runtime_message = (
+        "Offline. Remote actions are unavailable; local edits remain on this screen."
+        if is_offline
+        else "Colab no longer lists this runtime. Its kernel and remote files are "
+        "unavailable; local notebook and script drafts remain on this screen."
+        if runtime_status == "ended"
+        else "Could not verify this runtime. Its status is unknown; this does not "
+        "confirm that it ended."
+    )
+    runtime_banner = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.CLOUD_OFF_ROUNDED,
+                    color=ft.Colors.ON_ERROR_CONTAINER,
+                    size=tokens.ICON_SM,
+                ),
+                ft.Text(
+                    runtime_message,
+                    color=ft.Colors.ON_ERROR_CONTAINER,
+                    size=tokens.FONT_XS,
+                    expand=True,
+                ),
+                ft.TextButton("Back to Home", on_click=lambda e: on_back()),
+            ],
+            spacing=tokens.SPACE_SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor=ft.Colors.ERROR_CONTAINER,
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS
+        ),
+        visible=is_offline or runtime_status in ("ended", "unknown"),
+    )
+
     theme_icon = (
         ft.Icons.BRIGHTNESS_AUTO_ROUNDED
         if state.theme_mode == ft.ThemeMode.SYSTEM
@@ -430,6 +519,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     return ft.Column(
         controls=[
             header_bar,
+            runtime_banner,
             content,
         ],
         spacing=0,

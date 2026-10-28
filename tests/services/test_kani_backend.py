@@ -220,7 +220,7 @@ def _turn(specs, query="what does cell c7 do?", system="SYS", **kw):
 
 
 def test_the_preamble_before_a_tool_call_is_dropped():
-    """"Let me check that…" is not the answer.
+    """ "Let me check that…" is not the answer.
 
     DDGS clears its buffer at the tool-round boundary; the same text must not
     ride along into the final answer here, or every answer is prefixed with
@@ -421,7 +421,6 @@ def test_a_step_row_is_opened_and_closed_by_the_same_call_id():
     def on_step(event, payload):
         events.append((event, payload))
 
-
     tools = []
 
     async def read_cell(cell_id: str) -> str:
@@ -452,7 +451,6 @@ def test_a_step_row_carries_its_args_and_result():
     def on_step(event, payload):
         seen[event] = payload
 
-
     async def read_cell(cell_id: str) -> str:
         """Read a cell."""
         return "source-of-c7"
@@ -472,7 +470,6 @@ def test_a_failing_tool_body_becomes_an_error_payload():
 
     def on_step(event, payload):
         seen[event] = payload
-
 
     async def broken_tool() -> str:
         """Always fails."""
@@ -594,7 +591,6 @@ def test_a_plain_string_result_still_round_trips():
     _fresh_calls()
     _RouterState.args["read_cell"] = {"cell_id": "c7"}
 
-
     async def read_cell(cell_id: str) -> str:
         """Read a cell."""
         return "source-of-c7"
@@ -632,9 +628,7 @@ def _make_router(fail_for):
 
     class _Router(_Handler):
         def do_POST(self):
-            body = json.loads(
-                self.rfile.read(int(self.headers["Content-Length"]))
-            )
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             _RouterState.calls.append({"path": self.path, "body": body})
             model = str(body.get("model") or "").lower()
             if any(f in model for f in fail_for):
@@ -819,8 +813,8 @@ def test_the_round_reset_clears_the_preamble():
     assert resets == [True, True], resets
 
 
-def test_on_model_step_fires_before_every_call_after_the_first():
-    """The credit reserve is topped up before each additional model call."""
+def test_on_model_step_fires_before_each_model_call():
+    """Metering observes every attempted model call, including the first."""
     _fresh_calls()
     _RouterState.args["read_cell"] = {"cell_id": "c7"}
 
@@ -830,8 +824,8 @@ def test_on_model_step_fires_before_every_call_after_the_first():
         steps.append(len(steps))
 
     _run(_turn([_spec("read_cell")], on_model_step=on_model_step))
-    # One extra round after the first: exactly one reserve.
-    assert steps == [0], steps
+    # One tool round and one final answer.
+    assert steps == [0, 1], steps
 
 
 # ── 6. the rescue round ────────────────────────────────────────────────────
@@ -849,9 +843,7 @@ def test_past_the_round_budget_the_tools_are_stripped():
         """Always calls a tool, so the round budget is reached."""
 
         def do_POST(self):
-            body = json.loads(
-                self.rfile.read(int(self.headers["Content-Length"]))
-            )
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             _RouterState.calls.append({"path": self.path, "body": body})
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -892,7 +884,9 @@ def test_past_the_round_budget_the_tools_are_stripped():
 
     state.ai_router_url = f"http://127.0.0.1:{port}/v1"
     try:
-        result = _run(_turn([_spec("read_cell")], max_rounds=1, base_url=state.ai_router_url))
+        result = _run(
+            _turn([_spec("read_cell")], max_rounds=1, base_url=state.ai_router_url)
+        )
     finally:
         state.ai_router_url = _BASE
 
@@ -942,9 +936,7 @@ def test_cancellation_stops_before_the_next_model_call():
     # break at the next manager instead of making another request.
     class _CountingHandler(_Handler):
         def do_POST(self):
-            body = json.loads(
-                self.rfile.read(int(self.headers["Content-Length"]))
-            )
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             _RouterState.calls.append({"path": self.path, "body": body})
             has_tool = any(m.get("role") == "tool" for m in body["messages"])
             self.send_response(200)
@@ -1023,7 +1015,9 @@ def test_the_engine_uses_the_called_base_url_and_no_sdk_retries():
     assert engine.client.max_retries == 0, engine.client.max_retries
     # The context budget is ours, not the model's: `auto` has no known window
     # and kani's default for an unknown model is 2048.
-    assert engine.max_context_size == kani_backend.DEFAULT_CONTEXT, engine.max_context_size
+    assert engine.max_context_size == kani_backend.DEFAULT_CONTEXT, (
+        engine.max_context_size
+    )
     # A counting tokenizer, so a cold tiktoken download cannot stall a turn.
     assert type(engine.tokenizer).__name__ == "_CountingTokenizer", engine.tokenizer
     # api_type is explicit: "auto" matches no known prefix and kani would pick
@@ -1061,7 +1055,9 @@ def test_ai_service_delegates_to_kani():
     assert result["text"] == "Cell c7 sets X = 1", result
     assert result["cancelled"] is False
     assert result["model"] == "solo", result
-    assert _RouterState.calls[0]["path"].endswith("/chat/completions"), _RouterState.calls[0]
+    assert _RouterState.calls[0]["path"].endswith("/chat/completions"), (
+        _RouterState.calls[0]
+    )
 
 
 def test_ai_service_forward_the_settings_override():
@@ -1136,9 +1132,7 @@ def test_a_round_that_said_nothing_walks_to_the_next_candidate():
 
     class _SilentFirstHandler(_Handler):
         def do_POST(self):
-            body = json.loads(
-                self.rfile.read(int(self.headers["Content-Length"]))
-            )
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             _RouterState.calls.append({"path": self.path, "body": body})
             model = str(body.get("model") or "").lower()
             self.send_response(200)

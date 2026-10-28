@@ -72,7 +72,9 @@ def test_index_defaults_view_and_rejects_blank_ids():
     svc, mod, orig = _storage()
     try:
         asyncio.run(
-            svc.save_tab_index("s1", [{"id": "nb1", "name": "A"}, {"id": "", "name": "x"}])
+            svc.save_tab_index(
+                "s1", [{"id": "nb1", "name": "A"}, {"id": "", "name": "x"}]
+            )
         )
         loaded = asyncio.run(svc.load_tab_index("s1"))
         assert [t["id"] for t in loaded] == ["nb1"]
@@ -251,7 +253,7 @@ def test_notebook_view_exposes_insert_cells_and_rename():
     # Rename flows: dialog + action + long-press.
     assert "def _show_rename_dialog(" in src
     assert '"rename_notebook"' in src
-    assert "on_long_press=lambda e, tid=tab[\"id\"]: _show_rename_dialog(tid)" in src
+    assert 'on_long_press=lambda e, tid=tab["id"]: _show_rename_dialog(tid)' in src
     # Index sidecar is written on create/close and at restore.
     assert "def _save_index()" in src
     assert src.count("_save_index()") >= 4  # def + create + close + load paths
@@ -365,7 +367,14 @@ def test_index_roundtrip_carries_the_script_path():
         asyncio.run(
             svc.save_tab_index(
                 "s1",
-                [{"id": "py1", "name": "Pipeline", "view": "script", "path": "/content/p.py"}],
+                [
+                    {
+                        "id": "py1",
+                        "name": "Pipeline",
+                        "view": "script",
+                        "path": "/content/p.py",
+                    }
+                ],
             )
         )
         loaded = asyncio.run(svc.load_tab_index("s1"))

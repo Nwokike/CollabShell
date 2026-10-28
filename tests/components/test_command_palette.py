@@ -45,9 +45,14 @@ def _commands():
         return (label, icon, hint, action)
 
     cmds = [
-        make("Open Assistant", ft.Icons.AUTO_AWESOME_OUTLINED, "Chat with the assistant"),
-        make("Explain Terminal with AI", ft.Icons.AUTO_AWESOME_OUTLINED,
-             "What the terminal is telling you"),
+        make(
+            "Open Assistant", ft.Icons.AUTO_AWESOME_OUTLINED, "Chat with the assistant"
+        ),
+        make(
+            "Explain Terminal with AI",
+            ft.Icons.AUTO_AWESOME_OUTLINED,
+            "What the terminal is telling you",
+        ),
         make("Go to Home", ft.Icons.HOME_ROUNDED, "Ctrl+1"),
         make("Toggle theme", ft.Icons.BRIGHTNESS_6_ROUNDED, "Light / dark / system"),
     ]
@@ -175,9 +180,7 @@ def test_a_raising_action_is_caught_and_does_not_crash():
     from core import notifications
 
     notifications.show_notification = lambda p, m, is_error=False: notices.append(m)
-    open_command_palette(
-        page, [("Boom", ft.Icons.WARNING_ROUNDED, "", lambda: 1 / 0)]
-    )
+    open_command_palette(page, [("Boom", ft.Icons.WARNING_ROUNDED, "", lambda: 1 / 0)])
     _rows(page.dialogs[-1])[0].on_click(None)
     assert notices == ["That action failed."]
 

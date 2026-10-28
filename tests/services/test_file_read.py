@@ -33,7 +33,9 @@ class _FakeColab:
         self.body = body
         self.downloads = []
 
-    async def download(self, remote_path, local_path, session_name=None, auth_method=None):
+    async def download(
+        self, remote_path, local_path, session_name=None, auth_method=None
+    ):
         self.downloads.append((remote_path, local_path))
         if self.raises:
             raise self.raises
@@ -65,7 +67,6 @@ def _call(colab, tmp_path, monkeypatch, path="/content/x.csv"):
             )
         ), made
     finally:
-
         for name in made:
             Path(name).unlink(missing_ok=True)
 
@@ -106,8 +107,10 @@ def test_the_temp_file_is_unlinked_on_success(tmp_path, monkeypatch):
     monkeypatch.setattr(file_read.tempfile, "mkstemp", spy)
     asyncio.run(
         file_read.read_file_text(
-            "/content/x", colab_service=_FakeColab(ok=False),
-            session_name="s", auth_method="oauth2",
+            "/content/x",
+            colab_service=_FakeColab(ok=False),
+            session_name="s",
+            auth_method="oauth2",
         )
     )
     assert created, "a temp file should have been made"
@@ -128,8 +131,10 @@ def test_the_temp_file_is_unlinked_when_the_download_raises(tmp_path, monkeypatc
     monkeypatch.setattr(file_read.tempfile, "mkstemp", spy)
     asyncio.run(
         file_read.read_file_text(
-            "/content/x", colab_service=_FakeColab(raises=ValueError("x")),
-            session_name="s", auth_method="oauth2",
+            "/content/x",
+            colab_service=_FakeColab(raises=ValueError("x")),
+            session_name="s",
+            auth_method="oauth2",
         )
     )
     for name in created:

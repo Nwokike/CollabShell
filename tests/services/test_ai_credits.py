@@ -70,16 +70,21 @@ def _patch_turn(monkeypatch, result=None, exc=None, on_step=None):
 
     async def _fake(**kwargs):
         seen["steps"].append(kwargs.get("on_model_step"))
+        seen["kwargs"] = kwargs
         seen["messages"] = kwargs.get("messages")
         if exc is not None:
             raise exc
-        return result if result is not None else {
-            "text": "done",
-            "steps": [],
-            "model_steps": 1,
-            "cancelled": False,
-            "model": "m",
-        }
+        return (
+            result
+            if result is not None
+            else {
+                "text": "done",
+                "steps": [],
+                "model_steps": 1,
+                "cancelled": False,
+                "model": "m",
+            }
+        )
 
     monkeypatch.setattr(ai_service, "run_turn", _fake)
     return seen
@@ -109,7 +114,10 @@ def test_zero_balance_blocks_before_any_model_call(monkeypatch):
 
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -126,7 +134,10 @@ def test_missing_credit_service_is_reported_not_raised(monkeypatch):
     _patch_turn(monkeypatch)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=None, model="auto", tools=[],
+            state=_State(),
+            credits=None,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -138,14 +149,23 @@ def test_missing_credit_service_is_reported_not_raised(monkeypatch):
 
 
 def test_one_round_turn_costs_one_credit(monkeypatch):
-    _patch_turn(monkeypatch, result={
-        "text": "answer", "steps": [], "model_steps": 1,
-        "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "answer",
+            "steps": [],
+            "model_steps": 1,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = _Credits(balance=10)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -154,15 +174,63 @@ def test_one_round_turn_costs_one_credit(monkeypatch):
     assert credits.committed == [(credits.reserved[0], 1)]
 
 
+def test_tool_output_callback_reaches_the_ai_turn(monkeypatch):
+    seen = _patch_turn(monkeypatch)
+    output = []
+
+    async def _turn():
+        return await ai_credits.run_metered_turn(
+            state=_State(),
+            credits=_Credits(balance=10),
+            model="auto",
+            tools=[],
+            messages=[],
+            on_tool_output=lambda name, text: output.append((name, text)),
+        )
+
+    _run(_turn())
+    seen["kwargs"]["on_tool_output"]("read_terminal", "visible output")
+    assert output == [("read_terminal", "visible output")]
+
+
+def test_unexpected_turn_error_is_visible_and_rolls_back_empty_hold(monkeypatch):
+    _patch_turn(monkeypatch, exc=TypeError("unexpected callback keyword"))
+    credits = _Credits(balance=10)
+
+    result = _run(
+        ai_credits.run_metered_turn(
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
+            messages=[],
+        )
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "TypeError: unexpected callback keyword"
+    assert result["cost"] == 0
+    assert credits.rolled_back == [credits.reserved[0]]
+
+
 def test_multi_round_turn_costs_one_per_round(monkeypatch):
-    _patch_turn(monkeypatch, result={
-        "text": "answer", "steps": [{"id": "1"}, {"id": "2"}],
-        "model_steps": 3, "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "answer",
+            "steps": [{"id": "1"}, {"id": "2"}],
+            "model_steps": 3,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = _Credits(balance=10)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -172,15 +240,26 @@ def test_multi_round_turn_costs_one_per_round(monkeypatch):
 
 def test_every_exit_settles_exactly_once(monkeypatch):
     """A double settle cannot double-charge: commit is idempotent per tx."""
-    _patch_turn(monkeypatch, result={
-        "text": "a", "steps": [], "model_steps": 1,
-        "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "a",
+            "steps": [],
+            "model_steps": 1,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = _Credits(balance=10)
-    _run(ai_credits.run_metered_turn(
-        state=_State(), credits=credits, model="auto", tools=[],
-        messages=[{"role": "user", "content": "hi"}],
-    ))
+    _run(
+        ai_credits.run_metered_turn(
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
+            messages=[{"role": "user", "content": "hi"}],
+        )
+    )
     assert len(credits.committed) == 1
     # The service itself is idempotent for the same tx.
     real = CreditService()
@@ -195,7 +274,10 @@ def test_exhausted_router_rolls_back(monkeypatch):
     credits = _Credits(balance=10)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -208,14 +290,23 @@ def test_exhausted_router_rolls_back(monkeypatch):
 
 def test_nothing_delivered_refunds_the_hold(monkeypatch):
     """An immediate Stop must not be a free model call — nor a charged one."""
-    _patch_turn(monkeypatch, result={
-        "text": "", "steps": [], "model_steps": 0,
-        "cancelled": True, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "",
+            "steps": [],
+            "model_steps": 0,
+            "cancelled": True,
+            "model": "m",
+        },
+    )
     credits = _Credits(balance=10)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -231,15 +322,24 @@ def test_nothing_delivered_refunds_the_hold(monkeypatch):
 def test_last_credit_still_runs_and_clamps_at_zero(monkeypatch):
     """Balance 1: the hold succeeds, the turn runs, and the balance clamps at
     zero rather than the credit being refused."""
-    _patch_turn(monkeypatch, result={
-        "text": "answer", "steps": [], "model_steps": 1,
-        "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "answer",
+            "steps": [],
+            "model_steps": 1,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = CreditService()
     credits._balance = 1
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -250,15 +350,24 @@ def test_last_credit_still_runs_and_clamps_at_zero(monkeypatch):
 
 def test_an_over_hold_settles_by_clamping_not_refusing(monkeypatch):
     """A turn longer than the balance must still finish and land on zero."""
-    _patch_turn(monkeypatch, result={
-        "text": "answer", "steps": [], "model_steps": 6,
-        "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "answer",
+            "steps": [],
+            "model_steps": 6,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = CreditService()
     credits._balance = 2
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -272,7 +381,10 @@ def test_low_balance_is_flagged_but_not_blocking(monkeypatch):
     credits = _Credits(balance=2)
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )
@@ -317,15 +429,24 @@ def test_charge_subtracts_from_the_balance_and_leaves_the_hold():
 
 def test_metered_turn_against_the_real_service(monkeypatch):
     """End to end with the real CreditService, not a stand-in."""
-    _patch_turn(monkeypatch, result={
-        "text": "answer", "steps": [], "model_steps": 2,
-        "cancelled": False, "model": "m",
-    })
+    _patch_turn(
+        monkeypatch,
+        result={
+            "text": "answer",
+            "steps": [],
+            "model_steps": 2,
+            "cancelled": False,
+            "model": "m",
+        },
+    )
     credits = CreditService()
     before = _run(credits.get_balance())
     result = _run(
         ai_credits.run_metered_turn(
-            state=_State(), credits=credits, model="auto", tools=[],
+            state=_State(),
+            credits=credits,
+            model="auto",
+            tools=[],
             messages=[{"role": "user", "content": "hi"}],
         )
     )

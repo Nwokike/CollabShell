@@ -33,9 +33,7 @@ def test_join_text_none_and_empty():
 
 
 def test_stream_keeps_name_for_stderr_rendering():
-    out = _to_cell_output(
-        {"output_type": "stream", "name": "stderr", "text": "boom\n"}
-    )
+    out = _to_cell_output({"output_type": "stream", "name": "stderr", "text": "boom\n"})
     assert out == {"type": "stream", "text": "boom\n", "name": "stderr"}
 
 
@@ -73,7 +71,12 @@ def test_execute_result_keeps_execution_count():
 
 def test_execute_result_count_none_is_preserved():
     out = _to_cell_output(
-        {"output_type": "execute_result", "data": {}, "metadata": {}, "execution_count": None}
+        {
+            "output_type": "execute_result",
+            "data": {},
+            "metadata": {},
+            "execution_count": None,
+        }
     )
     assert out["execution_count"] is None
 

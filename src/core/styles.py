@@ -229,5 +229,3 @@ def tip_text(text: str) -> ft.Text:
         color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
         italic=True,
     )
-
-

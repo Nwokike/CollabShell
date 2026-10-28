@@ -91,9 +91,7 @@ def OnboardingScreen() -> ft.Control:
 
                     async def _prefetch_after_signin():
                         try:
-                            await get_usage_cached(
-                                services, state.auth_method
-                            )
+                            await get_usage_cached(services, state.auth_method)
                         except Exception as ex:
                             logger.debug("Usage prefetch failed: %s", ex)
 

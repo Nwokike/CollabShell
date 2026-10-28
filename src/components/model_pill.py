@@ -263,7 +263,9 @@ def _menu_item(entry: dict, selected: bool, on_pick) -> ft.PopupMenuItem:
                         ft.Text(
                             name,
                             size=tokens.FONT_SM,
-                            weight=ft.FontWeight.W_600 if selected else ft.FontWeight.W_400,
+                            weight=ft.FontWeight.W_600
+                            if selected
+                            else ft.FontWeight.W_400,
                             color=ft.Colors.ON_SURFACE,
                             no_wrap=True,
                             overflow=ft.TextOverflow.ELLIPSIS,
@@ -346,11 +348,7 @@ def build_model_pill(page: ft.Page, *, on_pick=None) -> ft.PopupMenuButton:
     from services import model_catalog
 
     state = pill_state()
-    rows = (
-        model_catalog.pickable_models()
-        if state.status == "ready"
-        else []
-    )
+    rows = model_catalog.pickable_models() if state.status == "ready" else []
     chosen = state.selected
 
     def _pick(model_id: str) -> None:

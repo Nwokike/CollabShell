@@ -23,7 +23,9 @@ DDGS/src/services/chat_agent.py:394-416 and :537-589):
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 
 from core.constants import (
     COST_STEP,
@@ -40,6 +42,19 @@ LOW_BALANCE_NUDGE = COST_STEP * 3
 
 OUT_OF_CREDITS_COPY = "Out of assistant credits."
 LOW_BALANCE_COPY = "Low credit balance. This message finishes regardless."
+_SECRET_VALUE = re.compile(
+    r"(?i)\b(access[_-]?token|refresh[_-]?token|api[_-]?key|authorization)"
+    r"(\s*[:=]\s*|\s+)([^,\s;&]+)"
+)
+_URL_QUERY = re.compile(r"(https?://[^\s?]+)\?[^\s]+")
+
+
+def safe_error_message(exc: BaseException) -> str:
+    """Keep useful exception details while removing common credential leaks."""
+    message = str(exc)
+    message = _SECRET_VALUE.sub(r"\1\2[redacted]", message)
+    message = _URL_QUERY.sub(r"\1?[redacted]", message)
+    return f"{type(exc).__name__}: {message[:400]}"
 
 
 def credit_word(n: int) -> str:
@@ -64,10 +79,7 @@ def credits_are_for_copy() -> str:
 def out_of_credits_notice(balance: int, is_premium: bool) -> str:
     """The gate message, honest about the number and where it resets."""
     cap = DAILY_PREMIUM_CREDITS if is_premium else DAILY_FREE_CREDITS
-    return (
-        f"{OUT_OF_CREDITS_COPY} {balance} of {cap} left today · "
-        "resets at 00:00 UTC."
-    )
+    return f"{OUT_OF_CREDITS_COPY} {balance} of {cap} left today · resets at 00:00 UTC."
 
 
 def charged_steps(model_steps: int, text: str) -> int:
@@ -92,6 +104,7 @@ async def run_metered_turn(
     on_thought=None,
     on_tool_start=None,
     on_tool_done=None,
+    on_tool_output=None,
     should_stop=None,
     max_rounds: int = ai_service.MAX_TOOL_ROUNDS,
 ) -> dict:
@@ -132,10 +145,35 @@ async def run_metered_turn(
     # Best-effort hold; at balance 1 it fails and we run hold-less.
     tx = await credits.reserve(COST_STEP, is_premium)
     low_balance = balance < LOW_BALANCE_NUDGE
+    streamed_text: list[str] = []
+    model_steps = 0
+    current_step_delivered = False
 
-    async def _reserve_more():
-        if tx:
+    async def _model_step_started():
+        if model_steps and tx:
             await credits.reserve_more(tx, COST_STEP)
+
+    async def _model_step_finished():
+        nonlocal model_steps, current_step_delivered
+        model_steps += 1
+        current_step_delivered = False
+
+    def _on_token(token):
+        nonlocal current_step_delivered
+        if token:
+            current_step_delivered = True
+            streamed_text.append(str(token))
+        if on_token:
+            on_token(token)
+
+    async def _settle(steps: int):
+        if steps <= 0:
+            if tx:
+                await credits.rollback(tx, is_premium)
+        elif tx:
+            await credits.commit(tx, steps, is_premium)
+        else:
+            await credits.charge(steps, is_premium)
 
     try:
         result = await ai_service.run_turn(
@@ -143,37 +181,40 @@ async def run_metered_turn(
             tools=tools,
             messages=messages,
             system=system,
-            on_token=on_token,
+            on_token=_on_token,
             on_thought=on_thought,
             on_tool_start=on_tool_start,
             on_tool_done=on_tool_done,
-            on_model_step=_reserve_more,
+            on_tool_output=on_tool_output,
+            on_model_step=_model_step_started,
+            on_model_step_done=_model_step_finished,
             should_stop=should_stop,
             max_rounds=max_rounds,
         )
-    except ai_service.AIUnavailable as ex:
-        # Nothing was delivered, so the hold goes back untouched. (A connection
-        # drop AFTER the model answered is not this case: run_turn returns the
-        # partial it got, and the floor rule below bills it.)
-        if tx:
-            await credits.rollback(tx, is_premium)
+    except asyncio.CancelledError:
+        steps = charged_steps(
+            model_steps + int(current_step_delivered),
+            "".join(streamed_text),
+        )
+        await _settle(steps)
+        _bump_revision(state)
+        raise
+    except Exception as ex:
+        observed_text = "".join(streamed_text)
+        steps = charged_steps(model_steps + int(current_step_delivered), observed_text)
+        await _settle(steps)
         _bump_revision(state)
         return {
             "ok": False,
             "out_of_credits": False,
             "low_balance": low_balance,
             "balance": await credits.get_balance(is_premium),
-            "cost": 0,
-            "error": str(ex),
+            "cost": steps,
+            "error": safe_error_message(ex),
         }
 
     steps = charged_steps(result.get("model_steps", 0), result.get("text", ""))
-    if steps <= 0:
-        await credits.rollback(tx, is_premium)
-    elif tx:
-        await credits.commit(tx, steps, is_premium)
-    else:
-        await credits.charge(steps, is_premium)
+    await _settle(steps)
 
     balance = await credits.get_balance(is_premium)
     _bump_revision(state)

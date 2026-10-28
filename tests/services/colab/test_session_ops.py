@@ -110,8 +110,7 @@ def test_list_sessions_refreshes_stale_token():
 
 
 def test_list_sessions_no_rewrite_without_sync_refresh():
-    # Our custom re-mint loop is gone (upstream sync_sessions refreshes);
-    # with a fake whose sync returns the store untouched, nothing is rewritten.
+    # A successful assignment check stores the fresh proxy information.
     svc = _service()
     store = FakeStore([_session(token="tok-fresh")])
     st = _make_state(store, [_assignment(token="tok-fresh")])
@@ -119,7 +118,61 @@ def test_list_sessions_no_rewrite_without_sync_refresh():
     with patch("colab_cli.common.State", side_effect=lambda: st):
         asyncio.run(session_ops.list_sessions_impl(svc))
 
-    assert store.added == []  # no rewrite when nothing changed
+    assert store.added == ["s1"]
+
+
+def test_list_sessions_removes_local_active_record_when_assignment_is_missing():
+    svc = _service()
+    store = FakeStore([_session()])
+    st = _make_state(store, [])
+
+    with patch("colab_cli.common.State", side_effect=lambda: st):
+        result = asyncio.run(session_ops.list_sessions_impl(svc))
+
+    assert result == []
+    assert store.get("s1") is None
+
+
+def test_list_sessions_surfaces_lookup_error_with_last_known_sessions():
+    svc = _service()
+    store = FakeStore([_session()])
+    st = _make_state(store, [])
+    st.client.list_assignments.side_effect = OSError("temporary network failure")
+
+    with (
+        patch("colab_cli.common.State", side_effect=lambda: st),
+    ):
+        try:
+            asyncio.run(session_ops.list_sessions_impl(svc))
+        except session_ops.SessionListError as exc:
+            assert exc.last_known_sessions[0]["name"] == "s1"
+            assert exc.last_known_sessions[0]["status"] == "UNVERIFIED"
+        else:
+            raise AssertionError("expected SessionListError")
+
+    assert store.get("s1") is not None
+
+
+def test_list_sessions_preserves_local_record_when_connectivity_check_fails():
+    svc = _service()
+    store = FakeStore([_session()])
+
+    async def _offline():
+        raise OSError("offline")
+
+    svc._ensure_online = _offline
+    st = _make_state(store, [])
+
+    with patch("colab_cli.common.State", side_effect=lambda: st):
+        try:
+            asyncio.run(session_ops.list_sessions_impl(svc))
+        except session_ops.SessionListError as exc:
+            assert exc.last_known_sessions[0]["name"] == "s1"
+            assert exc.last_known_sessions[0]["status"] == "UNVERIFIED"
+        else:
+            raise AssertionError("expected SessionListError")
+
+    assert store.get("s1") is not None
 
 
 def test_refresh_session_token_updates_on_change():
@@ -134,16 +187,20 @@ def test_refresh_session_token_updates_on_change():
     assert store.sessions["s1"].token == "tok-fresh"
 
 
-def test_refresh_session_token_false_when_no_assignment():
+def test_refresh_session_token_marks_missing_assignment_unavailable():
     svc = _service()
     store = FakeStore([_session()])
     st = _make_state(store, [])  # server has no assignments
 
     with patch("colab_cli.common.State", side_effect=lambda: st):
-        changed = asyncio.run(session_ops.refresh_session_token_impl(svc, "s1"))
+        try:
+            asyncio.run(session_ops.refresh_session_token_impl(svc, "s1"))
+        except session_ops.SessionEndedError:
+            pass
+        else:
+            raise AssertionError("expected missing assignment to be surfaced")
 
-    assert changed is False
-    assert store.sessions["s1"].token == "tok-old"
+    assert store.get("s1") is None
 
 
 def test_refresh_session_token_false_when_session_missing():
@@ -191,12 +248,39 @@ def test_new_session_surfaces_friendly_412():
 
 
 def test_load_session_fresh_never_raises_typer_exit():
-    """GUI rule: the wrapper always passes ignore_missing_session=True, so no
-    typer.Exit can escape into Flet async code — missing maps to None."""
+    """A missing local record maps to None without calling upstream prune logic."""
     st = _make_state(FakeStore([]), [])
-    # Even when the store is empty, the wrapper must return None, not raise.
     assert session_ops.load_session_fresh(st, "nope") is None
-    st.get_session.assert_called_once_with("nope", ignore_missing_session=True)
+    st.get_session.assert_not_called()
+
+
+def test_load_session_fresh_removes_local_record_when_assignment_is_missing():
+    store = FakeStore([_session()])
+    st = _make_state(store, [])
+
+    try:
+        session_ops.load_session_fresh(st, "s1")
+    except session_ops.SessionEndedError:
+        pass
+    else:
+        raise AssertionError("expected missing assignment to be surfaced")
+
+    assert store.get("s1") is None
+
+
+def test_load_session_fresh_keeps_local_record_when_assignment_lookup_fails():
+    store = FakeStore([_session()])
+    st = _make_state(store, [])
+    st.client.list_assignments.side_effect = OSError("temporary network failure")
+
+    try:
+        session_ops.load_session_fresh(st, "s1")
+    except OSError:
+        pass
+    else:
+        raise AssertionError("expected assignment lookup error")
+
+    assert store.get("s1") is not None
 
 
 def test_old_sessions_record_loads_under_new_model():

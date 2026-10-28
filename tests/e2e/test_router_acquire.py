@@ -22,8 +22,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-_HERE = Path(__file__).resolve().parent          # tests/e2e
-_REPO = _HERE.parent.parent                       # repo root
+_HERE = Path(__file__).resolve().parent  # tests/e2e
+_REPO = _HERE.parent.parent  # repo root
 # Only `src` goes on the path. Adding `tests/` itself would let
 # `tests/services/` shadow the real `services` package.
 if str(_REPO / "src") not in sys.path:

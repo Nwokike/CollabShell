@@ -26,7 +26,9 @@ def _read_local(path: str) -> str:
         return handle.read(_MAX_CHARS + 1)
 
 
-async def read_file_text(path: str, *, colab_service, session_name: str, auth_method) -> str:
+async def read_file_text(
+    path: str, *, colab_service, session_name: str, auth_method
+) -> str:
     """Return the head of a VM file as text, or "" when it cannot be read.
 
     Binary files decode badly, so the caller gets whatever survived the

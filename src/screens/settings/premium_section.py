@@ -58,8 +58,18 @@ _PLANS = (
 )
 
 _MONTHS = (
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
 )
 
 
@@ -101,7 +111,7 @@ def _paid_subtitle(claims, has_ads: bool) -> str:
         when = datetime.datetime.fromtimestamp(
             int(expires_at), tz=datetime.UTC
         ).strftime("%d %b %Y")
-    except (TypeError, ValueError, OSError, OverflowError):
+    except TypeError, ValueError, OSError, OverflowError:
         return f"{base} · thank you!"
     return f"{base} · active until {when} · {renewal}"
 
@@ -155,7 +165,11 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
 
     premium = getattr(services, "premium", None)
     license_ok = premium is not None and getattr(premium, "available", False)
-    claims = getattr(getattr(premium, "license", None), "claims", None) if license_ok else None
+    claims = (
+        getattr(getattr(premium, "license", None), "claims", None)
+        if license_ok
+        else None
+    )
     lapse = str(getattr(claims, "status", "") or "")
     has_ads = page_has_ads(page, state, services)
     is_premium = bool(getattr(state, "is_premium", False))
@@ -426,14 +440,17 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
         try:
             status = await premium.kiri_restore(code)
         except Exception as ex:
-            show_notification(page, f"Could not reach the licence service: {ex}",
-                              is_error=True)
+            show_notification(
+                page, f"Could not reach the licence service: {ex}", is_error=True
+            )
             return
         state.license_recovery_id = status.recovery_id or code
         if bool(getattr(state, "is_premium", False)):
             show_notification(page, "Premium restored.", is_success=True)
         else:
-            show_notification(page, f"That licence is {status.status}.", is_warning=True)
+            show_notification(
+                page, f"That licence is {status.status}.", is_warning=True
+            )
 
     async def _checkout(product_id: str, email: str):
         try:

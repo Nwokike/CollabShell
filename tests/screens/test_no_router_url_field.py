@@ -102,7 +102,7 @@ def test_premium_still_lives_in_the_one_card():
     """Removing the row did not remove the feature."""
     text = (_SRC / "screens/settings/premium_section.py").read_text(encoding="utf-8")
     assert "build_premium_section" in text
-    assert "CHANNEL == \"play\"" in text, "the card's channel gate is gone"
+    assert 'CHANNEL == "play"' in text, "the card's channel gate is gone"
     # And the screen still mounts it.
     screen = (_SRC / "screens/settings/__init__.py").read_text(encoding="utf-8")
     assert "build_premium_section" in screen
@@ -112,6 +112,6 @@ def test_the_assistant_section_reads_no_premium_service():
     """The credits line may still read `state.is_premium` for the cap — that is
     a number, not a second premium surface."""
     text = (_SRC / "screens/settings/ai_section.py").read_text(encoding="utf-8")
-    assert "services, \"premium\"" not in text
+    assert 'services, "premium"' not in text
     assert "getattr(services" in text or "getattr(state" in text
     assert "premium.available" not in text

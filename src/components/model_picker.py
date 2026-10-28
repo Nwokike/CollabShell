@@ -155,7 +155,9 @@ def show_model_picker(page: ft.Page, state, services) -> None:
             for entry in entries:
                 body.controls.append(
                     _model_row(
-                        entry, entry["id"] == selected["id"], lambda mid: page.run_task(_pick, mid)
+                        entry,
+                        entry["id"] == selected["id"],
+                        lambda mid: page.run_task(_pick, mid),
                     )
                 )
         try:
@@ -188,9 +190,7 @@ def model_subtitle(state) -> str:
 
     chosen = str(getattr(state, "ai_model", "") or "").strip()
     catalog = model_catalog.catalog()
-    entry = next(
-        (e for e in catalog if e["id"].lower() == chosen.lower()), None
-    )
+    entry = next((e for e in catalog if e["id"].lower() == chosen.lower()), None)
     if entry is not None:
         return model_catalog.model_hint(entry)
     if not chosen:

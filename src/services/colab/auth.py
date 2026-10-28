@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import os
-import socket
+import urllib.error
+import urllib.request
 
 logger = logging.getLogger("colab_auth")
 
@@ -26,14 +27,17 @@ async def init_impl(service) -> bool:
 
 
 async def ensure_online_impl(service):
-    """Raise ConnectionError if device is offline."""
+    """Raise ConnectionError when Google services cannot be reached."""
 
     def _check():
         try:
-            socket.setdefaulttimeout(2.0)
-            socket.gethostbyname("oauth2.googleapis.com")
+            with urllib.request.urlopen("https://oauth2.googleapis.com/", timeout=3):
+                return True
+        except urllib.error.HTTPError:
+            # An HTTP response (including a 404 for this root path) proves
+            # DNS, TLS, and the remote service are reachable.
             return True
-        except Exception:
+        except OSError, TimeoutError, urllib.error.URLError:
             return False
 
     is_online = await asyncio.to_thread(_check)
@@ -41,6 +45,31 @@ async def ensure_online_impl(service):
         from core.constants import ERR_NETWORK
 
         raise ConnectionError(ERR_NETWORK)
+
+
+def _auth_status_for_error(exc: BaseException) -> str:
+    """Classify only explicit credential rejection as signed out."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None) or getattr(exc, "code", None)
+    if status_code in (400, 401):
+        return "unauthenticated"
+    if status_code is not None:
+        return "unavailable"
+    message = str(exc).lower()
+    if any(marker in message for marker in ("invalid_grant", "invalid credentials")):
+        return "unauthenticated"
+    return "unavailable"
+
+
+def _auth_error_message(exc: BaseException) -> str:
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    status_code = status_code or getattr(exc, "code", None)
+    if status_code is not None:
+        return f"Google sign-in verification returned HTTP {status_code}. Try again."
+    return (
+        "Could not verify sign-in with Google "
+        f"({type(exc).__name__}). Check your connection and retry."
+    )
 
 
 async def get_auth_url_impl(service) -> str:
@@ -158,49 +187,54 @@ async def check_auth_impl(service) -> dict:
         from google.auth.transport.requests import Request as _Req
         from google.oauth2.credentials import Credentials
 
-        if not os.path.exists(TOKEN_CONFIG_PATH):
+        def result(authenticated, status, email="", expires_in="", error=""):
             return {
-                "authenticated": False,
-                "email": "",
-                "expires_in": "",
+                "authenticated": authenticated,
+                "email": email,
+                "expires_in": expires_in,
                 "auth_method": "oauth2",
+                "status": status,
+                "error": error,
             }
+
+        if not os.path.exists(TOKEN_CONFIG_PATH):
+            return result(False, "unauthenticated")
 
         try:
             creds = Credentials.from_authorized_user_file(
                 TOKEN_CONFIG_PATH, PUBLIC_SCOPES
             )
             if not creds:
-                return {
-                    "authenticated": False,
-                    "email": "",
-                    "expires_in": "",
-                    "auth_method": "oauth2",
-                }
+                return result(False, "unauthenticated")
 
-            if creds.expired and creds.refresh_token:
+            if creds.expired:
+                if not creds.refresh_token:
+                    return result(False, "unauthenticated")
                 try:
                     creds.refresh(_Req())
                     # Persist refreshed token
                     with open(TOKEN_CONFIG_PATH, "w") as f:
                         f.write(creds.to_json())
                 except Exception as ref_err:
-                    logger.warning("Token refresh failed: %s", ref_err)
-                    return {
-                        "authenticated": False,
-                        "email": "",
-                        "expires_in": "",
-                        "auth_method": "oauth2",
-                    }
+                    status = _auth_status_for_error(ref_err)
+                    logger.warning(
+                        "Token refresh verification failed (%s, %s)",
+                        status,
+                        type(ref_err).__name__,
+                    )
+                    return result(
+                        status == "authenticated",
+                        status,
+                        error=(
+                            ""
+                            if status == "unauthenticated"
+                            else _auth_error_message(ref_err)
+                        ),
+                    )
 
             token = creds.token
             if not token:
-                return {
-                    "authenticated": False,
-                    "email": "",
-                    "expires_in": "",
-                    "auth_method": "oauth2",
-                }
+                return result(False, "unauthenticated")
 
             qs = urllib.parse.urlencode({"access_token": token})
             url = f"https://oauth2.googleapis.com/tokeninfo?{qs}"
@@ -212,23 +246,18 @@ async def check_auth_impl(service) -> dict:
             try:
                 expires_min = int(expires_in) // 60
                 expires_str = f"{expires_min}m"
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 expires_str = str(expires_in)
 
-            return {
-                "authenticated": True,
-                "email": email,
-                "expires_in": expires_str,
-                "auth_method": "oauth2",
-            }
+            return result(True, "authenticated", email, expires_str)
         except Exception as e:
-            logger.warning("Auth check failed: %s", e)
-            return {
-                "authenticated": False,
-                "email": "",
-                "expires_in": "",
-                "auth_method": "oauth2",
-            }
+            status = _auth_status_for_error(e)
+            logger.warning("Auth check failed (%s, %s)", status, type(e).__name__)
+            return result(
+                status == "authenticated",
+                status,
+                error=("" if status == "unauthenticated" else _auth_error_message(e)),
+            )
 
     return await asyncio.to_thread(_check)
 

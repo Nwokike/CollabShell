@@ -152,9 +152,7 @@ class StorageService:
         return _STORAGE_DIR / f"{base}.json"
 
     def _get_tab_index_file(self, session_name: str) -> Path:
-        return (
-            _STORAGE_DIR / f"notebook_{_slugify(session_name)}__index.json"
-        )
+        return _STORAGE_DIR / f"notebook_{_slugify(session_name)}__index.json"
 
     async def save_tab_index(self, session_name: str, tabs: list[dict]) -> None:
         """Persist tab order, names, view prefs and script paths (sidecar).

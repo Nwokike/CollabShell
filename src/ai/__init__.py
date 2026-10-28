@@ -31,9 +31,7 @@ def _dev_tree_read(filename: str) -> str | None:
     """Read a bundled file from the dev-tree layout (repo checkout)."""
     import os
 
-    path = os.path.join(
-        os.path.dirname(__file__), os.pardir, os.pardir, "ai", filename
-    )
+    path = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, "ai", filename)
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as handle:

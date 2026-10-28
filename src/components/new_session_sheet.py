@@ -202,17 +202,31 @@ def show_new_session_sheet(
                 auth_method=state.auth_method,
                 high_mem=high_mem,
             )
-            logger.info("Session created successfully: %s", result)
+            logger.info(
+                "Session created successfully: name=%s variant=%s accelerator=%s shape=%s",
+                result["name"],
+                result["variant"],
+                result["accelerator"],
+                result["machine_shape"],
+            )
             loading_dialog.open = False
             page.update()
 
             if snack_func:
                 snack_func(f"✅ Session '{result['name']}' created!")
 
-            sessions = await colab_service.list_sessions(
-                auth_method=state.auth_method,
-            )
-            state.active_sessions = sessions or []
+            from services.colab.session_ops import SessionListError
+
+            try:
+                sessions = await colab_service.list_sessions(
+                    auth_method=state.auth_method,
+                )
+            except SessionListError as ex:
+                logger.warning(
+                    "Session created but assignment verification failed: %s", ex
+                )
+                sessions = ex.last_known_sessions
+            state.active_sessions = list(sessions)
 
             if on_session_created:
                 on_session_created(result["name"])

@@ -59,28 +59,96 @@ def _starter_rows():
     return [
         # ── sessions ──
         (ft.Icons.DNS_ROUNDED, "What sessions do I have?", "List my Colab sessions"),
-        (ft.Icons.ADD_BOX_ROUNDED, "Create a session", "Create a new session named 'my-lab'"),
+        (
+            ft.Icons.ADD_BOX_ROUNDED,
+            "Create a session",
+            "Create a new session named 'my-lab'",
+        ),
         # ── running code ──
-        (ft.Icons.PLAY_ARROW_ROUNDED, "Run code on my session", "Run this and tell me what happened: print(1+1)"),
-        (ft.Icons.MEMORY_ROUNDED, "What variables are in my kernel?", "What variables are in my kernel right now?"),
-        (ft.Icons.TABLE_CHART_ROUNDED, "Install a package", "Install pandas and confirm it worked"),
-        (ft.Icons.RESTART_ALT_ROUNDED, "Restart the kernel", "Restart the kernel — my memory is full"),
+        (
+            ft.Icons.PLAY_ARROW_ROUNDED,
+            "Run code on my session",
+            "Run this and tell me what happened: print(1+1)",
+        ),
+        (
+            ft.Icons.MEMORY_ROUNDED,
+            "What variables are in my kernel?",
+            "What variables are in my kernel right now?",
+        ),
+        (
+            ft.Icons.TABLE_CHART_ROUNDED,
+            "Install a package",
+            "Install pandas and confirm it worked",
+        ),
+        (
+            ft.Icons.RESTART_ALT_ROUNDED,
+            "Restart the kernel",
+            "Restart the kernel — my memory is full",
+        ),
         # ── the notebook ──
-        (ft.Icons.DESCRIPTION_ROUNDED, "Explain my notebook", "Read my active notebook and explain what it does, cell by cell"),
-        (ft.Icons.BUG_REPORT_ROUNDED, "Fix the error", "Read my active notebook, find the last error, and fix it"),
-        (ft.Icons.EDIT_NOTE_ROUNDED, "Write a cell for me", "Write a cell that loads my data and cleans it"),
-        (ft.Icons.TAB_ROUNDED, "What notebook tabs are open?", "List the notebook tabs I have open"),
+        (
+            ft.Icons.DESCRIPTION_ROUNDED,
+            "Explain my notebook",
+            "Read my active notebook and explain what it does, cell by cell",
+        ),
+        (
+            ft.Icons.BUG_REPORT_ROUNDED,
+            "Fix the error",
+            "Read my active notebook, find the last error, and fix it",
+        ),
+        (
+            ft.Icons.EDIT_NOTE_ROUNDED,
+            "Write a cell for me",
+            "Write a cell that loads my data and cleans it",
+        ),
+        (
+            ft.Icons.TAB_ROUNDED,
+            "What notebook tabs are open?",
+            "List the notebook tabs I have open",
+        ),
         # ── files ──
-        (ft.Icons.FOLDER_OPEN_ROUNDED, "What files are on my session?", "List the files in my session"),
-        (ft.Icons.DOWNLOAD_ROUNDED, "Read a file for me", "Read /content/data.csv and show me the first few rows"),
-        (ft.Icons.UPLOAD_FILE_ROUNDED, "Upload a file to my session", "Upload ~/data.csv to my session as /content/data.csv"),
-        (ft.Icons.TERMINAL_ROUNDED, "Check the terminal", "Show me the recent terminal output and flag anything concerning"),
-        (ft.Icons.DELETE_OUTLINE_ROUNDED, "Delete a file", "Delete /content/old.csv from my session"),
+        (
+            ft.Icons.FOLDER_OPEN_ROUNDED,
+            "What files are on my session?",
+            "List the files in my session",
+        ),
+        (
+            ft.Icons.DOWNLOAD_ROUNDED,
+            "Read a file for me",
+            "Read /content/data.csv and show me the first few rows",
+        ),
+        (
+            ft.Icons.UPLOAD_FILE_ROUNDED,
+            "Upload a file to my session",
+            "Upload ~/data.csv to my session as /content/data.csv",
+        ),
+        (
+            ft.Icons.TERMINAL_ROUNDED,
+            "Check the terminal",
+            "Show me the recent terminal output and flag anything concerning",
+        ),
+        (
+            ft.Icons.DELETE_OUTLINE_ROUNDED,
+            "Delete a file",
+            "Delete /content/old.csv from my session",
+        ),
         # ── the account ──
-        (ft.Icons.SPEED_ROUNDED, "How many compute units are left?", "How many compute units do I have left?"),
-        (ft.Icons.HISTORY_ROUNDED, "What has the session been doing?", "Show me the session activity log"),
+        (
+            ft.Icons.SPEED_ROUNDED,
+            "How many compute units are left?",
+            "How many compute units do I have left?",
+        ),
+        (
+            ft.Icons.HISTORY_ROUNDED,
+            "What has the session been doing?",
+            "Show me the session activity log",
+        ),
         # ── teardown ──
-        (ft.Icons.POWER_SETTINGS_NEW_ROUNDED, "Stop the session", "Stop my session when you're done"),
+        (
+            ft.Icons.POWER_SETTINGS_NEW_ROUNDED,
+            "Stop the session",
+            "Stop my session when you're done",
+        ),
     ]
 
 
@@ -294,7 +362,9 @@ class ChatSession:
             on_click=lambda e: self._on_composer_button(),
         )
 
-        self._credits_text = ft.Text("…", size=tokens.FONT_XS, weight=ft.FontWeight.W_600)
+        self._credits_text = ft.Text(
+            "…", size=tokens.FONT_XS, weight=ft.FontWeight.W_600
+        )
 
         # The balance is a control, not a readout: tapping it opens the wallet
         # (balance, cost table, ad top-up) exactly as DDGS's chip does. A
@@ -302,7 +372,9 @@ class ChatSession:
         self.credits_chip = ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(_CHAT_ICON, size=tokens.ICON_SM, color=self._credit_color()),
+                    ft.Icon(
+                        _CHAT_ICON, size=tokens.ICON_SM, color=self._credit_color()
+                    ),
                     self._credits_text,
                 ],
                 spacing=2,
@@ -320,9 +392,7 @@ class ChatSession:
 
         # Model selector: an actual dropdown menu (LM Router's pattern), not
         # the modal list DDGS uses — you keep the transcript in view.
-        self.model_chip = build_model_pill(
-            self.page, on_pick=self._pick_model
-        )
+        self.model_chip = build_model_pill(self.page, on_pick=self._pick_model)
 
         # Sherlock's header shape (via DDGS): ONE row, left group and right
         # group, SPACE_BETWEEN, and scroll on the whole row so oversized
@@ -361,9 +431,7 @@ class ChatSession:
                                 icon_size=18,
                                 icon_color=self._brand(),
                                 tooltip="New chat",
-                                style=ft.ButtonStyle(
-                                    padding=ft.Padding(2, 6, 2, 6)
-                                ),
+                                style=ft.ButtonStyle(padding=ft.Padding(2, 6, 2, 6)),
                                 on_click=lambda e: self.new_conversation(),
                             ),
                             ft.IconButton(
@@ -371,9 +439,7 @@ class ChatSession:
                                 icon_size=18,
                                 icon_color=self._brand(),
                                 tooltip="Past chats",
-                                style=ft.ButtonStyle(
-                                    padding=ft.Padding(2, 6, 2, 6)
-                                ),
+                                style=ft.ButtonStyle(padding=ft.Padding(2, 6, 2, 6)),
                                 on_click=lambda e: self._show_history(),
                             ),
                             self.credits_chip,
@@ -388,7 +454,9 @@ class ChatSession:
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 scroll=ft.ScrollMode.AUTO,
             ),
-            padding=ft.Padding(tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM),
+            padding=ft.Padding(
+                tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_LG, tokens.SPACE_SM
+            ),
         )
 
         composer = ft.Container(
@@ -397,7 +465,9 @@ class ChatSession:
                 vertical_alignment=ft.CrossAxisAlignment.END,
                 spacing=tokens.SPACE_NANO,
             ),
-            padding=ft.Padding(tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD),
+            padding=ft.Padding(
+                tokens.SPACE_MD, tokens.SPACE_SM, tokens.SPACE_MD, tokens.SPACE_MD
+            ),
         )
 
         self.view = ft.View(
@@ -464,9 +534,7 @@ class ChatSession:
                 # empty string whenever the router auto-started, which is the
                 # "Request URL is missing an 'http://'… protocol" failure in the
                 # log: every model pick logged it and then refreshed nothing.
-                await model_catalog.refresh_catalog(
-                    model_catalog.router_url_for_read()
-                )
+                await model_catalog.refresh_catalog(model_catalog.router_url_for_read())
             except Exception:
                 pass
             # Rebuild the pill so its label matches the new choice.
@@ -669,6 +737,7 @@ class ChatSession:
             on_thought=self._on_thought,
             on_tool_start=self._on_tool_start,
             on_tool_done=self._on_tool_done,
+            on_tool_output=self._on_tool_output,
             should_stop=self._cancel.is_set,
         )
 
@@ -751,6 +820,13 @@ class ChatSession:
         }
         self._emit("step_error" if error else "step_done", {**data, "error": error})
 
+    def _on_tool_output(self, tool_name: str, output_chunk: str) -> None:
+        """Stream tool output (terminal stdout, notebook cell output) to UI in real-time."""
+        if not output_chunk:
+            return
+        # Emit a special event for live tool output
+        self._emit("tool_output", {"tool": tool_name, "text": output_chunk})
+
     def _build_tools(self) -> list:
         from services.ai_tools import build_tools
 
@@ -788,10 +864,16 @@ class ChatSession:
             return
         exc = task.exception()
         if exc is not None:
-            logger.warning("Assistant turn crashed: %s", exc)
+            from services.ai_credits import safe_error_message
+
+            error_message = safe_error_message(exc)
+            logger.warning("Assistant turn failed: %s", error_message)
             self._emit(
                 "error",
-                {"kind": "unavailable", "message": "The assistant stopped unexpectedly."},
+                {
+                    "kind": "unavailable",
+                    "message": error_message,
+                },
             )
         self._persist_history()
         self._render()
@@ -848,7 +930,7 @@ class ChatSession:
             await asyncio.wait_for(event.wait(), timeout=APPROVAL_TIMEOUT_SEC)
             decision = self._confirm[1]["decision"] if self._confirm else None
             return decision == "allow"
-        except (TimeoutError, asyncio.CancelledError):
+        except TimeoutError, asyncio.CancelledError:
             return False
         finally:
             self._confirm = None
@@ -899,7 +981,27 @@ class ChatSession:
         except Exception:
             logger.debug("reveal_cell failed", exc_info=True)
 
-    # ── emit ───────────────────────────────────────────────────────────────
+            def _open_terminal_for_session(self) -> None:
+                """Switch to the terminal tab for the active session."""
+                handler = getattr(self.controller, "open_terminal", None)
+                if not callable(handler):
+                    return
+                try:
+                    handler(getattr(self.state, "active_session_name", "") or "")
+                except Exception:
+                    logger.debug("open_terminal failed", exc_info=True)
+
+            def _open_notebook_for_session(self) -> None:
+                """Switch to the notebook tab for the active session."""
+                handler = getattr(self.controller, "open_notebook", None)
+                if not callable(handler):
+                    return
+                try:
+                    handler(getattr(self.state, "active_session_name", "") or "")
+                except Exception:
+                    logger.debug("open_notebook failed", exc_info=True)
+
+            # ── emit ───────────────────────────────────────────────────────────────
 
     def _emit(self, event: str, data: dict) -> None:
         if self._closing:
@@ -930,8 +1032,23 @@ class ChatSession:
                     "outcome": "",
                     "error": None,
                     "refs": [],
+                    "live_output": "",
                 }
             )
+        elif event == "tool_output" and self._current is not None:
+            # Stream tool output (terminal stdout, notebook cell output) to UI
+            # Find the running step row for this tool and append output
+            tool_name = data.get("tool", "")
+            output_text = data.get("text", "")
+            if tool_name and output_text:
+                for row in self._current["steps_rows"]:
+                    if row.get("name") == tool_name and row.get("state") == "running":
+                        # Append to the row
+                        row["live_output"] = (
+                            row.get("live_output") or ""
+                        ) + output_text
+                        break
+            force = True  # Force render for live output
         elif event in ("step_done", "step_error") and self._current is not None:
             rows = self._current["steps_rows"]
             for row in rows:
@@ -1035,7 +1152,10 @@ class ChatSession:
                     ),
                     padding=ft.Padding.all(tokens.SPACE_MD),
                     border_radius=ft.BorderRadius(
-                        tokens.RADIUS_XL, tokens.RADIUS_XL, tokens.RADIUS_XS, tokens.RADIUS_XL
+                        tokens.RADIUS_XL,
+                        tokens.RADIUS_XL,
+                        tokens.RADIUS_XS,
+                        tokens.RADIUS_XL,
                     ),
                     bgcolor=ft.Colors.PRIMARY,
                     width=min(320, (self.page.width or 320) * 0.8),
@@ -1074,9 +1194,12 @@ class ChatSession:
                             left=tokens.SPACE_MD, top=tokens.SPACE_XS
                         ),
                         border=ft.Border(
-                            left=ft.BorderSide(2, ft.Colors.with_opacity(
-                                0.3, ft.Colors.ON_SURFACE_VARIANT
-                            ))
+                            left=ft.BorderSide(
+                                2,
+                                ft.Colors.with_opacity(
+                                    0.3, ft.Colors.ON_SURFACE_VARIANT
+                                ),
+                            )
                         ),
                     )
                 )
@@ -1143,29 +1266,90 @@ class ChatSession:
             elif row["state"] == "error":
                 detail = str(row.get("error") or "").strip() or "failed"
                 label = f"{label}: {detail[:90]}"
+            # Show live output for running tools (terminal stdout, notebook cell output)
+            live_output = row.get("live_output", "")
+            if row["state"] == "running" and live_output:
+                live_lines = live_output.strip().split("\n")
+                if len(live_lines) > 3:
+                    live_lines = live_lines[-3:]
+                    label = f"{label}\n{chr(10).join(live_lines)}"
             # A row that wrote cells is also a way to reach them: tapping the
             # first one switches to its tab and puts the caret in the cell, so
             # the user takes over exactly where the assistant stopped.
             refs = [r for r in (row.get("refs") or []) if r]
+            action_buttons = []
+            tool_name = row.get("name", "")
+            if tool_name == "_exec" and row["state"] in ("running", "done"):
+                action_buttons.append(
+                    ft.TextButton(
+                        "Open Terminal",
+                        icon=ft.Icons.TERMINAL_ROUNDED,
+                        on_click=lambda e, tn=tool_name: (
+                            self._open_terminal_for_session()
+                        ),
+                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
+                    )
+                )
+            elif tool_name == "read_notebook" and row["state"] in ("running", "done"):
+                action_buttons.append(
+                    ft.TextButton(
+                        "Open Notebook",
+                        icon=ft.Icons.DESCRIPTION_ROUNDED,
+                        on_click=lambda e, tn=tool_name: (
+                            self._open_notebook_for_session()
+                        ),
+                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
+                    )
+                )
+            elif (
+                tool_name == "write_cells"
+                and row["state"] in ("running", "done")
+                and refs
+            ):
+                action_buttons.append(
+                    ft.TextButton(
+                        "Open Notebook",
+                        icon=ft.Icons.DESCRIPTION_ROUNDED,
+                        on_click=lambda e, r=refs[0]: self._reveal_cell(r),
+                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
+                    )
+                )
             kids.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=ft.Column(
                         [
-                            icon,
-                            ft.Text(
-                                label,
-                                size=tokens.FONT_SM,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                                expand=True,
+                            ft.Row(
+                                [
+                                    icon,
+                                    ft.Text(
+                                        label,
+                                        size=tokens.FONT_SM,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        expand=True,
+                                    ),
+                                ],
+                                spacing=tokens.SPACE_SM,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             ),
+                            ft.Row(
+                                action_buttons,
+                                spacing=tokens.SPACE_XS,
+                                alignment=ft.MainAxisAlignment.END,
+                            )
+                            if action_buttons
+                            else ft.Container(),
                         ],
-                        spacing=tokens.SPACE_SM,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=tokens.SPACE_XXS,
                     ),
                     padding=ft.Padding.only(left=tokens.SPACE_MD),
-                    **({"ink": True, "on_click": lambda e, r=refs[0]: self._reveal_cell(r)}
+                    **(
+                        {
+                            "ink": True,
+                            "on_click": lambda e, r=refs[0]: self._reveal_cell(r),
+                        }
                         if refs
-                        else {}),
+                        else {}
+                    ),
                 )
             )
 
@@ -1183,7 +1367,11 @@ class ChatSession:
                                         size=tokens.ICON_SM,
                                         color=ft.Colors.ERROR,
                                     ),
-                                    ft.Text(label, size=tokens.FONT_SM, weight=ft.FontWeight.W_700),
+                                    ft.Text(
+                                        label,
+                                        size=tokens.FONT_SM,
+                                        weight=ft.FontWeight.W_700,
+                                    ),
                                 ],
                                 spacing=tokens.SPACE_SM,
                             ),
@@ -1203,23 +1391,31 @@ class ChatSession:
                                 [
                                     ft.FilledButton(
                                         "Allow",
-                                        on_click=lambda e: self._confirm_decision("allow"),
+                                        on_click=lambda e: self._confirm_decision(
+                                            "allow"
+                                        ),
                                     ),
                                     ft.OutlinedButton(
                                         "Deny",
-                                        on_click=lambda e: self._confirm_decision("deny"),
+                                        on_click=lambda e: self._confirm_decision(
+                                            "deny"
+                                        ),
                                     ),
                                 ],
                                 spacing=tokens.SPACE_SM,
                             ),
-                            tip_text(f"Auto-denies in {APPROVAL_TIMEOUT_SEC // 60} minutes"),
+                            tip_text(
+                                f"Auto-denies in {APPROVAL_TIMEOUT_SEC // 60} minutes"
+                            ),
                         ],
                         spacing=tokens.SPACE_SM,
                         tight=True,
                     ),
                     padding=ft.Padding.all(tokens.SPACE_SM),
                     border_radius=tokens.RADIUS_MD,
-                    border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.ERROR)),
+                    border=ft.Border.all(
+                        1, ft.Colors.with_opacity(0.5, ft.Colors.ERROR)
+                    ),
                 )
             )
 
@@ -1272,7 +1468,9 @@ class ChatSession:
             from services.ai_credits import credit_word
 
             kids.append(
-                tip_text(f"{credit_word(turn['cost'])} · {turn.get('model') or 'router'}")
+                tip_text(
+                    f"{credit_word(turn['cost'])} · {turn.get('model') or 'router'}"
+                )
             )
 
         return ft.Container(
@@ -1283,7 +1481,9 @@ class ChatSession:
     def _welcome(self) -> ft.Control:
         kids: list[ft.Control] = [
             ft.Container(
-                content=ft.Icon(_CHAT_ICON, size=tokens.ICON_XXL, color=ft.Colors.PRIMARY),
+                content=ft.Icon(
+                    _CHAT_ICON, size=tokens.ICON_XXL, color=ft.Colors.PRIMARY
+                ),
                 alignment=ft.Alignment.CENTER,
                 margin=ft.Margin(0, tokens.SPACE_XXXL, 0, tokens.SPACE_SM),
             ),
@@ -1293,7 +1493,9 @@ class ChatSession:
                 weight=ft.FontWeight.W_700,
                 text_align=ft.TextAlign.CENTER,
             ),
-            tip_text("I can read your notebooks and terminals, run code, and edit cells."),
+            tip_text(
+                "I can read your notebooks and terminals, run code, and edit cells."
+            ),
         ]
         for icon, label, prompt in _starter_rows():
             kids.append(
@@ -1329,7 +1531,9 @@ class ChatSession:
     def _persist_history(self) -> None:
         from services.conversation_service import flat_from_turns
 
-        self._conversations.save_conversation(self.conversation_id, flat_from_turns(self._turns))
+        self._conversations.save_conversation(
+            self.conversation_id, flat_from_turns(self._turns)
+        )
 
     def _refresh_credits(self) -> None:
         from services.ai_credits import refresh_balance
