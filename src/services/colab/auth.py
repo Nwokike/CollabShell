@@ -37,7 +37,7 @@ async def ensure_online_impl(service):
             # An HTTP response (including a 404 for this root path) proves
             # DNS, TLS, and the remote service are reachable.
             return True
-        except OSError, TimeoutError, urllib.error.URLError:
+        except (OSError, TimeoutError, urllib.error.URLError):
             return False
 
     is_online = await asyncio.to_thread(_check)

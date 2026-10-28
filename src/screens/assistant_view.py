@@ -981,27 +981,27 @@ class ChatSession:
         except Exception:
             logger.debug("reveal_cell failed", exc_info=True)
 
-            def _open_terminal_for_session(self) -> None:
-                """Switch to the terminal tab for the active session."""
-                handler = getattr(self.controller, "open_terminal", None)
-                if not callable(handler):
-                    return
-                try:
-                    handler(getattr(self.state, "active_session_name", "") or "")
-                except Exception:
-                    logger.debug("open_terminal failed", exc_info=True)
+    def _open_terminal_for_session(self) -> None:
+        """Switch to the terminal tab for the active session."""
+        handler = getattr(self.controller, "open_terminal", None)
+        if not callable(handler):
+            return
+        try:
+            handler(getattr(self.state, "active_session_name", "") or "")
+        except Exception:
+            logger.debug("open_terminal failed", exc_info=True)
 
-            def _open_notebook_for_session(self) -> None:
-                """Switch to the notebook tab for the active session."""
-                handler = getattr(self.controller, "open_notebook", None)
-                if not callable(handler):
-                    return
-                try:
-                    handler(getattr(self.state, "active_session_name", "") or "")
-                except Exception:
-                    logger.debug("open_notebook failed", exc_info=True)
+    def _open_notebook_for_session(self) -> None:
+        """Switch to the notebook tab for the active session."""
+        handler = getattr(self.controller, "open_notebook", None)
+        if not callable(handler):
+            return
+        try:
+            handler(getattr(self.state, "active_session_name", "") or "")
+        except Exception:
+            logger.debug("open_notebook failed", exc_info=True)
 
-            # ── emit ───────────────────────────────────────────────────────────────
+    # ── emit ───────────────────────────────────────────────────────────────
 
     def _emit(self, event: str, data: dict) -> None:
         if self._closing:
