@@ -155,7 +155,8 @@ def test_renaming_models_changes_nothing_structural():
 
 def test_candidates_exclude_auto_and_unusable_rows():
     _fresh([_row("auto"), _row("low", tier="low")])
-    assert mc.candidate_models() == []
+    # With fallback enabled, low tier models are included when no high/medium available
+    assert mc.candidate_models() == ["low"]
 
 
 def test_turn_candidates_auto_falls_back_to_ranked_pool():

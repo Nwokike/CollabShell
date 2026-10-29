@@ -158,7 +158,8 @@ def _normalise(rows) -> list[dict]:
 
 
 def pickable_models() -> list[dict]:
-    """Rows the picker may show: active, chat-capable, high/medium tier."""
+    """Rows the picker may show: active, chat-capable, high/medium tier.
+    Falls back to low/minimal if no high/medium models available."""
     kept = []
     for entry in _catalog:
         if str(entry.get("id") or "").lower() == "auto":
@@ -168,6 +169,18 @@ def pickable_models() -> list[dict]:
         if tier_of(entry) not in PICKABLE_TIERS:
             continue
         kept.append(entry)
+    
+    # Fallback: if no high/medium models, include low/minimal
+    if not kept:
+        for entry in _catalog:
+            if str(entry.get("id") or "").lower() == "auto":
+                continue
+            if not is_active(entry) or not _is_chat_row(entry):
+                continue
+            if tier_of(entry) in PICKABLE_TIERS:
+                continue
+            kept.append(entry)
+    
     return _sorted(kept)
 
 
@@ -175,7 +188,7 @@ def candidate_models(exclude: str | None = None) -> list[str]:
     """Ordered model ids a turn may try.
 
     Tier first, then gateway latency, then id — so "high by fastest" leads and
-    medium follows.
+    medium follows. Falls back to low/minimal if no high/medium models available.
     """
     skip = (exclude or "").strip().lower()
     ranked = []
@@ -195,7 +208,29 @@ def candidate_models(exclude: str | None = None) -> list[str]:
             (0 if tier_of(entry) == "high" else 1, _latency_of(entry), model_id)
         )
     ranked.sort()
-    return [model_id for _tier, _latency, model_id in ranked]
+    result = [model_id for _tier, _latency, model_id in ranked]
+    
+    # Fallback: if no high/medium models available, include low/minimal
+    if not result:
+        for entry in _catalog:
+            model_id = entry["id"]
+            if str(model_id).lower() == "auto":
+                continue
+            if skip and model_id.lower() == skip:
+                continue
+            if not is_active(entry) or not _is_chat_row(entry):
+                continue
+            if tier_of(entry) in PICKABLE_TIERS:
+                continue  # already handled above
+            if model_circuit_open(model_id):
+                continue
+            ranked.append(
+                (2 if tier_of(entry) == "low" else 3, _latency_of(entry), model_id)
+            )
+        ranked.sort()
+        result = [model_id for _tier, _latency, model_id in ranked]
+    
+    return result
 
 
 def turn_candidates(chosen: str) -> list[str]:

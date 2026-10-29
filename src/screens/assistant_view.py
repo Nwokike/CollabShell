@@ -28,6 +28,7 @@ import time
 
 import flet as ft
 
+from components.ai_step_output import build_ai_step_output
 from components.model_pill import build_model_pill
 from core import tokens
 from core.styles import tip_text
@@ -817,6 +818,8 @@ class ChatSession:
             # write_cells echoes the ids it inserted so this row can point
             # back at the cells and hand them over to the user.
             "refs": _cell_refs({"name": name, "result": result}),
+            # Include outputs for rich rendering
+            "outputs": payload.get("outputs", []),
         }
         self._emit("step_error" if error else "step_done", {**data, "error": error})
 
@@ -1001,6 +1004,26 @@ class ChatSession:
         except Exception:
             logger.debug("open_notebook failed", exc_info=True)
 
+    def _copy_step_output(self, outputs: list) -> None:
+        """Copy step output to clipboard."""
+        if not outputs:
+            return
+        # Flatten outputs to text
+        text_parts = []
+        for out in outputs:
+            if out.get("type") == "stream":
+                text_parts.append(out.get("text", ""))
+            elif out.get("type") == "error":
+                text_parts.append("\n".join(out.get("traceback", [])))
+            elif out.get("type") in ("execute_result", "display_data"):
+                data = out.get("data", {})
+                if "text/plain" in data:
+                    text_parts.append(data["text/plain"])
+        text = "\n".join(text_parts)
+        if text:
+            import flet as ft
+            ft.Page.set_clipboard(text)
+
     # ── emit ───────────────────────────────────────────────────────────────
 
     def _emit(self, event: str, data: dict) -> None:
@@ -1058,6 +1081,8 @@ class ChatSession:
                     row["error"] = data.get("error")
                     if data.get("refs"):
                         row["refs"] = list(data["refs"])
+                    # Store outputs for rich rendering
+                    row["outputs"] = data.get("outputs", [])
                     break
             else:
                 # An id with no row for it. That is a wiring fault, not a row to
@@ -1246,20 +1271,6 @@ class ChatSession:
             )
 
         for row in turn.get("steps_rows", []):
-            if row["state"] == "running":
-                icon = ft.ProgressRing(width=12, height=12, stroke_width=2)
-            elif row["state"] == "error":
-                icon = ft.Icon(
-                    ft.Icons.ERROR_OUTLINE_ROUNDED,
-                    size=tokens.ICON_SM,
-                    color=AppColors.ERROR,
-                )
-            else:
-                icon = ft.Icon(
-                    ft.Icons.CHECK_CIRCLE_ROUNDED,
-                    size=tokens.ICON_SM,
-                    color=AppColors.SUCCESS,
-                )
             label = row["label"]
             if row["state"] == "done" and row.get("outcome"):
                 label = f"{label}: {row['outcome']}"
@@ -1273,85 +1284,18 @@ class ChatSession:
                 if len(live_lines) > 3:
                     live_lines = live_lines[-3:]
                     label = f"{label}\n{chr(10).join(live_lines)}"
-            # A row that wrote cells is also a way to reach them: tapping the
-            # first one switches to its tab and puts the caret in the cell, so
-            # the user takes over exactly where the assistant stopped.
-            refs = [r for r in (row.get("refs") or []) if r]
-            action_buttons = []
             tool_name = row.get("name", "")
-            if tool_name == "_exec" and row["state"] in ("running", "done"):
-                action_buttons.append(
-                    ft.TextButton(
-                        "Open Terminal",
-                        icon=ft.Icons.TERMINAL_ROUNDED,
-                        on_click=lambda e, tn=tool_name: (
-                            self._open_terminal_for_session()
-                        ),
-                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-                    )
-                )
-            elif tool_name == "read_notebook" and row["state"] in ("running", "done"):
-                action_buttons.append(
-                    ft.TextButton(
-                        "Open Notebook",
-                        icon=ft.Icons.DESCRIPTION_ROUNDED,
-                        on_click=lambda e, tn=tool_name: (
-                            self._open_notebook_for_session()
-                        ),
-                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-                    )
-                )
-            elif (
-                tool_name == "write_cells"
-                and row["state"] in ("running", "done")
-                and refs
-            ):
-                action_buttons.append(
-                    ft.TextButton(
-                        "Open Notebook",
-                        icon=ft.Icons.DESCRIPTION_ROUNDED,
-                        on_click=lambda e, r=refs[0]: self._reveal_cell(r),
-                        style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-                    )
-                )
-            kids.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    icon,
-                                    ft.Text(
-                                        label,
-                                        size=tokens.FONT_SM,
-                                        color=ft.Colors.ON_SURFACE_VARIANT,
-                                        expand=True,
-                                    ),
-                                ],
-                                spacing=tokens.SPACE_SM,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                            ft.Row(
-                                action_buttons,
-                                spacing=tokens.SPACE_XS,
-                                alignment=ft.MainAxisAlignment.END,
-                            )
-                            if action_buttons
-                            else ft.Container(),
-                        ],
-                        spacing=tokens.SPACE_XXS,
-                    ),
-                    padding=ft.Padding.only(left=tokens.SPACE_MD),
-                    **(
-                        {
-                            "ink": True,
-                            "on_click": lambda e, r=refs[0]: self._reveal_cell(r),
-                        }
-                        if refs
-                        else {}
-                    ),
-                )
+            
+            # Use shared AI step output component for rich rendering
+            step_output = build_ai_step_output(
+                tool_name=tool_name,
+                outputs=row.get("outputs", []),
+                state=row["state"],
+                on_open_terminal=self._open_terminal_for_session,
+                on_open_notebook=self._open_notebook_for_session,
+                on_copy=lambda r=row: self._copy_step_output(r.get("outputs", [])),
             )
+            kids.append(step_output)
 
         if self._confirm and self._confirm[1].get("decision") is None:
             label = self._confirm[1]["label"]

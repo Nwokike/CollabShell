@@ -330,8 +330,8 @@ def test_unreachable_router_returns_no_pickable_rows(monkeypatch):
 
 
 def test_untiered_rows_are_not_offered(monkeypatch):
-    """A row with no rate_hint tiers as 'low', which is not pickable."""
-
+    """A row with no rate_hint tiers as 'low', which is not pickable by default.
+    But with fallback enabled, it IS offered when no high/medium models available."""
     from services import model_catalog
 
     def handler(request):
@@ -352,7 +352,8 @@ def test_untiered_rows_are_not_offered(monkeypatch):
     model_catalog._catalog = []
     model_catalog._catalog_fetched_at = 0.0
     entries = asyncio.run(model_catalog.refresh_catalog("http://router/v1"))
-    assert entries == [], entries
+    # With fallback enabled, untiered (low) models are offered when no high/medium available
+    assert entries == [{"id": "no-tier", "status": "active", "endpoint_type": "chat.completion"}], entries
 
 
 def test_picker_lists_the_ranked_models(monkeypatch):

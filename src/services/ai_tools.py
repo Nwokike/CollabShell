@@ -132,14 +132,17 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return NO_SESSION
         try:
             chunks: list[str] = []
+            outputs: list[dict] = []
 
             def _on_output(payload):
                 entry = payload if isinstance(payload, dict) else {"text": str(payload)}
                 if "traceback" in entry:
                     chunks.append("\n".join(map(str, entry["traceback"])))
+                    outputs.append(entry)
                 else:
                     text = str(entry.get("text", ""))
                     chunks.append(text)
+                    outputs.append(entry)
                     # Stream to UI in real-time
                     if on_tool_output and text:
                         on_tool_output("_exec", text)
@@ -158,7 +161,12 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
                 intercept_oauth=True,
             )
             out = "".join(chunks).strip()
-            return _clip(out) if out else "(no output)"
+            # Attach outputs to the result for rich rendering in chat
+            import json
+            result = _clip(out) if out else "(no output)"
+            if outputs:
+                result = json.dumps({"text": result, "outputs": outputs})
+            return result
         except Exception as ex:
             logger.warning("AI tool _exec failed: %s", ex)
             return f"Execution failed: {type(ex).__name__}: {ex}"
@@ -234,7 +242,11 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             from screens.session.terminal_panel import read_terminal_scrollback
 
             text = read_terminal_scrollback(_live_session(), lines)
-            return _clip_text(text) if text.strip() else "(terminal is empty)"
+            # Return structured output for rich rendering
+            import json
+            result = _clip_text(text) if text.strip() else "(terminal is empty)"
+            outputs = [{"type": "stream", "text": text}] if text.strip() else []
+            return json.dumps({"text": result, "outputs": outputs})
         except Exception as ex:
             logger.warning("AI tool read_terminal failed: %s", ex)
             return f"Could not read the terminal: {ex}"
