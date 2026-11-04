@@ -493,17 +493,18 @@ class AppController:
             )
 
         def _open_terminal(session_name: str):
-            """Switch to the terminal tab for a session."""
-            # Navigate to the session screen with terminal mode
-            state.active_session_name = session_name
-            state.session_mode = "terminal"
-            _navigate_tab(2)  # Terminal tab
+            """Open the SESSION's terminal screen — not the home terminal tab.
+
+            `_navigate_tab` routes through `_apply_route`, whose tab branch
+            clears `active_session_name`/`active_subview` and lands on the
+            session LIST. The assistant's Open-Terminal action must land
+            inside the session screen showing the live PTY.
+            """
+            _open_session(session_name, "terminal")
 
         def _open_notebook(session_name: str):
-            """Switch to the notebook tab for a session."""
-            state.active_session_name = session_name
-            state.session_mode = "notebook"
-            _navigate_tab(1)  # Notebooks tab
+            """Open the SESSION's notebook screen (same reasoning as terminal)."""
+            _open_session(session_name, "notebook")
 
         def _toggle_theme():
             if page.theme_mode == ft.ThemeMode.SYSTEM:
@@ -663,6 +664,15 @@ class AppController:
                 state.logtostderr = saved_logtostderr == "true"
             else:
                 state.logtostderr = True
+
+            # Restore the onboarding flag HERE, before any network call: the
+            # shell renders as soon as app_ready flips, and a boot path that
+            # leaves onboarding_done at its False default paints a flash of
+            # onboarding before the real screen (the 2.1.2 splash regression).
+            saved_onboarding = await self.storage.get(
+                constants.STORAGE_ONBOARDING_DONE
+            )
+            state.onboarding_done = saved_onboarding == "true"
         except Exception as e:
             logger.warning("Failed to restore some preferences: %s", e)
 
@@ -716,10 +726,15 @@ class AppController:
         try:
             if not await self._refresh_auth_state():
                 state.active_sessions = []
+                # A flaky network must not flip app_ready onto a stale
+                # onboarding default: re-read the persisted flag so the shell
+                # lands on a definite screen (offline flow / onboarding / auth).
+                saved_onboarding = await self.storage.get(
+                    constants.STORAGE_ONBOARDING_DONE
+                )
+                state.onboarding_done = saved_onboarding == "true"
                 return
 
-            onboarding_done = await self.storage.get(constants.STORAGE_ONBOARDING_DONE)
-            state.onboarding_done = onboarding_done == "true"
             if state.is_authenticated:
                 state.onboarding_done = True
                 await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")

@@ -215,6 +215,13 @@ async def copy_output(page: ft.Page, outputs: list):
     ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
     final_text = ansi_escape.sub("", text_to_copy).strip()
 
+    # A placeholder-only result ("None", "None idle") is NOT copyable content:
+    # copying the literal string None is how the owner got a copy button that
+    # "couldn't copy".
+    if final_text in ("", "None"):
+        _snack(page, "No output to copy.")
+        return
+
     if final_text:
         try:
             await ft.Clipboard().set(final_text)

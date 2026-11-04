@@ -30,7 +30,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Collab Shell"
-build_number = 15
+build_number = 16
 # The light desktop client does not bundle flet-terminal (terminals render as
 # unknown controls under `flet run`); the full client does.
 desktop_flavor = "full"

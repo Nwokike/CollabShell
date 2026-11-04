@@ -226,6 +226,10 @@ def HistoryScreen() -> ft.Control:
     return ft.Column(
         controls=[
             build_brand_header(),
+            # Banner at the TOP of the content (files/selector pattern) — the
+            # owner flagged a banner parked at the very bottom as an
+            # afterthought, and there must be exactly one on this screen.
+            build_banner_ad(page),
             ft.Container(
                 content=ft.Column(
                     controls=[
@@ -322,7 +326,6 @@ def HistoryScreen() -> ft.Control:
                 expand=True,
                 padding=ft.Padding(tokens.SPACE_LG, 0, tokens.SPACE_LG, 0),
             ),
-            build_banner_ad(page),
         ],
         spacing=0,
         scroll=ft.ScrollMode.AUTO,

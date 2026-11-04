@@ -60,7 +60,6 @@ def build_session_fab(
     # AI (only shown when the relevant handler is passed)
     on_ai_explain=None,
     on_ai_explain_cell=None,
-    on_ai_suggest_hardware=None,
     on_open_assistant=None,
 ) -> ft.FloatingActionButton | None:
     """Constructs the floating action button with contextual popup menu items."""
@@ -182,23 +181,14 @@ def build_session_fab(
                 on_ai_explain,
             )
         )
-    elif mode != "terminal":
-        if on_ai_explain_cell:
-            ai.append(
-                _item(
-                    "Ask AI about this cell",
-                    ft.Icons.AUTO_AWESOME_OUTLINED,
-                    on_ai_explain_cell,
-                )
+    elif mode != "terminal" and on_ai_explain_cell:
+        ai.append(
+            _item(
+                "Ask AI about this cell",
+                ft.Icons.AUTO_AWESOME_OUTLINED,
+                on_ai_explain_cell,
             )
-        if on_ai_suggest_hardware:
-            ai.append(
-                _item(
-                    "Suggest runtime shape for this notebook",
-                    ft.Icons.MEMORY_ROUNDED,
-                    on_ai_suggest_hardware,
-                )
-            )
+        )
     ai.append(_item("Open Assistant", tokens.ASSISTANT_ICON, on_open_assistant))
     if any(ai):
         menu_items.append(ft.PopupMenuItem())

@@ -140,17 +140,20 @@ def AppShell() -> Control:
         if not page or not page.views:
             return
 
-        # Hide navigation bar when loading, in onboarding, or inside a subview
+        # The bottom navigation stays visible on EVERY app screen — including
+        # subview pages (history, session). It is hidden only while the app is
+        # still loading, in onboarding, or unauthenticated. (Hiding it inside
+        # subviews made the bar vanish whenever a page opened — a 2.2.0
+        # regression the owner hit constantly.)
         if (
             not state.app_ready
             or not state.onboarding_done
             or not state.is_authenticated
-            or bool(state.active_subview)
         ):
             if page.views[0].navigation_bar is not None:
                 # No page.update() here: this runs inside a use_effect
                 # callback, and the observable deps already schedule the
-                # re-render (flet 1.0.x forbids page.update() during render).
+                # re-render (flet 1.x forbids page.update() during render).
                 page.views[0].navigation_bar = None
             return
 
@@ -209,10 +212,12 @@ def AppShell() -> Control:
             return
         current = page.views[0].floating_action_button
         ours = current is not None and current is _assistant_fab_ref.current
-        # The FAB is always present once the app is up, the way DDGS ships it —
-        # it is the entry point to the assistant, so hiding it until a switch is
-        # flipped makes the feature undiscoverable. (There is no switch any more.)
-        if not (state.app_ready and state.onboarding_done):
+        # OWNERSHIP IS A PURE FUNCTION OF STATE: the assistant FAB lives on the
+        # bottom-nav tabs (no subview); inside a session subview the session
+        # screen owns the slot. Because both effects decide from
+        # `state.active_subview` alone, render order can never overlap them.
+        # The FAB is always present once the app is up, the way DDGS ships it.
+        if not (state.app_ready and state.onboarding_done) or state.active_subview:
             if ours:
                 page.views[0].floating_action_button = None
                 _assistant_fab_ref.current = None
@@ -226,11 +231,8 @@ def AppShell() -> Control:
             if current.tooltip != wanted:
                 current.tooltip = wanted
             return
-        if current is not None:
-            return  # the session screen owns the slot right now
-        # DDGS's recipe verbatim: mini, white icon, brand fill, tooltip only.
-        # No shape override (the platform's own roundness is right) and no
-        # badge or per-credit rebuild.
+        # Claim the slot: any FAB still parked here (e.g. a stale session FAB)
+        # is replaced — the shell decides by state, not by identity.
         fab = ft.FloatingActionButton(
             icon=tokens.ASSISTANT_ICON,
             foreground_color=ft.Colors.WHITE,

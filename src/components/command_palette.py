@@ -2,7 +2,7 @@
 
 `Ctrl+K` opens it from anywhere in the shell. It exists mainly so the AI
 actions (open the assistant, ask AI about this cell, explain the terminal,
-suggest a runtime shape) are discoverable in the same place as everything
+assist with cells) are discoverable in the same place as everything
 else, rather than hidden in per-screen menus.
 
 Deliberately not a fuzzy-finder with scoring: the command list is a few dozen

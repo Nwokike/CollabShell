@@ -465,8 +465,9 @@ def test_wallet_shows_balance_and_cost_rules():
     dialog = page.dialogs[-1]
     texts = _flatten_texts(dialog)
     assert any("42 of 50 credits" in t for t in texts), texts
-    assert any("One assistant step costs 1 credit" in t for t in texts)
-    assert any("00:00 UTC" in t for t in texts)
+    assert any("Assistant model step" in t for t in texts), texts
+    assert any("Each reply and tool call" in t for t in texts), texts
+    assert any("00:00 UTC" in t for t in texts), texts
 
 
 def test_wallet_offers_premium_when_not_premium():
@@ -514,7 +515,7 @@ def test_wallet_shows_ad_topup_on_mobile():
     )
     show_wallet_dialog(page, state, services)
     texts = _flatten_texts(page.dialogs[-1])
-    assert any("Watch Ad (+2)" in t for t in texts), texts
+    assert any("Watch Ad (+2 Credits)" in t for t in texts), texts
 
 
 def test_premium_user_sees_no_ad_topup():

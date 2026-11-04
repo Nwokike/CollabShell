@@ -56,7 +56,16 @@ def HomeScreen() -> ft.Control:
             if state.is_online and state.is_authenticated
             else None
         ),
-        [state.is_online, state.is_authenticated],
+        [
+            state.is_online,
+            state.is_authenticated,
+            # Re-fetch when the dashboard becomes visible again: closing the
+            # assistant (or any subview) does not remount this screen, so
+            # without these deps the session list stayed stale.
+            state.assistant_open,
+            state.active_subview,
+            state.current_tab,
+        ],
     )
 
     def _on_session_tap(session: dict):

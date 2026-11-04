@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+
 import flet as ft
 
 from components.session_card import build_session_card
 from core import constants, tokens
 from core.styles import build_banner_ad, section_header
-from state import AppStateCtx, ControllerMethodsCtx
+from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
+
+logger = logging.getLogger("SessionSelector")
 
 
 @ft.component
@@ -18,7 +22,28 @@ def SessionSelectorTab(mode: str) -> ft.Control:
     """
     state = ft.use_context(AppStateCtx)
     controller = ft.use_context(ControllerMethodsCtx)
+    services = ft.use_context(ServiceCtx)
     page = ft.context.page
+
+    def _load_sessions():
+        async def _load():
+            try:
+                state.active_sessions = (
+                    await services.colab.list_sessions(auth_method=state.auth_method)
+                    or []
+                )
+            except Exception as exc:
+                logger.debug("selector tab refresh failed: %s", exc)
+
+        # Every entry into this tab re-lists the sessions, so the list never
+        # shows a stale snapshot (it renders the observable directly).
+        if state.is_online and state.is_authenticated:
+            page.run_task(_load)
+
+    ft.use_effect(
+        _load_sessions,
+        [state.is_online, state.is_authenticated, state.active_subview, mode],
+    )
 
     def _on_select(session_name: str):
         controller.open_session(session_name, mode)

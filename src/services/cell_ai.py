@@ -1,4 +1,4 @@
-"""In-cell AI actions — Explain, Fix error, Suggest next, Suggest hardware.
+"""In-cell AI actions — Explain, Fix error, Suggest next.
 
 These run *in context*, not in a chat, so they are deliberately tool-free: the
 whole notebook is passed in the prompt and the model answers in one step. That
@@ -15,9 +15,6 @@ cell it is about.
 Metering goes through the same `ai_credits.run_metered_turn` as the chat, so
 the zero-balance gate, the per-step charge and the floor rule behave
 identically.
-
-`HARDWARE_OPTIONS` is read, not invented: the app's own accelerator vocabulary
-(session_ops), so a suggestion names a shape the picker can actually select.
 """
 
 from __future__ import annotations
@@ -25,20 +22,6 @@ from __future__ import annotations
 import logging
 
 logger = logging.getLogger("cell_ai")
-
-# What the app can actually pick, and what each one costs the user. Passed to
-# the model verbatim so a recommendation maps onto a real choice rather than a
-# plausible-sounding shape the picker does not offer.
-HARDWARE_OPTIONS = (
-    "CPU (no accelerator) — always available",
-    "T4 (GPU) — free tier",
-    "L4 (GPU) — paid",
-    "G4 (GPU) — paid",
-    "A100 (GPU) — paid",
-    "H100 (GPU) — paid",
-    "v5e1 / v6e1 (TPU) — free tier / paid",
-    "High-RAM shape — needs Colab Pro or Pro+",
-)
 
 # The gates live in ai_quick (the shared engine), and are re-exported here so
 # `except cell_ai.OutOfCredits` at a call site catches the class that is
@@ -111,31 +94,12 @@ def _model_messages(
             "corrected code. Reply with ONLY a Python code block containing the "
             "fixed cell — no explanation before or after it."
         )
-    elif action == "hardware":
-        ask = (
-            "Recommend the runtime shape for THIS notebook. Reply in markdown "
-            "with: the single recommendation on its own line first, exactly as "
-            "it appears in the options list; then two or three sentences of "
-            "why; then, if relevant, what would change your mind. Only "
-            "recommend something the options list can select."
-        )
     else:  # suggest
         ask = (
             "Suggest the single most useful next cell for this notebook. Reply "
             "with ONLY a Python code block containing it — no explanation "
             "before or after it. It should follow on from what is already here."
         )
-    if action == "hardware":
-        body = [
-            "Notebook:",
-            digest or "(empty)",
-            "",
-            "Available runtime shapes:",
-            *[f"- {option}" for option in HARDWARE_OPTIONS],
-            "",
-            ask,
-        ]
-        return [{"role": "user", "content": "\n".join(body)}]
     body = [
         "Notebook:",
         digest or "(empty)",
@@ -147,6 +111,7 @@ def _model_messages(
         body += ["", "Its output (the error):", output or "(no output captured)"]
     body += ["", ask]
     return [{"role": "user", "content": "\n".join(body)}]
+
 
 
 def extract_code(text: str) -> str:

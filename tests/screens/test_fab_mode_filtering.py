@@ -50,7 +50,6 @@ def test_notebook_mode_excludes_terminal_actions():
         on_stop=lambda e: None,
         on_ai_explain=lambda e: None,
         on_ai_explain_cell=lambda e: None,
-        on_ai_suggest_hardware=lambda e: None,
         on_open_assistant=lambda e: None,
     )
     
@@ -98,7 +97,6 @@ def test_terminal_mode_excludes_notebook_actions():
         on_stop=lambda e: None,
         on_ai_explain=lambda e: None,
         on_ai_explain_cell=lambda e: None,
-        on_ai_suggest_hardware=lambda e: None,
         on_open_assistant=lambda e: None,
     )
     
@@ -147,7 +145,6 @@ def test_shared_actions_appear_in_both_modes():
             on_stop=lambda e: None,
             on_ai_explain=lambda e: None,
             on_ai_explain_cell=lambda e: None,
-            on_ai_suggest_hardware=lambda e: None,
             on_open_assistant=lambda e: None,
         )
         

@@ -336,53 +336,6 @@ def test_ai_quick_gates_are_the_same_classes_as_cell_ai_uses():
     assert cell_ai.CellAIDisabled is ai_quick.CellAIDisabled
 
 
-# ── hardware suggestion (4C) ───────────────────────────────────────────────
-
-
-def test_hardware_prompt_lists_only_selectable_options(monkeypatch):
-    """A suggestion naming a shape the picker cannot select is useless — and
-    worse, it looks like the app lied."""
-    captured = {}
-    monkeypatch.setattr(
-        "services.ai_credits.run_metered_turn", _recording_turn(captured)
-    )
-    from services import ai_quick
-
-    monkeypatch.setattr(ai_quick, "ask", _recording_turn(captured))
-    asyncio.run(
-        cell_ai.run_cell_action(
-            action="hardware",
-            state=_state(),
-            credits=object(),
-            services=NS(),
-            source="",
-            notebook_cells=[FakeCell("import torch; torch.cuda.is_available()")],
-        )
-    )
-    prompt = captured["prompt"]
-    assert "Available runtime shapes:" in prompt
-    # Every option the app can pick appears in the prompt.
-    for option in cell_ai.HARDWARE_OPTIONS:
-        assert option.split(" (")[0] in prompt, option
-
-
-def test_hardware_asks_for_a_verdict_first_and_a_markdown_explanation():
-    """The recommendation must be separable from the reasoning, so the UI can
-    show one line and let the rest be detail."""
-    body = cell_ai._model_messages("hardware", source="", digest="x", output="")
-    content = body[0]["content"]
-    assert "single recommendation on its own line first" in content
-    assert "markdown" in content.lower()
-
-
-def test_hardware_does_not_need_a_cell():
-    """It is notebook-scoped: an empty source is legitimate."""
-    body = cell_ai._model_messages(
-        "hardware", source="", digest="import numpy", output="", cell_type="code"
-    )
-    assert "import numpy" in body[0]["content"]
-
-
 def _recording_turn(captured):
     async def fake(**kwargs):
         captured.update(kwargs)

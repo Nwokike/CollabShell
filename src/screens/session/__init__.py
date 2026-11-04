@@ -273,7 +273,6 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             # worse than no entry.
             on_ai_explain=lambda e: _call(term_actions, "explain"),
             on_ai_explain_cell=lambda e: _call(nb_actions, "ask_ai_active"),
-            on_ai_suggest_hardware=lambda e: _call(nb_actions, "suggest_hardware"),
             on_open_assistant=lambda e: controller.open_assistant(),
         )
         # No page.update() inside the effect: the observable deps schedule

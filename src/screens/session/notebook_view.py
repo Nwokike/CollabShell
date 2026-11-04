@@ -574,47 +574,6 @@ def NotebookView(
         if not _insert_ai_answer(cell_id, text, kind):
             _ai_notice("The Assistant returned nothing usable.")
 
-    async def _suggest_hardware():
-        """Ask what runtime shape this notebook wants (4C).
-
-        Notebook-scoped, so there is no anchor cell — the answer is appended
-        at the end as a markdown cell, which is where a recommendation reads
-        best anyway.
-        """
-        from services import cell_ai
-
-        tab = _get_tab()
-        if tab is None:
-            return
-        try:
-            text = await cell_ai.run_cell_action(
-                action="hardware",
-                state=state,
-                credits=getattr(services, "credits", None),
-                services=services,
-                source="",
-                notebook_cells=_active_cells(),
-            )
-        except cell_ai.OutOfCredits:
-            _ai_notice("Out of assistant credits — top up in Assistant settings.")
-            return
-        except cell_ai.CellAIDisabled:
-            _ai_notice("Assistant credits are unavailable in this build.")
-            return
-        except Exception as ex:
-            logger.warning("Hardware suggestion failed: %s", ex)
-            _ai_notice("The Assistant could not answer just now.")
-            return
-
-        if not tab["cells"] or not text.strip():
-            _ai_notice("The Assistant returned nothing usable.")
-            return
-        from components.notebook_cell import CellData
-
-        cell = CellData(cell_type="markdown", source=text.strip(), origin="assistant")
-        _insert_cells(tab["id"], [cell])
-        _focus_cell(cell.id)
-
     def _ai_notice(message: str):
         from core.notifications import show_notification
 
@@ -1121,6 +1080,9 @@ def NotebookView(
                             ),
                             on_click=lambda ev: _pick("py"),
                         ),
+                        # Banner inside the export dialog (mobile-only, 0x0 on
+                        # desktop/premium) — the owner asked for a banner here.
+                        build_banner_ad(page),
                     ],
                     spacing=tokens.SPACE_XS,
                     tight=True,
@@ -1194,8 +1156,6 @@ def NotebookView(
                         _show_cell_ai_menu(active_cell_id) if active_cell_id else None
                     )
                 ),
-                # Notebook-scoped: "what runtime shape should I use for this?"
-                "suggest_hardware": lambda: page.run_task(_suggest_hardware),
             }
         )
 

@@ -692,6 +692,16 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             return NO_SESSION
         try:
             ok = await services.colab.stop_session(target, state.auth_method)
+            if ok:
+                # Parity with create_session: the observable session list must
+                # reflect the stop, or the home screen shows a dead session.
+                try:
+                    state.active_sessions = (
+                        await services.colab.list_sessions(auth_method=state.auth_method)
+                        or []
+                    )
+                except Exception:
+                    logger.debug("post-stop session re-list failed", exc_info=True)
             return (
                 f"Session '{target}' stopped." if ok else f"Could not stop '{target}'."
             )

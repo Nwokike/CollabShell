@@ -326,10 +326,14 @@ def NotebookCell(
                             on_open_terminal() if on_open_terminal else None
                         ),
                     ),
+                    # Copy Output only when there is something to copy: the
+                    # owner flagged a copy button over an empty/placeholder
+                    # output ("None idle") that copies nothing.
                     ft.IconButton(
                         ft.Icons.COPY_ALL_ROUNDED,
                         icon_size=tokens.ICON_SM,
                         tooltip="Copy Output",
+                        visible=bool(output_controls),
                         on_click=lambda e: page.run_task(_copy_output_task, e),
                     ),
                     ft.IconButton(

@@ -75,6 +75,41 @@ def _open_action_buttons(
     return []
 
 
+def _copyable_text(outputs: list) -> str:
+    """The text Copy Output would actually put on the clipboard.
+
+    Mirrors notebook_cell.actions.copy_output's extraction so the button can
+    appear ONLY when there is something copyable — never on an empty or
+    placeholder ('None') output.
+    """
+    import re
+
+    parts: list[str] = []
+    for out in outputs or []:
+        if isinstance(out, str):
+            parts.append(out)
+            continue
+        if not isinstance(out, dict):
+            continue
+        if out.get("type") == "error":
+            parts.append("\n".join(str(t) for t in out.get("traceback", []) or []))
+            continue
+        text = out.get("text")
+        if text is None:
+            data = out.get("data") or {}
+            if isinstance(data, dict):
+                plain = data.get("text/plain")
+                if isinstance(plain, list):
+                    plain = "".join(str(p) for p in plain)
+                text = plain
+        if text is not None:
+            parts.append(str(text))
+    joined = "\n".join(parts)
+    # Strip ANSI escapes the same way copy_output does, then judge.
+    stripped = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", joined)
+    return stripped.strip()
+
+
 def _output_panel(
     output_controls: list,
     action_buttons: list,
@@ -162,10 +197,10 @@ def build_ai_step_output(
     action_buttons = _open_action_buttons(
         tool_name, state, session_mode, on_open_terminal, on_open_notebook
     )
-    # The notebook's own Copy Output button (same helper, same icon) — never a
-    # clear or terminal switch here. run_task wants a coroutine FUNCTION, not
-    # an already-created coroutine.
-    if page is not None:
+    # The notebook's own Copy Output button (same helper, same icon) — but
+    # ONLY when there is something copyable: a button that copies nothing (or
+    # copies the string "None") is worse than no button.
+    if page is not None and _copyable_text(outputs):
         from components.notebook_cell.actions import copy_output
 
         async def _copy_output(e=None):
@@ -177,15 +212,6 @@ def build_ai_step_output(
                 icon_size=tokens.ICON_SM,
                 tooltip="Copy Output",
                 on_click=lambda e: page.run_task(_copy_output, e),
-            )
-        )
-    elif outputs:
-        action_buttons.append(
-            ft.IconButton(
-                ft.Icons.COPY_ALL_ROUNDED,
-                icon_size=tokens.ICON_SM,
-                tooltip="Copy Output",
-                on_click=None,
             )
         )
 
