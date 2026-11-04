@@ -1,5 +1,16 @@
 """Design tokens — unified spacing, typography, radii, icons, and layout dimensions."""
 
+import flet as ft
+
+# ── Identity icons ────────────────────────────────────────────────────────────
+# The assistant's identity glyph. One constant, read by every surface that
+# means "this is the assistant": the main FAB, the chat screen's own title and
+# empty state, the credit pill, the palette entry, the session FAB menu, the
+# in-cell AI button, and the file/terminal explain buttons. They had drifted
+# apart (an outline bubble on the chat screen, a sparkle everywhere else), so
+# the FAB and the thing the FAB opens looked like two different products.
+ASSISTANT_ICON = ft.Icons.CHAT_BUBBLE_ROUNDED
+
 # ── Spacing ───────────────────────────────────────────────────────────────────
 SPACE_NONE = 0
 SPACE_MICRO = 1

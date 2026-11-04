@@ -21,7 +21,14 @@ from core.theme import AppColors
 
 @ft.observable
 class CellData:
-    """Observable notebook cell model (code or markdown)."""
+    """Observable notebook cell model (code or markdown).
+
+    ``origin``/``tool_call_id`` record who wrote a cell: a cell the Assistant
+    created (Phase 4) is tagged so a chat step row can point back at it and so
+    the user can tell their own work from the AI's at a glance. Both are
+    omitted from ``to_dict`` while at their defaults, so notebooks written
+    before this existed stay valid and byte-identical.
+    """
 
     def __init__(
         self,
@@ -31,6 +38,8 @@ class CellData:
         outputs: list | None = None,
         is_running: bool = False,
         is_editing: bool | None = None,
+        origin: str = "user",
+        tool_call_id: str | None = None,
     ):
         self.id = cell_id or str(uuid.uuid4())
         self.type = cell_type
@@ -43,9 +52,11 @@ class CellData:
         self.is_editing = (
             (not bool(source.strip())) if is_editing is None else is_editing
         )
+        self.origin = origin or "user"
+        self.tool_call_id = tool_call_id
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "id": self.id,
             "type": self.type,
             "source": self.source,
@@ -53,6 +64,12 @@ class CellData:
             "is_running": False,
             "is_editing": self.is_editing,
         }
+        # Emitted only when non-default so existing files stay byte-identical.
+        if self.origin and self.origin != "user":
+            data["origin"] = self.origin
+        if self.tool_call_id:
+            data["tool_call_id"] = self.tool_call_id
+        return data
 
     @classmethod
     def from_dict(cls, d: dict) -> CellData:
@@ -63,6 +80,8 @@ class CellData:
             outputs=d.get("outputs", []),
             is_running=False,
             is_editing=d.get("is_editing"),
+            origin=d.get("origin") or "user",
+            tool_call_id=d.get("tool_call_id"),
         )
 
 
@@ -80,6 +99,7 @@ def NotebookCell(
     is_active: bool = False,
     on_focus_change: Callable[[str, bool], None] | None = None,
     focus_token: int = 0,
+    on_ask_ai: Callable[[], None] | None = None,
 ) -> ft.Control:
     """Renders one notebook cell. Re-renders reactively when `cell` changes."""
     page = ft.context.page
@@ -128,6 +148,7 @@ def NotebookCell(
             on_move_down=on_move_down,
             on_delete=on_delete,
             on_copy=lambda: page.run_task(_copy_code_task),
+            on_ask_ai=on_ask_ai,
         )
 
     # ── Markdown cell ─────────────────────────────────────────────────────────
@@ -141,7 +162,9 @@ def NotebookCell(
                         min_lines=2,
                         max_lines=8,
                         text_size=tokens.FONT_SM,
-                        border_color=ft.Colors.TRANSPARENT,
+                        border=ft.OutlineInputBorder(
+                            side=ft.BorderSide(color=ft.Colors.TRANSPARENT)
+                        ),
                         bgcolor=ft.Colors.TRANSPARENT,
                         ref=editor_ref,
                         on_focus=lambda e: _report_focus(True),
@@ -356,7 +379,9 @@ def NotebookCell(
                     text_style=ft.TextStyle(
                         font_family="RobotoMono", size=tokens.FONT_SM
                     ),
-                    border_color=ft.Colors.TRANSPARENT,
+                    border=ft.OutlineInputBorder(
+                        side=ft.BorderSide(color=ft.Colors.TRANSPARENT)
+                    ),
                     bgcolor=ft.Colors.TRANSPARENT,
                     ref=editor_ref,
                     on_focus=lambda e: _report_focus(True),

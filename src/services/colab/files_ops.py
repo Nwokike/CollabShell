@@ -29,7 +29,11 @@ async def _run_with_token_heal(service, session_name: str, auth_method: str, op)
         healed = False
         try:
             healed = await service.refresh_session_token(session_name, auth_method)
-        except Exception:
+        except Exception as refresh_error:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(refresh_error, SessionEndedError):
+                raise
             logger.debug("token heal failed for %s", session_name, exc_info=True)
         if not healed:
             raise
@@ -49,19 +53,17 @@ async def ls_impl(
     def _ls():
         import posixpath
 
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.contents import ContentsClient
 
         norm_path = posixpath.normpath(path) if path else ""
         if norm_path == "." or norm_path == "/":
             norm_path = ""
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        from services.colab.session_ops import _cli_state, load_session_fresh
+
+        st = _cli_state(auth_method)
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -108,17 +110,15 @@ async def upload_impl(
     def _upload():
         import posixpath
 
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.contents import ContentsClient
 
         norm_remote = posixpath.normpath(remote_path)
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        from services.colab.session_ops import _cli_state, load_session_fresh
+
+        st = _cli_state(auth_method)
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -153,17 +153,15 @@ async def download_impl(
     def _download():
         import posixpath
 
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.contents import ContentsClient
 
         norm_remote = posixpath.normpath(remote_path)
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        from services.colab.session_ops import _cli_state, load_session_fresh
+
+        st = _cli_state(auth_method)
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 
@@ -286,17 +284,15 @@ async def rm_impl(
     def _rm():
         import posixpath
 
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.contents import ContentsClient
 
         norm_path = posixpath.normpath(path)
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        from services.colab.session_ops import _cli_state, load_session_fresh
+
+        st = _cli_state(auth_method)
         name = session_name or service._resolve_session(st)
-        s = st.store.get(name)
+        s = load_session_fresh(st, name)
         if not s:
             raise ValueError(f"Session '{name}' not found")
 

@@ -9,7 +9,7 @@ import flet as ft
 from components.shortcuts_help import build_help_button
 from core import tokens
 from core.shortcuts import SUPPRESS, shortcuts_router
-from core.styles import hardware_badge, status_dot
+from core.styles import hardware_badge, shape_chip, status_dot
 from screens.files.modal import show_manage_files_modal
 from screens.session.fab_menu import build_session_fab
 from screens.session.layout import build_tab_switcher
@@ -31,9 +31,62 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
 
     active_tab, set_tab = ft.use_state(0 if mode == "notebook" else 1)
     terminal_ready, set_terminal_ready = ft.use_state(mode == "terminal")
+    runtime_status, set_runtime_status = ft.use_state("checking")
     # Stable panel state survives re-renders; the TerminalPanel component
     # subscribes to it and manages its own WebSocket lifecycle.
     terminal_ps_ref = ft.use_ref(lambda: TerminalPanelState())
+
+    async def _verify_runtime():
+        from services.colab.session_ops import SessionListError
+
+        try:
+            sessions = await services.colab.list_sessions(auth_method=state.auth_method)
+        except SessionListError:
+            set_runtime_status("unknown")
+        except Exception:
+            logger.exception("Could not verify runtime assignment")
+            set_runtime_status("unknown")
+        else:
+            state.active_sessions = sessions or []
+            if any(session.get("name") == session_name for session in sessions or []):
+                set_runtime_status("active")
+            else:
+                set_runtime_status("ended")
+
+    ft.use_effect(
+        lambda: page.run_task(_verify_runtime),
+        [session_name],
+    )
+
+    # ── Session ended modal ──────────────────────────────────────────────────
+    # When the runtime is authoritatively confirmed as ended (not just unknown),
+    # show a modal that forces the user back to Home. This replaces the passive
+    # banner-only behavior.
+    ended_modal_shown, set_ended_modal_shown = ft.use_state(False)
+
+    def _show_ended_modal():
+        if runtime_status == "ended" and not ended_modal_shown:
+            set_ended_modal_shown(True)
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text("Session Not Found"),
+                    content=ft.Text(
+                        "This Colab runtime no longer exists on the server. "
+                        "Its kernel and remote files are unavailable. "
+                        "Local notebook and script drafts are preserved on this screen."
+                    ),
+                    actions=[
+                        ft.FilledButton(
+                            "Return to Home",
+                            on_click=lambda e: (page.pop_dialog(), on_back()),
+                        ),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                    modal=True,
+                )
+            )
+
+        ft.use_effect(_show_ended_modal, [runtime_status, ended_modal_shown])
 
     # ── Keyboard shortcut context ────────────────────────────────────────────
     # While the Terminal tab is active the page-level handler must ignore ALL
@@ -131,6 +184,18 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     cells_version, set_cells_version = ft.use_state(0)
     nb_actions_ref = ft.use_ref(dict)
     term_actions_ref = ft.use_ref(dict)
+    # Per-session env override store: plain memory-only dict shared between
+    # the header env icon (opens the dialog) and the notebook view (reads it
+    # at exec time). Rebuilt only when the session screen rebuilds; the dialog
+    # mutates it in place so both sides always see the same object.
+    session_env_override: dict = {}
+
+    def _open_env_dialog(e=None):
+        from components.env_dialog import show_env_override_dialog
+
+        show_env_override_dialog(
+            page, state, session_env_override, on_save=lambda _env: None
+        )
 
     def _sync_fab():
         if not page or not page.views:
@@ -152,6 +217,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_export_ipynb=lambda e: _call(nb_actions, "export_ipynb"),
             on_import_ipynb=lambda e: _call(nb_actions, "import_ipynb"),
             on_clear_all=lambda e: _call(nb_actions, "clear_all"),
+            on_rename_notebook=lambda e: _call(nb_actions, "rename_notebook"),
             # Shared
             on_manage_files=lambda e: show_manage_files_modal(
                 page,
@@ -202,20 +268,21 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_term_zoom_reset=lambda e=None: _call(term_actions, "zoom_reset"),
             on_term_toggle_blink=lambda e=None: _call(term_actions, "toggle_blink"),
             on_term_toggle_search=lambda e=None: _call(term_actions, "toggle_search"),
+            # AI. Each panel registers its own handler, and each is always
+            # offered: a menu entry that only opens a "turn it on" notice is
+            # worse than no entry.
+            on_ai_explain=lambda e: _call(term_actions, "explain"),
+            on_ai_explain_cell=lambda e: _call(nb_actions, "ask_ai_active"),
+            on_ai_suggest_hardware=lambda e: _call(nb_actions, "suggest_hardware"),
+            on_open_assistant=lambda e: controller.open_assistant(),
         )
-        try:
-            page.views[0].floating_action_button = fab
-            page.update()
-        except Exception:
-            logger.exception("Suppressed exception")
+        # No page.update() inside the effect: the observable deps schedule
+        # the re-render (flet 1.0.x forbids page.update() during render).
+        page.views[0].floating_action_button = fab
 
     def _cleanup_fab():
         if page and page.views:
-            try:
-                page.views[0].floating_action_button = None
-                page.update()
-            except Exception:
-                logger.exception("Suppressed exception")
+            page.views[0].floating_action_button = None
 
     ft.use_effect(
         _sync_fab,
@@ -278,8 +345,15 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     )
     _accel = (_session or {}).get("accelerator", "NONE")
     _variant = (_session or {}).get("variant", "DEFAULT")
+    _shape = (_session or {}).get("machine_shape", "STANDARD")
     _is_running = (_session or {}).get("running") is not None
     _status_text = (_session or {}).get("status", "IDLE")
+    # Env indicator reflects persisted defaults (the override dialog pre-fills
+    # from these). Per-session memory-only overrides live in the notebook view
+    # and are shown there; the header stays truthful about stored config.
+    _env_count = len(getattr(state, "default_env", {}) or {}) + len(
+        session_env_override
+    )
 
     # ── Content area ──────────────────────────────────────────────────────────
     content = ft.Stack(
@@ -295,6 +369,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     register_bindings=lambda bindings: (
                         session_kb_ref.current.__setitem__("nb_bindings", bindings)
                     ),
+                    session_env_override=session_env_override,
                 ),
                 expand=True,
                 visible=active_tab == 0,
@@ -306,6 +381,42 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             ),
         ],
         expand=True,
+    )
+
+    is_offline = not state.is_online
+    runtime_message = (
+        "Offline. Remote actions are unavailable; local edits remain on this screen."
+        if is_offline
+        else "Colab no longer lists this runtime. Its kernel and remote files are "
+        "unavailable; local notebook and script drafts remain on this screen."
+        if runtime_status == "ended"
+        else "Could not verify this runtime. Its status is unknown; this does not "
+        "confirm that it ended."
+    )
+    runtime_banner = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(
+                    ft.Icons.CLOUD_OFF_ROUNDED,
+                    color=ft.Colors.ON_ERROR_CONTAINER,
+                    size=tokens.ICON_SM,
+                ),
+                ft.Text(
+                    runtime_message,
+                    color=ft.Colors.ON_ERROR_CONTAINER,
+                    size=tokens.FONT_XS,
+                    expand=True,
+                ),
+                ft.TextButton("Back to Home", on_click=lambda e: on_back()),
+            ],
+            spacing=tokens.SPACE_SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor=ft.Colors.ERROR_CONTAINER,
+        padding=ft.Padding(
+            tokens.SPACE_MD, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS
+        ),
+        visible=is_offline or runtime_status in ("ended", "unknown"),
     )
 
     theme_icon = (
@@ -351,15 +462,44 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
                     expand=True,
                     tooltip=session_name,
                 ),
-                hardware_badge(_accel, _variant),
-                build_tab_switcher(active_tab, _switch_tab),
-                build_help_button(
-                    page,
-                    lambda: (
-                        "terminal" if session_kb_ref.current["tab"] == 1 else "notebook"
-                    ),
+                # Badge rail scrolls horizontally on narrow screens (visible
+                # scrollbar, Sherlock/LM-Router pattern) so the hardware/shape
+                # chips, tab switcher, help, and theme controls are never
+                # silently clipped the way HIDDEN-scroll did on laptops.
+                ft.Row(
+                    controls=[
+                        hardware_badge(_accel, _variant),
+                        shape_chip(_shape),
+                        *(
+                            [
+                                ft.IconButton(
+                                    icon=ft.Icons.TUNE_ROUNDED,
+                                    icon_size=tokens.ICON_SM,
+                                    tooltip=(
+                                        f"Environment variables ({_env_count} set) — "
+                                        "tap to manage"
+                                    ),
+                                    on_click=_open_env_dialog,
+                                )
+                            ]
+                            if _env_count
+                            else []
+                        ),
+                        build_tab_switcher(active_tab, _switch_tab),
+                        build_help_button(
+                            page,
+                            lambda: (
+                                "terminal"
+                                if session_kb_ref.current["tab"] == 1
+                                else "notebook"
+                            ),
+                        ),
+                        theme_btn,
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=tokens.SPACE_SM,
+                    scroll=ft.ScrollMode.AUTO,
                 ),
-                theme_btn,
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=tokens.SPACE_SM,
@@ -373,6 +513,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
     return ft.Column(
         controls=[
             header_bar,
+            runtime_banner,
             content,
         ],
         spacing=0,

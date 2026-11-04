@@ -12,7 +12,14 @@ from core import tokens
 from core.theme import AppColors
 
 
-def OfflineFlow(on_retry) -> Control:
+def OfflineFlow(
+    on_retry,
+    title: str = "No internet connection",
+    message: str = (
+        "Check your network and try again.\n"
+        "You need a connection to sign in and manage sessions."
+    ),
+) -> Control:
     """Centered offline card with a single Retry button."""
     return ft.Container(
         alignment=ft.Alignment(0.0, 0.0),
@@ -27,15 +34,14 @@ def OfflineFlow(on_retry) -> Control:
                 ),
                 ft.Container(height=tokens.SPACE_MD),
                 ft.Text(
-                    "No internet connection",
+                    title,
                     size=tokens.FONT_XL,
                     weight=ft.FontWeight.W_700,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Container(height=tokens.SPACE_SM),
                 ft.Text(
-                    "Check your network and try again.\n"
-                    "You need a connection to sign in and manage sessions.",
+                    message,
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     text_align=ft.TextAlign.CENTER,

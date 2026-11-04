@@ -110,7 +110,7 @@ def build_page_2() -> ft.Column:
             ft.Container(height=tokens.SPACE_SM),
             ft.Container(
                 content=ft.Text(
-                    "💡 CPU sessions are always free. GPU/TPU have usage limits on the free tier.",
+                    "💡 CPU sessions are always free. GPU/TPU have usage limits on the free tier. High-RAM needs Colab Pro/Pro+. Check Settings → Account for your compute-unit balance.",
                     size=tokens.FONT_SM,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                     text_align=ft.TextAlign.CENTER,
@@ -208,20 +208,26 @@ def build_page_3(
                 content=ft.Column(
                     controls=[
                         ft.FilledButton(
-                            content=ft.Text(
-                                constants.LBL_SIGN_IN,
-                                size=tokens.FONT_MD,
-                                weight=ft.FontWeight.W_600,
-                            ),
+                            content=constants.LBL_SIGN_IN,
                             icon=ft.Icons.LOGIN_ROUNDED,
                             width=300,
                             height=46,
+                            # A label built as a bare ft.Text inside a tonal
+                            # button is painted by the Material text color, not
+                            # the button's own foreground, which is how the
+                            # Verify Code label ended up grey on this slide.
+                            # Passing the string lets the button paint itself;
+                            # only typography is declared here, never a colour.
                             style=ft.ButtonStyle(
                                 padding=ft.Padding(
                                     tokens.SPACE_LG,
                                     tokens.SPACE_SM,
                                     tokens.SPACE_LG,
                                     tokens.SPACE_SM,
+                                ),
+                                text_style=ft.TextStyle(
+                                    size=tokens.FONT_MD,
+                                    weight=ft.FontWeight.W_600,
                                 ),
                             ),
                             disabled=is_loading_auth,
@@ -233,7 +239,9 @@ def build_page_3(
                                 value=auth_code_val,
                                 label="Paste authorization code",
                                 prefix_icon=ft.Icons.KEY_ROUNDED,
-                                border_radius=tokens.RADIUS_MD,
+                                border=ft.OutlineInputBorder(
+                                    border_radius=tokens.RADIUS_MD
+                                ),
                                 text_size=tokens.FONT_MD,
                                 visible=show_verify,
                                 on_change=on_auth_code_change,
@@ -242,17 +250,24 @@ def build_page_3(
                             width=300,
                             visible=show_verify,
                         ),
-                        ft.FilledTonalButton(
-                            content=ft.Text(
-                                "Verify Code",
-                                size=tokens.FONT_MD,
-                                weight=ft.FontWeight.W_600,
-                            ),
+                        ft.FilledButton(
+                            content="Verify Code",
                             icon=ft.Icons.VERIFIED_ROUNDED,
                             visible=show_verify,
-                            disabled=is_loading_auth,
+                            # Stays disabled until the code field has something
+                            # in it, the same rule "Get Started" follows on the
+                            # last slide: a button for an empty field can only
+                            # answer "paste something first".
+                            disabled=is_loading_auth
+                            or not (auth_code_val or "").strip(),
                             width=300,
                             height=46,
+                            style=ft.ButtonStyle(
+                                text_style=ft.TextStyle(
+                                    size=tokens.FONT_MD,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                            ),
                             on_click=on_submit_code,
                         ),
                     ],

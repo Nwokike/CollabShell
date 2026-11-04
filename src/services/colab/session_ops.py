@@ -1,7 +1,120 @@
 import asyncio
 import logging
+import threading
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger("colab_session_ops")
+
+_TOKEN_REFRESH_MARGIN = timedelta(minutes=5)
+
+
+class SessionListError(RuntimeError):
+    """Assignment lookup failed; any included local sessions are unverified."""
+
+    def __init__(self, last_known_sessions: list[dict]):
+        super().__init__("Could not verify Colab session assignments.")
+        self.last_known_sessions = last_known_sessions
+
+
+class SessionEndedError(RuntimeError):
+    """A successful assignment lookup confirmed that the runtime is absent."""
+
+    def __init__(self, session_name: str):
+        super().__init__(
+            f"Colab no longer lists runtime '{session_name}'. Its kernel and "
+            "remote files are unavailable; local notebook and script drafts "
+            "remain on this device."
+        )
+        self.session_name = session_name
+
+
+_CLI_STATE = None
+_CLI_STATE_CLASS = None
+
+
+def _cli_state(auth_method: str = "oauth2"):
+    """The shared colab_cli ``State`` with the auth provider set.
+
+    Creating ``State()`` per call bypassed the singleton's cached client,
+    stores and history logger (audit dep-03 #24/#25); this builds it once
+    and reuses it. The cache is keyed on the ``State`` class object so tests
+    that patch ``colab_cli.common.State`` still get their fake.
+    """
+    global _CLI_STATE, _CLI_STATE_CLASS
+    from colab_cli.auth import AuthProvider
+    from colab_cli.common import State
+
+    if _CLI_STATE is None or _CLI_STATE_CLASS is not State:
+        _CLI_STATE = State()
+        _CLI_STATE_CLASS = State
+    _CLI_STATE.auth_provider = (
+        AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
+    )
+    return _CLI_STATE
+
+
+# The shared State's store holds ONE filelock.ReadWriteLock, which pins write
+# locks to the acquiring thread: concurrent asyncio.to_thread workers would
+# raise RuntimeError (filelock._validate_reentrant) — the 12:51 crash in the
+# flet-run log. Serialize every store op in-process; the underlying OS file
+# lock still guards cross-process access.
+_STORE_MUTEX = threading.Lock()
+
+
+def _store_call(fn, *args, **kwargs):
+    """Run one colab_cli store operation under the in-process mutex."""
+    with _STORE_MUTEX:
+        return fn(*args, **kwargs)
+
+
+def _store_remove(st,  name: str) -> bool:
+    """Remove one local session record; never raises.
+
+    On lock/OS errors the record is KEPT: a failed check must never prune a
+    possibly-live session (that is how "session does not exist" appeared while
+    the VM was still up).
+    """
+    try:
+        with _STORE_MUTEX:
+            st.store.remove(name)
+        return True
+    except Exception:
+        logger.exception("store.remove(%s) failed; keeping local record", name)
+        return False
+
+
+def _unverified_sessions(local_sessions: dict) -> list[dict]:
+    results = []
+    for session in local_sessions.values():
+        last_execution = session.last_execution
+        results.append(
+            {
+                "name": session.name,
+                "endpoint": session.endpoint,
+                "accelerator": session.accelerator,
+                "variant": session.variant,
+                "accelerator_label": (
+                    "CPU" if session.accelerator == "NONE" else session.accelerator
+                ),
+                "machine_shape": session.machine_shape,
+                "status": "UNVERIFIED",
+                "running": session.running,
+                "last_execution": (
+                    {
+                        "file": last_execution[0],
+                        "cell": last_execution[1],
+                        "time": last_execution[2],
+                    }
+                    if last_execution
+                    else None
+                ),
+            }
+        )
+    return results
+
+
+def _load_local_sessions(auth_method: str) -> dict:
+    return _store_call(_cli_state(auth_method).store.list)
 
 
 async def new_session_impl(
@@ -10,7 +123,7 @@ async def new_session_impl(
     gpu: str | None = None,
     tpu: str | None = None,
     auth_method: str = "oauth2",
-    keep_alive: bool = True,
+    high_mem: bool = False,
 ) -> dict:
     """Create a new Colab session."""
     await service._ensure_online()
@@ -18,15 +131,18 @@ async def new_session_impl(
     def _new():
         import uuid
 
-        from colab_cli.auth import AuthProvider
-        from colab_cli.client import Accelerator, ColabRequestError, Variant
-        from colab_cli.common import State
+        from colab_cli.client import (
+            Accelerator,
+            ColabRequestError,
+            Shape,
+            TooManyAssignmentsError,
+            Variant,
+            resolve_assign_shape,
+        )
         from colab_cli.state import SessionState
         from colab_cli.utils import get_status_code
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        st = _cli_state(auth_method)
 
         session_name = name or uuid.uuid4().hex[:6]
         variant = Variant.DEFAULT
@@ -48,15 +164,33 @@ async def new_session_impl(
             }
             accelerator = mapping.get(gpu.lower(), Accelerator.T4)
 
+        shape = resolve_assign_shape(accelerator, high_mem=high_mem)
+
         try:
             res = st.client.assign(
-                uuid.uuid4(), variant=variant, accelerator=accelerator
+                uuid.uuid4(), variant=variant, accelerator=accelerator, shape=shape
+            )
+        except TooManyAssignmentsError:
+            raise RuntimeError(
+                "[colab] Allocation refused (precondition failed). This can mean "
+                "too many active sessions, or a temporary usage or capacity "
+                "limit for the requested runtime. Run `colab stop` to free up a "
+                "session, wait and retry, or try a different accelerator."
             )
         except ColabRequestError as e:
-            if get_status_code(e) == 400 and accelerator != Accelerator.NONE:
+            status_code = get_status_code(e)
+            if status_code == 400 and accelerator != Accelerator.NONE:
                 raise ValueError(
-                    f"Accelerator '{accelerator.value}' rejected. "
-                    "You may not have quota. Try T4 (free) or CPU."
+                    f"Backend rejected accelerator '{accelerator.value}'. "
+                    "You may not have quota or entitlement for this accelerator "
+                    "on your account. Try T4 (free) or CPU."
+                )
+            if status_code and status_code >= 500 and high_mem:
+                # Live-observed: CPU + shape=hm returns 503 Service Unavailable
+                # on free accounts. The shape is the problem, not the server.
+                raise ValueError(
+                    "High-RAM is not available on your free account — retry as "
+                    "Standard RAM. High-RAM needs Colab Pro/Pro+."
                 )
             raise
 
@@ -82,47 +216,19 @@ async def new_session_impl(
             token=token,
             url=url,
             endpoint=endpoint,
+            token_expires_at=(
+                res.runtime_proxy_info.expires_at()
+                if hasattr(res, "runtime_proxy_info")
+                else None
+            ),
             variant=variant.value,
             accelerator=accelerator.value,
+            machine_shape=(
+                Shape.HIGH_RAM.name if shape == Shape.HIGH_RAM else Shape.STANDARD.name
+            ),
         )
 
-        if keep_alive:
-            # Pre-flight the keep-alive ping. If it returns a 403 caused by
-            # missing OAuth scopes the in-process loop will fail the same way —
-            # unassign the VM now so we don't leak a billable assignment.
-            try:
-                st.client.keep_alive_assignment(endpoint)
-            except ColabRequestError as e:
-                status_code = get_status_code(e)
-                body = str(getattr(e, "response_body", "") or "")
-                is_scope_err = (
-                    "insufficient_scope" in body
-                    or "insufficient authentication scopes" in body.lower()
-                )
-                if status_code == 403 and is_scope_err:
-                    logger.error(
-                        "[keep_alive] pre-flight 403 scope error for %s — "
-                        "unassigning to prevent billable VM leak",
-                        session_name,
-                    )
-                    try:
-                        st.client.unassign(endpoint)
-                    except Exception:
-                        logger.exception("Suppressed exception")
-                    raise RuntimeError(
-                        "Keep-alive pre-flight failed: OAuth credentials are "
-                        "missing a Colab scope. Please re-authenticate."
-                    ) from e
-                # Any other error (network blip, 5xx): non-fatal.
-                # The in-process loop will retry after 60 s.
-                logger.warning(
-                    "[keep_alive] pre-flight non-fatal error (will retry): %s", e
-                )
-
-            st.store.add(s)
-            s.keep_alive_pid = None
-        else:
-            st.store.add(s)
+        _store_call(st.store.add, s)
         st.history.log_event(
             session_name,
             "session_created",
@@ -130,6 +236,7 @@ async def new_session_impl(
                 "endpoint": endpoint,
                 "variant": variant.value,
                 "accelerator": accelerator.value,
+                "machine_shape": s.machine_shape,
             },
         )
 
@@ -138,138 +245,174 @@ async def new_session_impl(
             "endpoint": endpoint,
             "variant": variant.value,
             "accelerator": accelerator.value,
+            "machine_shape": s.machine_shape,
             "status": "READY",
         }
 
     result = await asyncio.to_thread(_new)
-
-    if keep_alive:
-        service._start_in_process_keep_alive(
-            result["name"], result["endpoint"], auth_method
-        )
 
     return result
 
 
 async def list_sessions_impl(service, auth_method: str = "oauth2") -> list:
     """List all active sessions."""
-    await service._ensure_online()
+    try:
+        await service._ensure_online()
+    except Exception as exc:
+        logger.exception("Could not check connectivity before listing sessions")
+        try:
+            local_sessions = await asyncio.to_thread(_load_local_sessions, auth_method)
+        except Exception:
+            logger.exception("Could not read local session records")
+            local_sessions = {}
+        raise SessionListError(_unverified_sessions(local_sessions)) from exc
 
     def _list():
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
-
-        local_sessions, assignments = st.sync_sessions()
-
-        # The runtime-proxy JWT is short-lived; list_assignments() hands us a
-        # fresh one on every sync. Persist it onto existing local records so
-        # long-running sessions don't start failing with 404s hours in.
-        name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
-        for a in assignments:
-            existing_name = name_by_ep.get(a.endpoint)
-            if not existing_name:
-                continue
-            s = local_sessions.get(existing_name)
-            if s is None:
-                continue
-            if (
-                s.token != a.runtime_proxy_info.token
-                or s.url != a.runtime_proxy_info.url
-            ):
-                s.token = a.runtime_proxy_info.token
-                s.url = a.runtime_proxy_info.url
-                st.store.add(s)
-                logger.info(
-                    "[sync] refreshed runtime proxy token for session %s",
-                    existing_name,
-                )
+        st = _cli_state(auth_method)
+        local_sessions = _store_call(st.store.list)
 
         results = []
-        name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
+        try:
+            assignments = st.client.list_assignments()
+            name_by_ep = {s.endpoint: s.name for s in local_sessions.values()}
+            returned_endpoints = set()
+            recovered_count = 0
 
-        recovered_count = 0
-        for a in assignments:
-            name = name_by_ep.get(a.endpoint)
+            for assignment in assignments:
+                returned_endpoints.add(assignment.endpoint)
+                name = name_by_ep.get(assignment.endpoint)
 
-            if not name:
-                recovered_count += 1
-                name = f"recovered-{recovered_count}"
+                if not name:
+                    recovered_count += 1
+                    name = f"recovered-{recovered_count}"
 
-                from colab_cli.state import SessionState
+                    from colab_cli.state import SessionState
 
-                recovered_session = SessionState(
-                    name=name,
-                    token=a.runtime_proxy_info.token,
-                    url=a.runtime_proxy_info.url,
-                    endpoint=a.endpoint,
-                    variant=a.variant.name,
-                    accelerator=a.accelerator.value,
-                )
-                st.store.add(recovered_session)
-                local_sessions[name] = recovered_session
+                    session = SessionState(
+                        name=name,
+                        token=assignment.runtime_proxy_info.token,
+                        url=assignment.runtime_proxy_info.url,
+                        endpoint=assignment.endpoint,
+                        token_expires_at=assignment.runtime_proxy_info.expires_at(),
+                        variant=assignment.variant.name,
+                        accelerator=assignment.accelerator.value,
+                        machine_shape=assignment.machine_shape.name,
+                    )
+                    _store_call(st.store.add, session)
+                    local_sessions[name] = session
+                    name_by_ep[assignment.endpoint] = name
+                else:
+                    session = local_sessions[name]
+                    session.token = assignment.runtime_proxy_info.token
+                    session.url = assignment.runtime_proxy_info.url
+                    session.token_expires_at = (
+                        assignment.runtime_proxy_info.expires_at()
+                    )
+                    _store_call(st.store.add, session)
 
-            accel_label = (
-                "CPU" if a.accelerator.value == "NONE" else a.accelerator.value
-            )
-            status = "IDLE"
-            running = None
-            last_exec = None
-
-            if name != "?" and name in local_sessions:
-                s = local_sessions[name]
-                if s.running:
-                    status = f"BUSY ({s.running})"
-                    running = s.running
-                if s.last_execution:
-                    last_exec = {
-                        "file": s.last_execution[0],
-                        "cell": s.last_execution[1],
-                        "time": s.last_execution[2],
+                accelerator = assignment.accelerator.value
+                running = session.running
+                last_execution = session.last_execution
+                results.append(
+                    {
+                        "name": name,
+                        "endpoint": assignment.endpoint,
+                        "accelerator": accelerator,
+                        "variant": assignment.variant.name,
+                        "accelerator_label": (
+                            "CPU" if accelerator == "NONE" else accelerator
+                        ),
+                        "machine_shape": assignment.machine_shape.name,
+                        "status": f"BUSY ({running})" if running else "IDLE",
+                        "running": running,
+                        "last_execution": (
+                            {
+                                "file": last_execution[0],
+                                "cell": last_execution[1],
+                                "time": last_execution[2],
+                            }
+                            if last_execution
+                            else None
+                        ),
                     }
+                )
 
-            results.append(
-                {
-                    "name": name,
-                    "endpoint": a.endpoint,
-                    "accelerator": a.accelerator.value,
-                    "variant": a.variant.name,
-                    "accelerator_label": accel_label,
-                    "status": status,
-                    "running": running,
-                    "last_execution": last_exec,
-                }
+            missing_sessions = [
+                session
+                for session in local_sessions.values()
+                if session.endpoint not in returned_endpoints
+            ]
+            for session in missing_sessions:
+                _store_remove(st, session.name)
+            logger.info(
+                "Colab assignment check completed: %d listed, %d absent local records removed",
+                len(assignments),
+                len(missing_sessions),
             )
+            return results
+        except Exception as exc:
+            logger.exception("Colab assignment check failed")
+            raise SessionListError(_unverified_sessions(local_sessions)) from exc
 
-        return results
+    return await asyncio.to_thread(_list)
 
-    try:
-        return await asyncio.to_thread(_list)
-    except Exception:
-        logger.exception("list_sessions failed")
-        return []
+
+def load_session_fresh(st, session_name: str):
+    """Load a session and refresh its proxy token when it is close to expiry.
+
+    A missing assignment only means the runtime is unavailable after a
+    successful assignment lookup. Lookup errors propagate and keep local state.
+    """
+    session = _store_call(st.store.get,session_name)
+    if session is None:
+        return None
+
+    expires_at = session.token_expires_at
+    if expires_at is None or expires_at - datetime.now(UTC) <= (_TOKEN_REFRESH_MARGIN):
+        assignments = st.client.list_assignments()
+        match = next(
+            (
+                assignment
+                for assignment in assignments
+                if assignment.endpoint == session.endpoint
+            ),
+            None,
+        )
+        if match is None:
+            _store_remove(st, session_name)
+            logger.warning(
+                "Colab assignment check confirmed runtime %s absent", session_name
+            )
+            raise SessionEndedError(session_name)
+
+        proxy_info = match.runtime_proxy_info
+        session.token = proxy_info.token
+        session.url = proxy_info.url
+        session.token_expires_at = proxy_info.expires_at()
+        _store_call(st.store.add, session)
+
+    return session
 
 
 def _refresh_runtime_token_sync(st, session_name: str) -> bool:
     """Synchronously re-mint one session's runtime-proxy token from the server.
 
     Returns True when the local record was updated with a fresh token (the
-    caller should retry its failed operation); False when the session is
-    unknown locally, has no live assignment anymore, the token is unchanged,
-    or the refresh itself failed (the caller keeps its existing error path).
+    caller should retry its failed operation). A successful assignment lookup
+    that omits the runtime removes the active record and raises
+    SessionEndedError. Lookup failures retain the record and return False.
     """
     try:
-        s = st.store.get(session_name)
+        s = _store_call(st.store.get,session_name)
         if not s:
             return False
 
         assignments = st.client.list_assignments()
         match = next((a for a in assignments if a.endpoint == s.endpoint), None)
         if match is None:
-            return False
+            _store_remove(st, session_name)
+            raise SessionEndedError(session_name)
 
         fresh = match.runtime_proxy_info
         if s.token == fresh.token and s.url == fresh.url:
@@ -277,9 +420,11 @@ def _refresh_runtime_token_sync(st, session_name: str) -> bool:
 
         s.token = fresh.token
         s.url = fresh.url
-        st.store.add(s)
+        _store_call(st.store.add, s)
         logger.info("[heal] refreshed runtime proxy token for session %s", session_name)
         return True
+    except SessionEndedError:
+        raise
     except Exception:
         logger.debug(
             "runtime proxy token refresh failed for %s", session_name, exc_info=True
@@ -294,57 +439,42 @@ async def refresh_session_token_impl(
     await service._ensure_online()
 
     def _refresh():
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        st = _cli_state(auth_method)
         return _refresh_runtime_token_sync(st, session_name)
 
     return await asyncio.to_thread(_refresh)
 
 
 async def stop_session_impl(
-    service, session_name: str, auth_method: str = "oauth2"
+    service,
+    session_name: str,
+    auth_method: str = "oauth2",
+    reason: str = "user_requested",
 ) -> bool:
     """Stop a session by name."""
     await service._ensure_online()
-    task = service._keep_alive_tasks.pop(session_name, None)
-    if task is not None and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception(
-                "keep-alive task for %s raised unexpected exception", session_name
-            )
 
     def _stop():
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.runtime import ColabRuntime
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        st = _cli_state(auth_method)
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             return False
 
+        logger.info("Stopping Colab session %s (reason=%s)", session_name, reason)
         try:
+            # Fresh-read the token first: a long-lived session may have
+            # outlived its runtime-proxy token (upstream run.py teardown pattern).
             runtime = ColabRuntime(s.url, s.token, kernel_id=s.kernel_id)
             runtime.stop(shutdown_kernel=True)
         except Exception:
             logger.exception("Suppressed exception")
         st.client.unassign(s.endpoint)
-        st.store.remove(session_name)
-        st.history.log_event(
-            session_name, "session_terminated", {"reason": "user_requested"}
-        )
+        _store_remove(st, session_name)
+        st.history.log_event(session_name, "session_terminated", {"reason": reason})
         return True
 
     return await asyncio.to_thread(_stop)
@@ -357,25 +487,21 @@ async def restart_kernel_impl(
     await service._ensure_online()
 
     def _restart():
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
         from colab_cli.runtime import ColabRuntime
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        st = _cli_state(auth_method)
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             return False
 
         def on_started(kid):
             s.kernel_id = kid
-            st.store.add(s)
+            _store_call(st.store.add, s)
 
         def on_sess(sid):
             s.session_id = sid
-            st.store.add(s)
+            _store_call(st.store.add, s)
 
         runtime = ColabRuntime(
             s.url,
@@ -402,7 +528,7 @@ async def restart_kernel_impl(
                 # kernel. Re-mint the token and retry once before pruning a
                 # session that may still be alive server-side.
                 if _refresh_runtime_token_sync(st, session_name):
-                    s = st.store.get(session_name)
+                    s = load_session_fresh(st, session_name)
                     retry = ColabRuntime(
                         s.url,
                         s.token,
@@ -420,11 +546,13 @@ async def restart_kernel_impl(
                             session_name,
                         )
                 logger.warning(
-                    f"[colab_service] Kernel for session '{session_name}' returned 404 (Expired/Closed). Removing from local storage."
+                    "Kernel restart returned 404 for session %s; preserving its local record",
+                    session_name,
                 )
-                st.store.remove(session_name)
                 raise RuntimeError(
-                    "Session has expired or closed on Colab server (404 Not Found) and was removed locally."
+                    "Colab could not restart this runtime (404 Not Found). "
+                    "The local session record and documents were kept; verify the "
+                    "runtime in Colab before retrying."
                 ) from e
             raise
         finally:
@@ -440,14 +568,10 @@ async def get_session_url_impl(
     """Get the web URL of an active session."""
 
     def _url():
-        from colab_cli.auth import AuthProvider
-        from colab_cli.common import State
 
-        provider = AuthProvider.ADC if auth_method == "adc" else AuthProvider.OAUTH2
-        st = State()
-        st.auth_provider = provider
+        st = _cli_state(auth_method)
 
-        s = st.store.get(session_name)
+        s = load_session_fresh(st, session_name)
         if not s:
             raise ValueError(f"Session '{session_name}' not found locally.")
 

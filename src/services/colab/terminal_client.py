@@ -18,7 +18,7 @@ import logging
 from collections.abc import Callable
 from urllib.parse import urlparse
 
-import requests
+import httpx
 import tornado.httpclient
 from tornado.websocket import WebSocketClientConnection, websocket_connect
 
@@ -49,7 +49,7 @@ def create_terminal_ws_url(
         }
 
         logger.info("Creating PTY terminal via POST %s", post_url)
-        resp = requests.post(post_url, headers=headers, timeout=10)
+        resp = httpx.post(post_url, headers=headers, timeout=10)
         resp.raise_for_status()
 
         term_info = resp.json()
@@ -107,16 +107,21 @@ class ColabTerminalClient:
             return False
 
         def _read():
-            from colab_cli.common import State
+            from services.colab.session_ops import _cli_state, load_session_fresh
 
-            s = State().store.get(self.session_name)
+            st = _cli_state()
+            s = load_session_fresh(st, self.session_name)
             if not s:
                 return None
             return (s.url, s.token)
 
         try:
             creds = await asyncio.to_thread(_read)
-        except Exception:
+        except Exception as exc:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(exc, SessionEndedError):
+                raise
             logger.debug(
                 "credential re-read failed for %s",
                 self.session_name,
@@ -151,7 +156,14 @@ class ColabTerminalClient:
                 self.ws_url,
                 connect_timeout=15,
             )
-            self.ws = await websocket_connect(req)
+            # Protocol-level ping/pong handled by tornado itself: keeps the
+            # Colab proxy socket open during quiet periods and detects dead
+            # sockets (the app-level read-timeout watchdog stays as backup).
+            self.ws = await websocket_connect(
+                req,
+                ping_interval=WS_PING_INTERVAL,
+                ping_timeout=10,
+            )
             logger.info("Direct WebSocket connected upstream to Colab terminal.")
             if self.on_status:
                 self.on_status("Connected", True)
@@ -268,6 +280,8 @@ class ColabTerminalClient:
             self._reconnecting = False
 
     async def _reconnect_attempts(self, max_attempts: int, base_delay: float):
+        from services.colab.session_ops import SessionEndedError
+
         for attempt in range(1, max_attempts + 1):
             delay = min(base_delay * (2 ** (attempt - 1)), 15.0)
             if self.on_status:
@@ -293,6 +307,11 @@ class ColabTerminalClient:
                 )
                 return
             except Exception as ex:
+                if isinstance(ex, SessionEndedError):
+                    logger.warning("Terminal runtime unavailable: %s", ex)
+                    if self.on_status:
+                        self.on_status(str(ex), False)
+                    break
                 status = getattr(getattr(ex, "response", None), "status_code", None)
                 logger.warning(
                     "Terminal reconnect attempt %d/%d failed: %s%s",
@@ -301,8 +320,13 @@ class ColabTerminalClient:
                     ex,
                     f" (HTTP {status})" if status is not None else "",
                 )
-                # Permanent 4xx (e.g. 404 terminal gone) — stop hammering.
-                if status is not None and 400 <= status < 500:
+                # Only these are terminal for the PTY: 404 after a fresh
+                # token means the runtime/PTY is really gone, 403/410/412
+                # are entitlement/limit answers, 400 is a malformed request
+                # (app bug). 401 and 429 are NOT permanent: the next attempt
+                # re-reads credentials (token heal) or backs off, so keep
+                # retrying instead of giving up on a healed session.
+                if status in (400, 403, 404, 410, 412):
                     break
 
         self._running = False
@@ -333,6 +357,10 @@ class ColabTerminalClient:
             logger.info("Terminal '%s' resumed with fresh connection.", self.term_name)
             return True
         except Exception as ex:
+            from services.colab.session_ops import SessionEndedError
+
+            if isinstance(ex, SessionEndedError) and self.on_status:
+                self.on_status(str(ex), False)
             logger.warning("Manual terminal reconnect failed: %s", ex)
             return False
         finally:

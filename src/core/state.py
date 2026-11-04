@@ -37,6 +37,34 @@ class AppState:
     theme_mode: ft.ThemeMode = ft.ThemeMode.SYSTEM
     theme_revision: int = 0  # bumped on platform-brightness change (SYSTEM mode)
     terminal_settings_rev: int = 0  # bumped when terminal settings change (FAB rebuild)
+    # Bumped whenever a metered assistant turn settles, so the credit pill
+    # re-reads the balance without a full rebuild.
+    credits_revision: int = 0
+    # The assistant credits line in Settings. Async-loaded, so it lives in
+    # observable state: the controls in a component body are frozen, and the
+    # loader cannot write to them (`flet/controls/value_types.py:64-66`).
+    # None means "not loaded yet", so the section can skip the first fetch on
+    # a screen the user has already visited.
+    credits_copy: str | None = None
+    # Bumped when the Account section's compute-usage card has new values to
+    # show. The card keeps its own store at module level for its state machine
+    # (loading/error/reason), and this revision is what tells a subscribed
+    # screen to rebuild from it.
+    usage_revision: int = 0
+    # The premium card's async-loaded data, in observable state for the same
+    # reason as `credits_copy`: the card's body is built from these, so a
+    # write repaints it without anyone mutating frozen controls.
+    # license_prices maps product id -> price label; empty means "not loaded".
+    # Never mutated in place — the loader REPLACES it, like `default_env` below.
+    license_prices: dict = {}  # noqa: RUF012
+    # The recovery ID from the licence token (also in the receipt email).
+    license_recovery_id: str = ""
+    # Bumped when the Settings router row has new status to show, so the
+    # section rebuilds the row instead of writing into its frozen controls.
+    router_status_revision: int = 0
+    # Bumped every time a fresh model catalog is installed, so the model pill
+    # and picker re-render automatically (no manual Refresh needed).
+    catalog_revision: int = 0
     # Callable set by the active TerminalPanel; invoked on app RESUME so
     # dropped terminal WebSockets re-attach to their still-alive PTYs.
     terminal_reconnect = None
@@ -51,8 +79,11 @@ class AppState:
     auth_method: str = "oauth2"
     default_gpu: str = ""
     default_tpu: str = ""
+    default_high_mem: bool = False
     default_timeout: int = 30
-    keep_alive_enabled: bool = True
+    # Never mutated in place: hydration/settings always REPLACE the dict, and
+    # readers copy values out. Single app-wide instance (see bottom of file).
+    default_env: dict = {}  # noqa: RUF012
     keep_alive_on_disconnect: bool = True
     default_log_format: str = "ipynb"
     drive_mount_path: str = "/content/drive"
@@ -62,6 +93,42 @@ class AppState:
     is_authenticated: bool = False
     auth_email: str = ""
     auth_error: str = ""
+    # Assistant premium (higher daily credit cap). The license Worker is
+    # authoritative; see services/premium_service.py.
+    is_premium: bool = False
+
+    # ── Assistant (AI) ──────────────────────────────────────────────────────
+    # There is no on/off switch: the assistant is part of the app. It was one
+    # once, and it never worked — `on_change` passed an `async def` through a
+    # lambda, so flet dropped the coroutine and the preference was never saved.
+    # The user's model preference. Empty means none: the app then serves the
+    # fastest medium/high model the gateway reported — both references' rule.
+    # There is no "auto" entry; a rotation model was a client-side invention
+    # neither reference has.
+    ai_model: str = ""
+    # An ADVANCED OVERRIDE, not the normal path. Empty means the app probes
+    # 8082..8092 and embeds its own router (services/router.py), which is what
+    # makes the assistant work out of the box.
+    ai_router_url: str = ""
+    # How hard the model thinks before answering: one of `THINKING_DEPTHS`.
+    # "auto" is stored by name but sends nothing, leaving the router's own
+    # default in force — the same rule both reference apps use.
+    ai_thinking: str = "auto"
+    # Router lifecycle, owned by services/router.py and carried to the UI by
+    # services/router_watchdog.py. Written only on a real change, so the status
+    # loop never repaints for nothing.
+    # One of: ready | stopped | unavailable | starting
+    ai_router_status: str = "starting"
+    ai_router_port: int | None = None
+    # The open conversation (single owner: conversation_service).
+    active_assistant_conversation: str = ""
+    # Cached list for the history dialog (refreshed by conversation_service).
+    assistant_conversations: ClassVar[list] = []
+    # Chat lifecycle. The session object is retained on the page across
+    # minimize/restore, so these exist for the shell and tests to read —
+    # the transcript itself is never torn down by minimizing.
+    assistant_open: bool = False
+    assistant_minimized: bool = False
 
     # ── History ───────────────────────────────────────────────────────────────
     log_session_names: ClassVar[list] = []
@@ -69,6 +136,8 @@ class AppState:
 
     # ── Connectivity ─────────────────────────────────────────────────────────
     is_online: bool = True
+    connectivity_status: str = "checking"
+    auth_status: str = "unknown"
 
     # ── Services ──────────────────────────────────────────────────────────────
     ad_service = None
@@ -89,6 +158,8 @@ class AppState:
         self.app_ready = False
         self.is_online = True
         self.ad_service = None
+        self.ad_cooldown_end: float = 0.0
+        self.last_interstitial_ts: float = 0.0  # central 60s gap guard
         self.notebook_cells = []
 
 

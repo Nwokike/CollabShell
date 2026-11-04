@@ -169,3 +169,24 @@ class AppTheme:
             ),
             font_family="Outfit",
         )
+
+
+def brand_color(page: ft.Page | None = None) -> str:
+    """The live brand colour, resolved from the active theme's colour scheme.
+
+    ``AppColors`` has no plain ``PRIMARY`` (only the light/dark pair), and the
+    theme is what actually decides which one is current — so anything that
+    wants "brand" must read it back rather than hard-code a hex or fall back to
+    ``ft.Colors.PRIMARY`` (a Material blue that is not our brand).
+    """
+    try:
+        if page is None:
+            page = ft.context.page
+        scheme = getattr(getattr(page, "theme", None), "color_scheme", None)
+        primary = getattr(scheme, "primary", None)
+        if primary:
+            return primary
+    except Exception:
+        pass
+    # No page yet: the dark palette's brand, which is the app's default mode.
+    return AppColors.DARK_PRIMARY

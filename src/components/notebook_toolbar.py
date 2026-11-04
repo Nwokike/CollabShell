@@ -12,7 +12,12 @@ def build_notebook_toolbar(
     on_open_terminal=None,
 ) -> ft.Container:
     """Bottom toolbar for adding cells. Import/export are also exposed here
-    (in addition to the session FAB overflow menu) so they're easy to reach."""
+    (in addition to the session FAB overflow menu) so they're easy to reach.
+
+    ``on_add_code``/``on_add_markdown`` may be None to omit them — the script
+    view reuses this toolbar with only Import/Export, since adding a cell has
+    no meaning when the document is being edited as one plain script.
+    """
     trailing = [
         ft.IconButton(
             ft.Icons.UPLOAD_FILE_ROUNDED,
@@ -24,7 +29,7 @@ def build_notebook_toolbar(
         else ft.Container(),
         ft.IconButton(
             ft.Icons.DOWNLOAD_ROUNDED,
-            tooltip="Export IPYNB",
+            tooltip="Export notebook (.ipynb or .py)",
             on_click=on_export_ipynb,
             icon_size=tokens.ICON_SM,
         )
@@ -32,27 +37,35 @@ def build_notebook_toolbar(
         else ft.Container(),
     ]
 
+    leading = [
+        ft.FilledButton(
+            "+ Code",
+            icon=ft.Icons.CODE_ROUNDED,
+            on_click=on_add_code,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
+            ),
+        )
+        if on_add_code
+        else ft.Container(),
+        ft.FilledButton(
+            "+ Markdown",
+            icon=ft.Icons.EDIT_NOTE_ROUNDED,
+            on_click=on_add_markdown,
+            style=ft.ButtonStyle(
+                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
+                color=ft.Colors.ON_SURFACE,
+                shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
+            ),
+        )
+        if on_add_markdown
+        else ft.Container(),
+    ]
+
     return ft.Container(
         content=ft.Row(
             controls=[
-                ft.FilledButton(
-                    "+ Code",
-                    icon=ft.Icons.CODE_ROUNDED,
-                    on_click=on_add_code,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
-                    ),
-                ),
-                ft.FilledButton(
-                    "+ Markdown",
-                    icon=ft.Icons.EDIT_NOTE_ROUNDED,
-                    on_click=on_add_markdown,
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE),
-                        color=ft.Colors.ON_SURFACE,
-                        shape=ft.RoundedRectangleBorder(radius=tokens.RADIUS_MD),
-                    ),
-                ),
+                *leading,
                 ft.Container(expand=True),
                 *trailing,
             ],

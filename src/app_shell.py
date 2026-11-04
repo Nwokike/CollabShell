@@ -17,8 +17,9 @@ from components.offline_flow import OfflineFlow
 from components.shortcuts_help import build_help_button, open_shortcuts_help
 from core import constants, tokens
 from core.shortcuts import Binding, shortcuts_router
+from core.theme import brand_color
 from hooks.use_keyboard_shortcuts import use_keyboard_shortcuts
-from state import AppStateCtx, ControllerMethodsCtx
+from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("AppShell")
 
@@ -44,6 +45,7 @@ def AppShell() -> Control:
     """Top-level shell. Reads observable state; renders Onboarding, Subview, or Dashboard."""
     controller = ft.use_context(ControllerMethodsCtx)
     state = ft.use_context(AppStateCtx)
+    services = ft.use_context(ServiceCtx)
     page = ft.context.page
 
     # ── 0. Global keyboard shortcuts (desktop) ────────────────────────────────
@@ -72,7 +74,60 @@ def AppShell() -> Control:
                     ),
                 )
             )
+            # Ctrl+K opens the command palette. Registered here rather than as
+            # a screen action so it works from every screen including the
+            # fullscreen subviews.
+            bindings.append((Binding("k", ctrl=True), _open_palette))
         return bindings
+
+    def _palette_commands():
+        """Global commands. Session actions are contributed by the session
+        screen; these are the ones available everywhere."""
+        commands = [
+            (
+                "Command palette",
+                ft.Icons.KEYBOARD_COMMAND_KEY_ROUNDED,
+                "Ctrl+K",
+                _open_palette,
+            ),
+            (
+                "Keyboard shortcuts",
+                ft.Icons.KEYBOARD_ROUNDED,
+                "F1",
+                lambda: open_shortcuts_help(page, "global"),
+            ),
+        ]
+        commands.append(
+            (
+                "Open Assistant",
+                tokens.ASSISTANT_ICON,
+                "Chat with the assistant",
+                lambda: controller.open_assistant(),
+            )
+        )
+        commands.extend(
+            (
+                "Go to " + name,
+                ft.Icons.LAUNCH_ROUNDED,
+                f"Ctrl+{i + 1}",
+                lambda i=i: controller.navigate_tab(i),
+            )
+            for i, name in enumerate(_TAB_NAMES)
+        )
+        commands.append(
+            (
+                "Toggle theme",
+                ft.Icons.BRIGHTNESS_6_ROUNDED,
+                "Light / dark / system",
+                controller.toggle_theme,
+            )
+        )
+        return commands
+
+    def _open_palette():
+        from components.command_palette import open_command_palette
+
+        open_command_palette(page, _palette_commands())
 
     def _register_global_shortcuts():
         return shortcuts_router.register(_global_bindings)
@@ -93,11 +148,10 @@ def AppShell() -> Control:
             or bool(state.active_subview)
         ):
             if page.views[0].navigation_bar is not None:
+                # No page.update() here: this runs inside a use_effect
+                # callback, and the observable deps already schedule the
+                # re-render (flet 1.0.x forbids page.update() during render).
                 page.views[0].navigation_bar = None
-                try:
-                    page.update()
-                except Exception:
-                    logger.exception("Suppressed exception")
             return
 
         def _on_tab_change(e):
@@ -123,10 +177,6 @@ def AppShell() -> Control:
             indicator_color=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
         )
-        try:
-            page.update()
-        except Exception:
-            logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_navigation_bar,
@@ -136,6 +186,77 @@ def AppShell() -> Control:
             state.is_authenticated,
             state.active_subview,
             state.current_tab,
+        ],
+    )
+
+    # ── 1b. Assistant FAB (Deliberate Page Chrome) ──────────────────────────
+    # The chat is a peer of the shell, not a route, so it rides on its own
+    # view on top of views[0] — which means the shell's FAB is simply not
+    # rendered while the chat is open, and comes back when it closes. The
+    # chat's own back arrow is the way out; this button is the way back.
+    #
+    # Both this effect and the session screen write the SAME slot
+    # (views[0].floating_action_button), so ownership matters:
+    #   - a FAB that is not ours is the session's and must be left alone;
+    #   - leaving a session clears the slot, and only a re-run of this effect
+    #     (hence state.active_subview in the deps) puts ours back.
+    # `_assistant_fab_ref` holds the button we actually created, so identity —
+    # not a ValueKey comparison — decides whether the slot is already ours.
+    _assistant_fab_ref = ft.Ref[ft.FloatingActionButton]()
+
+    def _sync_assistant_fab():
+        if not page or not page.views:
+            return
+        current = page.views[0].floating_action_button
+        ours = current is not None and current is _assistant_fab_ref.current
+        # The FAB is always present once the app is up, the way DDGS ships it —
+        # it is the entry point to the assistant, so hiding it until a switch is
+        # flipped makes the feature undiscoverable. (There is no switch any more.)
+        if not (state.app_ready and state.onboarding_done):
+            if ours:
+                page.views[0].floating_action_button = None
+                _assistant_fab_ref.current = None
+            return
+        if ours:
+            # Only the meaning changes between "new chat" and "restore", so
+            # relabel in place rather than rebuilding the button.
+            wanted = (
+                "Back to Assistant" if state.assistant_minimized else "Ask Assistant"
+            )
+            if current.tooltip != wanted:
+                current.tooltip = wanted
+            return
+        if current is not None:
+            return  # the session screen owns the slot right now
+        # DDGS's recipe verbatim: mini, white icon, brand fill, tooltip only.
+        # No shape override (the platform's own roundness is right) and no
+        # badge or per-credit rebuild.
+        fab = ft.FloatingActionButton(
+            icon=tokens.ASSISTANT_ICON,
+            foreground_color=ft.Colors.WHITE,
+            bgcolor=brand_color(page),
+            mini=True,
+            tooltip="Back to Assistant"
+            if state.assistant_minimized
+            else "Ask Assistant",
+            on_click=lambda e: controller.open_assistant(),
+        )
+        _assistant_fab_ref.current = fab
+        page.views[0].floating_action_button = fab
+
+    ft.use_effect(
+        _sync_assistant_fab,
+        [
+            state.app_ready,
+            state.onboarding_done,
+            state.is_authenticated,
+            # Relabel when the chat is minimized vs closed, and restore the FAB
+            # after a session: the session screen owns
+            # views[0].floating_action_button while it is open, so leaving it
+            # clears the slot and only a re-run of this effect puts the
+            # assistant button there again.
+            state.assistant_minimized,
+            state.active_subview,
         ],
     )
 
@@ -165,23 +286,89 @@ def AppShell() -> Control:
         )
 
     # ── 3. Offline Mode ───────────────────────────────────────────────────────
-    if not state.is_online:
+    if (not state.is_online or state.auth_status == "unavailable") and not (
+        state.active_subview
+    ):
 
         async def _on_retry():
             try:
-                connectivity = await page.connectivity.get_connectivity()
-                state.is_online = ft.ConnectivityType.NONE not in connectivity
-                if state.is_online:
-                    controller.show_snack("Back online!")
-                else:
-                    controller.show_snack(constants.ERR_NETWORK)
-            except Exception:
-                logger.exception("Suppressed exception")
+                await services.colab._ensure_online()
+            except Exception as exc:
+                state.is_online = False
+                state.connectivity_status = "offline"
+                if state.auth_status == "unavailable":
+                    state.auth_status = "unknown"
+                logger.warning(
+                    "Retry could not reach Google services (%s)",
+                    type(exc).__name__,
+                )
+                controller.show_snack(constants.ERR_NETWORK, is_error=True)
+                page.update()
+                return
 
-        return OfflineFlow(on_retry=lambda: page.run_task(_on_retry))
+            state.is_online = True
+            state.connectivity_status = "online"
+            try:
+                auth_info = await services.colab.check_auth()
+            except Exception as exc:
+                state.auth_status = "unavailable"
+                state.auth_error = (
+                    "Could not verify sign-in with Google "
+                    f"({type(exc).__name__}). Check your connection and retry."
+                )
+                logger.warning(
+                    "Retry auth verification failed (%s)", type(exc).__name__
+                )
+                controller.show_snack(state.auth_error, is_error=True)
+                page.update()
+                return
+
+            auth_status = auth_info.get("status")
+            if auth_status is None:
+                auth_status = (
+                    "authenticated"
+                    if auth_info.get("authenticated", False)
+                    else "unauthenticated"
+                )
+            state.auth_status = auth_status
+            state.auth_error = auth_info.get("error", "")
+            if auth_status == "unavailable":
+                controller.show_snack(state.auth_error, is_error=True)
+            else:
+                state.is_authenticated = bool(auth_info.get("authenticated", False))
+                state.auth_email = auth_info.get("email", "")
+                if state.is_authenticated:
+                    state.onboarding_done = True
+                    await services.storage.set(
+                        constants.STORAGE_ONBOARDING_DONE, "true"
+                    )
+                controller.show_snack(
+                    "Back online!"
+                    if state.is_authenticated
+                    else "Connection restored. Sign in to continue."
+                )
+            page.update()
+
+        verification_unavailable = state.auth_status == "unavailable"
+        return OfflineFlow(
+            on_retry=lambda: page.run_task(_on_retry),
+            title=(
+                "Sign-in verification unavailable"
+                if verification_unavailable
+                else "No internet connection"
+            ),
+            message=(
+                state.auth_error
+                if verification_unavailable
+                else "Check your network and try again.\n"
+                "You need a connection to sign in and manage sessions."
+            ),
+        )
 
     # ── 4. Onboarding Presentation ────────────────────────────────────────────
-    if not state.onboarding_done or not state.is_authenticated:
+    if not state.active_subview and (
+        not state.onboarding_done or not state.is_authenticated
+    ):
         from screens.onboarding import OnboardingScreen
 
         return OnboardingScreen(key=ft.ValueKey("onboarding"))
@@ -397,6 +584,32 @@ def AppShell() -> Control:
             on_click=lambda e: controller.open_version_dialog(),
         )
 
+    def _build_header_chips(page) -> ft.Container:
+        """Assistant credits and compute-usage chips in the header.
+
+        Both move out of the Home body: the owner saw them stacked under the
+        signed-in chip, where a wall of chips read as the page itself. DDGS
+        does the same thing — its `AppHeader` takes `extra_actions=[CreditPill()]`
+        (`screens/home_screen.py:612`) instead of putting the pill in the body.
+
+        The credits pill is the existing component. The usage balance is a
+        small read-only chip beside it; both numbers are loaded by the same
+        loaders the Home body already runs.
+        """
+        from components.credit_pill import CreditPill
+        from components.usage_chip import UsageChip
+
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    CreditPill(),
+                    UsageChip(),
+                ],
+                spacing=tokens.SPACE_XS,
+            ),
+            visible=state.app_ready and state.onboarding_done,
+        )
+
     header_bar = ft.Container(
         content=ft.Row(
             controls=[
@@ -415,6 +628,7 @@ def AppShell() -> Control:
                     visible=state.current_tab == 0,
                 ),
                 _build_version_chip(),
+                _build_header_chips(page),
                 build_help_button(page, "global"),
                 theme_btn,
             ],

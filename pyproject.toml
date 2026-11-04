@@ -1,47 +1,73 @@
 [project]
 name = "collabshell"
-version = "2.1.2"
+version = "2.2.0"
 description = "Collab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "flet>=0.86.5",
-    "flet-ads>=0.86.5",
+    # The whole flet 1.1.0-dev family is co-released and cross-pinned
+    # (flet-notifications 1.1.0.dev4 requires flet==1.1.0.dev4 exactly), so
+    # they move together. flet-terminal has no 1.1.0-dev line (stays 0.4.2).
+    "flet==1.1.0.dev4",
+    "flet-ads==1.1.0.dev4",
+    "flet-notifications==1.1.0.dev4",
     "httpx>=0.28.1",
-    "flet-cli>=0.86.5; sys_platform == 'win32'",
-    "flet-desktop>=0.86.5; sys_platform == 'win32'",
-    "flet-terminal>=0.3.8",
-    "google-colab-cli>=0.6.0",
-    # google-colab-cli 0.6.0 calls jupyter_kernel_client.KernelClient(...),
-    # which jupyter-kernel-client 1.0.0 renamed to JupyterKernelClient.
-    # Pin below 1.0 until colab_cli supports the new API.
+    "flet-cli==1.1.0.dev4; sys_platform == 'win32'",
+    "flet-desktop==1.1.0.dev4; sys_platform == 'win32'",
+    "flet-terminal==0.4.2",
+    "google-colab-cli==0.7.5",
+    # google-colab-cli imports jupyter_kernel_client.JupyterSubprotocol
+    # (colab_cli/runtime.py:55), which 1.0.0 renamed, and pins ==0.9.0
+    # itself. Pin below 1.0 until colab_cli supports the new API.
     "jupyter-kernel-client<1.0",
+    # kani 1.10's OpenAIEngine is built on the openai 2.x client; 3.x changes
+    # the Responses client interface. Pin until kani supports it.
+    "openai>=2.54.0,<3.0",
     "rich>=15.0.0",
+    "kani[openai]>=1.10.0",
 ]
 
 [tool.flet]
 org = "ng.kiri"
-product = "Colab Shell"
-build_number = 12
+product = "Collab Shell"
+build_number = 15
+# The light desktop client does not bundle flet-terminal (terminals render as
+# unknown controls under `flet run`); the full client does.
+desktop_flavor = "full"
 
 [tool.flet.app]
 path = "src"
 
 
-[tool.flet.app.boot_screen]
+[tool.flet.boot_screen]
 startup_message = "Initializing Collab Shell..."
 
 [tool.flet.android]
+# Compress native libs in the APK (pre-0.86 behaviour): since 0.86 flet stores
+# them uncompressed by default, which doubled APK download size.
+legacy_packaging = true
 bundle_id = "ng.kiri.collabshell"
+# Our own Android resources (notification small icon drawable), copied into
+# the generated android/app/src/main/res by flet build.
+res_dir = "android_res"
 
-# Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq 27.2.0's
+# Google Play requires 16 KB ELF page alignment on 64-bit ABIs; pyzmq's
 # android x86_64 wheel ships 4 KB-aligned libs (libzmq + libc++_shared), so
-# x86_64 is dropped. armeabi-v7a is kept: 32-bit ABIs are exempt from the
-# 16 KB check, and it preserves phone/tablet/TV device reach.
-target_arch = ["arm64-v8a", "armeabi-v7a"]
+# x86_64 is dropped.
+#
+# armeabi-v7a is dropped for a different, harder reason: there is NO armv7
+# wheel for pyzmq at all (0 armv7, 15 aarch64, 0 pure-Python on PyPI), and
+# pyzmq arrives via kani/jupyter-kernel-client -> jupyter-client. `flet build`
+# installs the deps per ABI with `--only-binary :all:`, so it cannot compile
+# pyzmq from source, and the whole 32-bit install dies with
+# `ResolutionImpossible`. So armeabi-v7a is not a choice we can make: it
+# cannot be built with the current dependency set. arm64-v8a is the ABI every
+# current Android device uses.
+target_arch = ["arm64-v8a"]
 
 [tool.flet.android.meta_data]
 "com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-5679949845754640~7138516733"
+"android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" = "Colab sessions stay alive in the background"
 
 [tool.flet.android.manifest_application]
 allowBackup = "false"
@@ -49,6 +75,18 @@ allowBackup = "false"
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
 "android.permission.ACCESS_NETWORK_STATE" = true
+# Screen stays on while the app runs with an active session (ft.Wakelock).
+"android.permission.WAKE_LOCK" = true
+# Persistent "session running" notification via flet-notifications 1.1.0-dev:
+# the foreground service keeps the process alive when the app is minimized
+# (until the user closes it from the notification's Exit action).
+"android.permission.FOREGROUND_SERVICE" = true
+"android.permission.FOREGROUND_SERVICE_SPECIAL_USE" = true
+"android.permission.POST_NOTIFICATIONS" = true
+
+[tool.flet.android.service."com.dexterous.flutterlocalnotifications.ForegroundService"]
+exported = false
+foregroundServiceType = "specialUse"
 
 [tool.flet.android.signing]
 key_store = "../../../../kiri_keystore.jks"
@@ -58,12 +96,11 @@ key_alias = "upload"
 
 [dependency-groups]
 dev = [
-    "pytest",
-    "ruff",
+    "pytest>=9.1.1,<10",
+    "ruff>=0.17.0,<0.18",
 ]
 
 
 
 [tool.ruff]
 lint.extend-ignore = ["BLE001", "S110"]
-

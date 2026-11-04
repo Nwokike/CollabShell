@@ -7,6 +7,7 @@ where the client calls it (module-level import in terminal_client).
 
 import asyncio
 import sys
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
@@ -31,11 +32,24 @@ def _store_with(session):
     store.get = MagicMock(return_value=session)
     st = MagicMock()
     st.store = store
+    st.get_session = MagicMock(return_value=session)
     return st
 
 
 def _session_record(token="tok-fresh", url="https://8080-m.example.dev"):
-    return NS(token=token, url=url)
+    return NS(
+        token=token,
+        url=url,
+        endpoint="m-s-abc",
+        token_expires_at=datetime.now(UTC) + timedelta(hours=1),
+        variant="DEFAULT",
+        accelerator="NONE",
+        machine_shape="STANDARD",
+        kernel_id=None,
+        session_id=None,
+        last_execution=None,
+        running=None,
+    )
 
 
 def test_refresh_credentials_picks_up_fresh_token():
@@ -72,10 +86,9 @@ def test_refresh_credentials_skipped_without_session_name():
 
 def test_refresh_credentials_swallows_store_errors():
     client = _client()
-    store = MagicMock()
-    store.get = MagicMock(side_effect=RuntimeError("boom"))
     st = MagicMock()
-    st.store = store
+    st.store = MagicMock()
+    st.get_session = MagicMock(side_effect=RuntimeError("boom"))
 
     with patch("colab_cli.common.State", side_effect=lambda: st):
         changed = asyncio.run(client._refresh_cached_credentials())
