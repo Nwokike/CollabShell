@@ -151,10 +151,14 @@ def AppShell() -> Control:
             or not state.is_authenticated
         ):
             if page.views[0].navigation_bar is not None:
-                # No page.update() here: this runs inside a use_effect
-                # callback, and the observable deps already schedule the
-                # re-render (flet 1.x forbids page.update() during render).
                 page.views[0].navigation_bar = None
+                # The View prop is dirty-only until a patch runs; effects run
+                # after render, so page.update() here is legal and REQUIRED
+                # for the chrome to actually reach the client (flet 1.1).
+                try:
+                    page.update()
+                except Exception:
+                    logger.exception("Suppressed exception")
             return
 
         def _on_tab_change(e):
@@ -180,6 +184,10 @@ def AppShell() -> Control:
             indicator_color=ft.Colors.with_opacity(0.12, ft.Colors.PRIMARY),
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
         )
+        try:
+            page.update()
+        except Exception:
+            logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_navigation_bar,
@@ -221,6 +229,10 @@ def AppShell() -> Control:
             if ours:
                 page.views[0].floating_action_button = None
                 _assistant_fab_ref.current = None
+                try:
+                    page.update()
+                except Exception:
+                    logger.exception("Suppressed exception")
             return
         if ours:
             # Only the meaning changes between "new chat" and "restore", so
@@ -245,6 +257,10 @@ def AppShell() -> Control:
         )
         _assistant_fab_ref.current = fab
         page.views[0].floating_action_button = fab
+        try:
+            page.update()
+        except Exception:
+            logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_assistant_fab,

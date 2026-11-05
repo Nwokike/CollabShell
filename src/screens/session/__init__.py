@@ -275,13 +275,21 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_ai_explain_cell=lambda e: _call(nb_actions, "ask_ai_active"),
             on_open_assistant=lambda e: controller.open_assistant(),
         )
-        # No page.update() inside the effect: the observable deps schedule
-        # the re-render (flet 1.0.x forbids page.update() during render).
         page.views[0].floating_action_button = fab
+        # The root View prop is dirty-only until a patch runs; effects run
+        # after render, so page.update() here is legal and REQUIRED (flet 1.1).
+        try:
+            page.update()
+        except Exception:
+            logger.exception("Suppressed exception")
 
     def _cleanup_fab():
         if page and page.views:
             page.views[0].floating_action_button = None
+            try:
+                page.update()
+            except Exception:
+                logger.exception("Suppressed exception")
 
     ft.use_effect(
         _sync_fab,

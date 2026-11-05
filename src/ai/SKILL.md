@@ -24,8 +24,11 @@ files, and capture work as notebooks or scripts.
   absolute `/content/...` paths for file work.
 - **Notebook tabs share ONE kernel.** Multiple tabs are separate documents, not
   separate runtimes — a variable set in one tab is visible in the others.
-- **The VM is ephemeral.** VMs are reclaimed when idle and have a maximum
-  lifetime. Only files the user saved (or wrote to Drive) survive.
+- **The VM is ephemeral, but the app keeps it alive while you work.** While the
+  app is open, CollabShell pings the session so it is not idle-reclaimed; if a
+  call still hits a stale token or a reclaimed VM, the app re-syncs and retries
+  once transparently — you do not need to give up on the session. Only files
+  the user saved (or wrote to Drive) survive a real VM loss.
 
 ## When to activate
 
@@ -95,7 +98,7 @@ visible in the others.
 - **`write_cells` appends to the ACTIVE tab.** Name the tab you mean with
   `list_notebook_tabs` first if the user has more than one open — do not assume
   the active tab is the one they are talking about.
-- **`run_cell` runs a string without saving it anywhere.** Use it to check an
+- **`_exec` runs a string without saving it anywhere.** Use it to check an
   answer; use `write_cells` when the user should keep the code.
 - Cells you write are the user's to edit. Prefer short, single-purpose cells
   over one large block, and say in one line what each cell does.
@@ -133,8 +136,9 @@ visible in the others.
 3. **400 on creation with an accelerator** → no quota for that hardware.
    Fall back to T4 or CPU.
 4. **503 with `high_mem`** → that combination is unsupported. Drop the flag.
-5. **A session named X does not exist** → the VM was reclaimed (idle or max
-   lifetime). Create a new session; the notebooks are still on disk.
+5. **A session named X does not exist** → the app re-syncs sessions and retries
+   once on a stale token or a reclaimed VM; if it is truly gone, create a new
+   session — the notebooks are still on disk and reattach automatically.
 
 ## Safety
 

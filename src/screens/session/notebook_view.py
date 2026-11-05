@@ -74,6 +74,7 @@ def write_cells_to_active_tab(
             {
                 "type": c.get("type", "code"),
                 "source": c.get("source", ""),
+                "outputs": c.get("outputs", []),
                 "origin": c.get("origin") or origin,
                 "tool_call_id": c.get("tool_call_id"),
             }

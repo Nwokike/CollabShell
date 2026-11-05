@@ -48,9 +48,11 @@ def _open_action_buttons(
         return []
     if tool_name == "read_terminal":
         target = "terminal"
-    elif tool_name in ("_exec", "read_notebook", "write_cells", "install_package"):
+    elif tool_name in ("write_cells", "read_notebook"):
         target = "notebook"
     else:
+        # _exec/file tools: follow the tab the session is currently on, so both
+        # labels appear across usage instead of always notebook.
         target = session_mode if session_mode in ("notebook", "terminal") else "notebook"
     # The label is TEXT, not just an icon — "Open Notebook" vs "Open Terminal"
     # must be readable at a glance.

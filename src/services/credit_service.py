@@ -70,6 +70,16 @@ class CreditService:
     def daily_cap(self, is_premium: bool = False) -> int:
         return DAILY_PREMIUM_CREDITS if is_premium else DAILY_FREE_CREDITS
 
+    def _sync_state(self, balance: int) -> None:
+        """Mirror the balance into the observable so readers (wallet dialog,
+        pill) can use it synchronously, DDGS-style."""
+        try:
+            from core.state import state
+
+            state.credits_remaining = int(balance)
+        except Exception:
+            pass
+
     def _reset_if_new_day(self) -> None:
         """Flat UTC reset with no rollover: yesterday's unused credits go."""
         if UTC_MIDNIGHT_RESET and self._day != _today_utc():
@@ -82,7 +92,9 @@ class CreditService:
             self._reset_if_new_day()
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
-            return max(0, self._balance)
+            balance = max(0, self._balance)
+            self._sync_state(balance)
+            return balance
 
     async def add_credits(self, amount: int, is_premium: bool = False) -> int:
         async with self._lock:
@@ -90,6 +102,7 @@ class CreditService:
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
             self._balance = max(0, self._balance + int(amount))
+            self._sync_state(self._balance)
             return self._balance
 
     # ── settlement ─────────────────────────────────────────────────────────

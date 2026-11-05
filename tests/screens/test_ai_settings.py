@@ -461,10 +461,12 @@ def test_wallet_shows_balance_and_cost_rules():
     from components.wallet_dialog import show_wallet_dialog
 
     page, state, services, _ = _stubs()
+    state.credits_remaining = 42  # the wallet reads the observable synchronously (DDGS)
     show_wallet_dialog(page, state, services)
     dialog = page.dialogs[-1]
     texts = _flatten_texts(dialog)
-    assert any("42 of 50 credits" in t for t in texts), texts
+    assert any(t == "42" for t in texts), texts  # balance is the trailing value
+    assert any("of 50 daily · resets 00:00 UTC" in t for t in texts), texts
     assert any("Assistant model step" in t for t in texts), texts
     assert any("Each reply and tool call" in t for t in texts), texts
     assert any("00:00 UTC" in t for t in texts), texts

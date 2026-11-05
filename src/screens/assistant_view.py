@@ -1033,9 +1033,13 @@ class ChatSession:
             logger.debug("open_terminal failed", exc_info=True)
 
     def _open_notebook_for_session(self, row: dict | None = None) -> None:
-        """Open the session's notebook screen — and if this step wrote cells,
-        reveal the first one so the user lands ON the AI's output (the DDGS
-        open-in-results model)."""
+        """Open the session's notebook screen showing what the AI did.
+
+        - a write_cells step: reveal the first cell it wrote (step refs)
+        - an _exec step: write the code it ran plus its outputs as an
+          assistant cell into the active notebook tab, then reveal it —
+          "its own notebook" is the point of the action (DDGS open-in-results)
+        """
         try:
             self.close()
         except Exception:
@@ -1043,15 +1047,49 @@ class ChatSession:
         handler = getattr(self.controller, "open_notebook", None)
         if not callable(handler):
             return
+        session_name = getattr(self.state, "active_session_name", "") or ""
         try:
-            handler(getattr(self.state, "active_session_name", "") or "")
+            handler(session_name)
         except Exception:
             logger.debug("open_notebook failed", exc_info=True)
-        refs = (row or {}).get("refs") or []
+
+        row = row or {}
+        refs = row.get("refs") or []
+        cell_id = None
         if refs:
-            cell_id = refs[0].get("cell_id") or refs[0].get("id")
-            if cell_id:
-                self._reveal_cell(str(cell_id))
+            cell_id = str(refs[0].get("cell_id") or refs[0].get("id") or "")
+        elif row.get("name") == "_exec":
+            code = str((row.get("args") or {}).get("code", "") or "")
+            if code.strip():
+                from screens.session.notebook_view import write_cells_to_active_tab
+
+                inserted = write_cells_to_active_tab(
+                    session_name,
+                    [
+                        {
+                            "type": "code",
+                            "source": code,
+                            "outputs": row.get("outputs", []),
+                            "origin": "assistant",
+                        }
+                    ],
+                )
+                if inserted:
+                    cell_id = str(getattr(inserted[0], "id", "") or "")
+        if cell_id:
+            self.page.run_task(self._reveal_cell_soon, session_name, cell_id)
+
+    async def _reveal_cell_soon(self, session_name: str, cell_id: str) -> None:
+        """Reveal a cell after the session screen has mounted (navigation races
+        the view mount, so retry briefly instead of failing once)."""
+        import asyncio
+
+        for _ in range(20):
+            from screens.session.notebook_view import reveal_cell
+
+            if reveal_cell(session_name, cell_id):
+                return
+            await asyncio.sleep(0.1)
 
     def _copy_step_output(self, outputs: list) -> None:
         """Copy step output to clipboard."""

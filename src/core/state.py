@@ -62,6 +62,9 @@ class AppState:
     # Bumped when the Settings router row has new status to show, so the
     # section rebuilds the row instead of writing into its frozen controls.
     router_status_revision: int = 0
+    # Assistant credit balance, kept in sync by CreditService — read
+    # synchronously by the wallet dialog (DDGS parity).
+    credits_remaining: int = 0
     # Bumped every time a fresh model catalog is installed, so the model pill
     # and picker re-render automatically (no manual Refresh needed).
     catalog_revision: int = 0

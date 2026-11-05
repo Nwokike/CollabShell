@@ -295,46 +295,35 @@ class AdService:
         return True
 
     async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
-        """Show a rewarded interstitial ad; grant the reward only when an ad
-        was actually presented and then closed.
+        """Show a rewarded interstitial ad, triggering on_close when closed.
 
-        Returns False when no ad could be shown and grants NOTHING in that
-        case - for premium users, when flet_ads is missing, on desktop/web,
-        or when ad creation fails. Credits must never be handed out for an
-        impression nobody saw (AdMob policy violation).
+        Returns False when no ad could be shown, and grants nothing in that
+        case. It used to call `on_close` anyway - for premium users, when
+        flet_ads is missing, and on mobile web where `_is_mobile()` is
+        False - so credits were handed out for an impression nobody saw:
+        two every 30 seconds against a 200/day cap, with the cooldown held
+        only in memory and cleared by a relaunch. A reward has to be paid
+        for by an ad that actually closed.
         """
         if state.is_premium or not _HAS_ADS or not self._is_mobile():
             logger.info("No rewarded ad available - granting nothing")
             return False
-        if self._active_rewarded_ad is not None:
-            # One rewarded ad at a time: a second press must not stack ads
-            # (or rewards) on top of the one already in flight.
-            return True
-
-        rewarded_state = {"opened": False}
 
         try:
 
             async def _show(e):
                 await e.control.show()
 
-            def _open(e):
-                # The full-screen ad is on screen: only from here may a
-                # later close count as an earned reward.
-                rewarded_state["opened"] = True
-
             async def _close(e):
                 self._active_rewarded_ad = None
-                if rewarded_state["opened"]:
-                    if asyncio.iscoroutinefunction(on_close):
-                        await on_close()
-                    else:
-                        on_close()
+                if asyncio.iscoroutinefunction(on_close):
+                    await on_close()
+                else:
+                    on_close()
 
             self._active_rewarded_ad = fta.InterstitialAd(
                 unit_id=self.interstitial_id,
                 on_load=lambda e: self.page.run_task(_show, e),
-                on_open=_open,
                 on_close=lambda e: self.page.run_task(_close, e),
                 on_error=lambda e: logger.error(
                     "Rewarded Interstitial error: %s", e.data
@@ -352,5 +341,8 @@ class AdService:
             ImportError,
         ):
             logger.exception("Failed to trigger rewarded interstitial")
-            self._active_rewarded_ad = None
+            if asyncio.iscoroutinefunction(on_close):
+                await on_close()
+            else:
+                on_close()
             return False

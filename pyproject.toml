@@ -30,7 +30,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Collab Shell"
-build_number = 16
+build_number = 17
 # The light desktop client does not bundle flet-terminal (terminals render as
 # unknown controls under `flet run`); the full client does.
 desktop_flavor = "full"
@@ -40,7 +40,14 @@ path = "src"
 
 
 [tool.flet.boot_screen]
+name = "flet"
+
+[tool.flet.boot_screen.flet]
 startup_message = "Initializing Collab Shell..."
+
+[tool.flet.splash]
+color = "#ffffff"
+dark_color = "#121212"
 
 [tool.flet.android]
 # Compress native libs in the APK (pre-0.86 behaviour): since 0.86 flet stores

@@ -1,16 +1,15 @@
-"""Wallet dialog — balance, cost table, ad top-up (cooldown) and upsell.
+"""AI credit pill + wallet dialog — copied verbatim from DDGS's wallet.py.
 
-A verbatim copy of DDGS's proven wallet (src/components/wallet.py), adapted
-only for CollabShell's names. The ad top-up exists ONLY where an ad can
-actually play (native mobile, non-premium), credits enter ONLY on the close
-of an ad that actually opened, and the cooldown runs a live 0.5s countdown
-that reads state fresh every tick.
+The only adaptations are CollabShell's plumbing: the dialog takes
+(page, state, services), credits come from services.credits, the pill refresh
+goes through page._assistant_session._refresh_credits, and the premium
+deep-link sets the shell route instead of DDGS's controller attribute.
+Everything else — rows, copy, cooldown, countdown, grant path — is DDGS's.
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 
 import flet as ft
@@ -24,11 +23,8 @@ from core.constants import (
     DAILY_FREE_CREDITS,
     DAILY_PREMIUM_CREDITS,
 )
-from core.styles import tip_text
 from core.theme import AppColors
 from services.ai_credits import credit_word
-
-logger = logging.getLogger("WalletDialog")
 
 
 def _credit_color(credits: int) -> str:
@@ -40,20 +36,38 @@ def _credit_color(credits: int) -> str:
 
 
 def _row(
-    icon: ft.IconData, title: str, subtitle: str, trailing: ft.Control
+    icon: ft.IconData,
+    title: str,
+    subtitle: str,
+    trailing: ft.Control,
 ) -> ft.Container:
-    """The wallet row shape — DDGS's setting_row."""
+    """Wallet row; the shape lives in DDGS's core.ui.setting_row."""
+    icon_box = ft.Container(
+        content=ft.Icon(
+            icon,
+            size=tokens.ICON_MD,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        ),
+        width=tokens.ICON_BOX if hasattr(tokens, "ICON_BOX") else 36,
+        height=tokens.ICON_BOX if hasattr(tokens, "ICON_BOX") else 36,
+        border_radius=tokens.ICON_BOX_RADIUS if hasattr(tokens, "ICON_BOX_RADIUS") else 8,
+        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+        alignment=ft.Alignment.CENTER,
+    )
     return ft.Container(
         content=ft.Row(
             [
-                ft.Icon(icon, size=tokens.ICON_SM, color=ft.Colors.ON_SURFACE_VARIANT),
+                icon_box,
                 ft.Column(
                     [
-                        ft.Text(title, size=tokens.FONT_SM, weight=ft.FontWeight.W_600),
+                        ft.Text(
+                            title, size=tokens.FONT_SM, weight=ft.FontWeight.W_600
+                        ),
                         ft.Text(
                             subtitle,
                             size=tokens.FONT_XS,
                             color=ft.Colors.ON_SURFACE_VARIANT,
+                            max_lines=3,
                         ),
                     ],
                     spacing=1,
@@ -62,103 +76,73 @@ def _row(
                 ),
                 trailing,
             ],
-            spacing=tokens.SM_SPACE_SM if hasattr(tokens, "SM_SPACE_SM") else 10,
+            spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.Padding(0, 4, 0, 4),
     )
 
 
+def _cost_row(label: str, cost: str) -> ft.Container:
+    if cost == "free":
+        return _row(
+            ft.Icons.MONEY_OFF_ROUNDED,
+            label,
+            "No credits used",
+            ft.Text(
+                "Free",
+                size=tokens.FONT_SM,
+                weight=ft.FontWeight.W_600,
+                color=AppColors.SUCCESS,
+            ),
+        )
+    return _row(
+        ft.Icons.BOLT_ROUNDED,
+        label,
+        "Each reply and tool call",
+        ft.Text(
+            str(cost),
+            size=tokens.FONT_SM,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.PRIMARY,
+        ),
+    )
+
+
 def show_wallet_dialog(page: ft.Page, state, services) -> None:
     """Balance, cost table, ad top-up (30s cooldown) and the premium upsell.
 
-    DDGS's flow verbatim: the top-up row exists only where an ad can play,
-    the cooldown is stamped the moment the button is pressed and handed
-    straight back when no ad was shown, and credits enter only through the
-    close of an ad that actually opened.
+    DDGS verbatim: the top-up row and button render exactly where an ad can
+    actually play, never as a dead affordance.
     """
-    credits = getattr(services, "credits", None)
-    ad_service = getattr(state, "ad_service", None) or getattr(
-        services, "ad_service", None
-    )
-
     if not hasattr(state, "ad_cooldown_end"):
         state.ad_cooldown_end = 0.0
 
-    ads_available = False
-    if ad_service is not None:
-        probe = getattr(ad_service, "_is_mobile", None)
-        # A method on the real service, a bool on stubs: handle both.
-        ads_available = bool(probe() if callable(probe) else probe)
+    # Ads exist only in native mobile builds: flet-ads raises on web and on
+    # desktop, so the top-up row and button render exactly where an ad can
+    # actually play (single source: ad_service).
+    ad_service = getattr(state, "ad_service", None) or getattr(
+        services, "ad_service", None
+    )
+    probe = getattr(ad_service, "_is_mobile", None) if ad_service is not None else None
+    ads_available = bool(ad_service) and bool(probe() if callable(probe) else probe)
     is_premium = bool(getattr(state, "is_premium", False))
-    cap = DAILY_PREMIUM_CREDITS if is_premium else DAILY_FREE_CREDITS
+    credits = getattr(services, "credits", None)
 
     def _credits():
         return credits
 
-    async def _balance_async() -> int:
-        if credits is None:
-            return 0
-        try:
-            return await credits.get_balance(is_premium=is_premium)
-        except Exception:
-            return 0
-
-    balance_value = 0
-
     balance_text = ft.Text(
-        "…",
-        size=tokens.FONT_MD,
-        weight=ft.FontWeight.W_700,
-        color=_credit_color(balance_value),
-        selectable=True,
+        str(getattr(state, "credits_remaining", 0)),
+        size=tokens.FONT_XL,
+        weight=ft.FontWeight.BOLD,
+        color=_credit_color(getattr(state, "credits_remaining", 0)),
     )
+    cooldown_label = ft.Text("", size=tokens.FONT_XS, text_align=ft.TextAlign.CENTER)
 
-    cooldown_label = ft.Text(
-        "",
-        size=tokens.FONT_SM,
-        color=ft.Colors.ON_SURFACE_VARIANT,
-    )
+    topup_label = f"Watch Ad (+{AD_TOPUP_CREDITS} Credits)"
 
-    def _refresh_color():
-        balance_text.color = _credit_color(balance_value)
-
-    async def _refresh_async():
-        nonlocal balance_value
-        balance_value = await _balance_async()
-        balance_text.value = (
-            f"{balance_value} of {cap} credits left today · resets 00:00 UTC"
-        )
-        _refresh_color()
-        try:
-            page.update()
-        except Exception as ex:
-            logger.debug("wallet refresh skipped: %s", ex)
-
-    def _refresh():
-        page.run_task(_refresh_async)
-
-    def _open_premium(ev=None):
-        """Desktop has no ads to watch: send the user to the Premium card."""
-        from core.state import state as app_state
-
-        page.pop_dialog()
-        app_state.current_tab = 4
-        try:
-            page.route = "/settings"
-        except Exception:
-            logger.debug("route write skipped", exc_info=True)
-        page.update()
-
-    def _close(e=None):
-        nonlocal dialog_open
-        dialog_open = False
-        try:
-            page.pop_dialog()
-        except Exception:
-            pass
-
-    def _watch_content(text: str) -> ft.Row:
+    def _watch_content(text: str) -> ft.Control:
         """The button's one shape; only its label changes state."""
         return ft.Row(
             [
@@ -173,21 +157,38 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             tight=True,
         )
 
-    topup_label = f"Watch Ad (+{AD_TOPUP_CREDITS} Credits)"
-
     watch_btn = ft.FilledButton(
         content=_watch_content(topup_label),
-        bgcolor=AppColors.DARK_PRIMARY,
+        bgcolor=ft.Colors.PRIMARY,
         disabled=is_premium,
     )
 
     dialog_open = True
 
+    def _open_premium(e=None):
+        """Desktop has no ads to watch: send the user to the Premium card."""
+        _close()
+        state.current_tab = 4
+        try:
+            page.route = "/settings"
+        except Exception:
+            pass
+        page.update()
+
+    def _close(e=None):
+        nonlocal dialog_open
+        dialog_open = False
+        try:
+            page.pop_dialog()
+        except Exception:
+            pass
+
     async def _countdown():
         while dialog_open:
             remaining = int(state.ad_cooldown_end - time.time())
-            # Read live: a purchase made while the dialog is open must not
-            # keep counting down against a verdict that already changed.
+            # Read live: the local above was captured when the dialog was
+            # built, so a purchase made while it was open kept counting down
+            # against a verdict that had already changed.
             if state.is_premium:
                 break
             if remaining > 0:
@@ -209,16 +210,18 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             AD_TOPUP_CREDITS, is_premium=is_premium
         )
         state.credits_remaining = new_balance
-        # The chat header pill is imperative: poke it or the balance behind
-        # this dialog stays stale until the next chat render.
-        chat = getattr(page, "_assistant_session", None)
-        refresh = getattr(chat, "_refresh_credits", None)
+        # The chat header is an imperative view, not a state subscriber:
+        # poke its pill or the balance behind this dialog stays stale until
+        # the next chat render.
+        refresh = getattr(
+            getattr(page, "_assistant_session", None), "_refresh_credits", None
+        )
         if callable(refresh):
             try:
                 refresh()
             except Exception:
                 pass
-        balance_text.value = f"{new_balance} of {cap} credits left today"
+        balance_text.value = str(new_balance)
         balance_text.color = _credit_color(new_balance)
         cooldown_label.value = f"+{AD_TOPUP_CREDITS} credits added!"
         try:
@@ -238,8 +241,6 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             except Exception:
                 pass
             return
-        # Stamp the cooldown BEFORE the ad: a double-press can never queue
-        # two ads (or two rewards).
         state.ad_cooldown_end = now + AD_TOPUP_COOLDOWN_SEC
         watch_btn.disabled = True
         try:
@@ -247,14 +248,15 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
         except Exception:
             pass
         page.run_task(_countdown)
-
         from services.ad_service import AdService
 
-        svc = ad_service or AdService(page)
-        ok = await svc.show_rewarded_interstitial(_on_watch_success)
+        ad_service = getattr(state, "ad_service", None) or getattr(
+            services, "ad_service", None
+        ) or AdService(page)
+        ok = await ad_service.show_rewarded_interstitial(_on_watch_success)
         if not ok:
-            # Nothing was shown, so nothing was earned and nothing should be
-            # locked out: hand the button straight back.
+            # Nothing was shown, so nothing was earned and nothing should
+            # be locked out: hand the button straight back.
             state.ad_cooldown_end = 0.0
             watch_btn.disabled = False
             cooldown_label.value = "Ads are not available right now."
@@ -274,34 +276,22 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
             "daily · resets 00:00 UTC",
             balance_text,
         ),
-        ft.Divider(height=1, thickness=1, color=ft.Colors.with_opacity(0.18, ft.Colors.OUTLINE)),
-        _row(
-            ft.Icons.BOLT_ROUNDED,
-            "Assistant model step",
-            "Each reply and tool call",
-            ft.Text(
-                credit_word(COST_STEP),
-                size=tokens.FONT_SM,
-                weight=ft.FontWeight.W_600,
-                color=ft.Colors.PRIMARY,
-            ),
+        ft.Divider(
+            height=1,
+            thickness=1,
+            color=ft.Colors.with_opacity(0.18, ft.Colors.OUTLINE),
         ),
-        ft.Divider(height=1, thickness=1, color=ft.Colors.with_opacity(0.18, ft.Colors.OUTLINE)),
-        _row(
-            ft.Icons.MONEY_OFF_ROUNDED,
-            "Searching, uploads, everything else",
-            "No credits used",
-            ft.Text(
-                "Free",
-                size=tokens.FONT_SM,
-                weight=ft.FontWeight.W_600,
-                color=AppColors.SUCCESS,
-            ),
+        _cost_row("Assistant model step", credit_word(COST_STEP)),
+        ft.Divider(
+            height=1,
+            thickness=1,
+            color=ft.Colors.with_opacity(0.18, ft.Colors.OUTLINE),
         ),
+        _cost_row("Everything else in the app", "free"),
     ]
 
-    # The watch-ad row exists only where an ad can play (native mobile) and
-    # only while it earns something (not for premium).
+    # The watch-ad row exists only where an ad can play (native mobile)
+    # and only while it earns something (not for premium).
     if ads_available and not is_premium:
         rows.extend(
             [
@@ -317,7 +307,7 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
                     ft.Icon(
                         ft.Icons.PLAY_CIRCLE_ROUNDED,
                         size=tokens.ICON_SM,
-                        color=ft.Colors.PRIMARY,
+                        color=AppColors.DARK_PRIMARY,
                     ),
                 ),
             ]
@@ -326,37 +316,38 @@ def show_wallet_dialog(page: ft.Page, state, services) -> None:
     if ads_available and not is_premium:
         actions: list[ft.Control] = [cooldown_label, watch_btn]
     elif not is_premium and CHANNEL != "play":
-        # No ad exists here (desktop, web): offer the credits, never the words
-        # "remove ads" — there are no ads to remove.
+        # No ad exists here (desktop, web): offer the credits, never the
+        # words "remove ads" - there are no ads to remove.
         actions = [
             ft.TextButton(
                 f"Get {DAILY_PREMIUM_CREDITS} credits a day",
                 icon=ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                icon_color=ft.Colors.PRIMARY,
                 on_click=lambda e: _open_premium(),
             )
         ]
     else:
         actions = []
 
-    page.show_dialog(
-        ft.AlertDialog(
-            title=ft.Text("Assistant credits"),
-            content=ft.Container(
-                content=ft.Column(
-                    [*rows, *actions, tip_text("Yesterday's unused credits do not roll over.")],
-                    spacing=tokens.SPACE_XS,
-                    tight=True,
-                ),
-                width=340,
-                padding=ft.Padding(4, 8, 4, 4),
-            ),
-            actions=[ft.TextButton("Close", on_click=_close)],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
+    content = ft.Column(
+        [
+            *rows,
+            *actions,
+        ],
+        spacing=tokens.SPACE_XS,
+        tight=True,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
-    # Populate the balance now that the dialog exists.
-    _refresh()
+
+    dlg = ft.AlertDialog(
+        title=ft.Text("Assistant credits", font_family="Outfit"),
+        content=ft.Container(
+            content=content, width=340, padding=ft.Padding(4, 8, 4, 4)
+        ),
+        actions=[ft.TextButton("Close", on_click=_close)],
+    )
+    page.show_dialog(dlg)
     # The cooldown loop only has anything to update when the ad button is
-    # actually on screen.
+    # on screen.
     if not is_premium and ads_available:
         page.run_task(_countdown)

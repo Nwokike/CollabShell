@@ -88,8 +88,8 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
     """
 
     NO_SESSION = (
-        "(no session is open — there is nothing to run this against. Ask the "
-        "user to open or create a session first.)"
+        "(no session exists at all — create one first with create_session, or "
+        "open an existing one from the session list.)"
     )
 
     def _live_session() -> str:
