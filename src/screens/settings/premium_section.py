@@ -36,6 +36,7 @@ from core.channel import CHANNEL
 from core.constants import DAILY_FREE_CREDITS, DAILY_PREMIUM_CREDITS
 from core.notifications import show_notification
 from core.styles import glass_card, section_header, tip_text
+from core.theme import AppColors
 
 logger = logging.getLogger("PremiumSection")
 
@@ -194,7 +195,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
                 ft.Icon(
                     ft.Icons.CHECK_CIRCLE_ROUNDED,
                     size=tokens.ICON_MD,
-                    color=ft.Colors.SUCCESS,
+                    color=AppColors.SUCCESS,
                 ),
             )
         )
@@ -208,7 +209,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
                 ft.Icon(
                     ft.Icons.ERROR_OUTLINE_ROUNDED,
                     size=tokens.ICON_SM,
-                    color=ft.Colors.ERROR,
+                    color=AppColors.ERROR,
                 ),
             )
         )
@@ -221,7 +222,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
                 ft.Icon(
                     ft.Icons.CHECK_CIRCLE_ROUNDED,
                     size=tokens.ICON_MD,
-                    color=ft.Colors.SUCCESS,
+                    color=AppColors.SUCCESS,
                 ),
             )
         )
@@ -237,7 +238,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
                 ft.Icon(
                     ft.Icons.ERROR_OUTLINE_ROUNDED,
                     size=tokens.ICON_SM,
-                    color=ft.Colors.ERROR,
+                    color=AppColors.ERROR,
                 ),
             )
         )

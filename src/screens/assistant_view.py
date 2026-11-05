@@ -1033,13 +1033,10 @@ class ChatSession:
             logger.debug("open_terminal failed", exc_info=True)
 
     def _open_notebook_for_session(self, row: dict | None = None) -> None:
-        """Open the session's notebook screen showing what the AI did.
-
-        - a write_cells step: reveal the first cell it wrote (step refs)
-        - an _exec step: write the code it ran plus its outputs as an
-          assistant cell into the active notebook tab, then reveal it —
-          "its own notebook" is the point of the action (DDGS open-in-results)
-        """
+        """Open the session's notebook screen ON the Assistant tab — the
+        notebook where the AI's runs live (one per session, tied to the AI
+        conversation). _exec steps write code + output into that tab, so it
+        always shows what the AI has been doing (DDGS open-in-results)."""
         try:
             self.close()
         except Exception:
@@ -1052,44 +1049,63 @@ class ChatSession:
             handler(session_name)
         except Exception:
             logger.debug("open_notebook failed", exc_info=True)
+        # Navigation races the notebook screen's mount, so the tab creation,
+        # insert and reveal all happen in the retry task.
+        self.page.run_task(self._open_assistant_tab, row or {})
 
-        row = row or {}
-        refs = row.get("refs") or []
-        cell_id = None
-        if refs:
-            cell_id = str(refs[0].get("cell_id") or refs[0].get("id") or "")
-        elif row.get("name") == "_exec":
-            code = str((row.get("args") or {}).get("code", "") or "")
-            if code.strip():
-                from screens.session.notebook_view import write_cells_to_active_tab
-
-                inserted = write_cells_to_active_tab(
-                    session_name,
-                    [
-                        {
-                            "type": "code",
-                            "source": code,
-                            "outputs": row.get("outputs", []),
-                            "origin": "assistant",
-                        }
-                    ],
-                )
-                if inserted:
-                    cell_id = str(getattr(inserted[0], "id", "") or "")
-        if cell_id:
-            self.page.run_task(self._reveal_cell_soon, session_name, cell_id)
-
-    async def _reveal_cell_soon(self, session_name: str, cell_id: str) -> None:
-        """Reveal a cell after the session screen has mounted (navigation races
-        the view mount, so retry briefly instead of failing once)."""
+    async def _open_assistant_tab(self, row: dict) -> None:
+        """Ensure the session's Assistant tab exists, land the AI's run in it
+        (deduped by source), and reveal the newest cell."""
         import asyncio
 
-        for _ in range(20):
-            from screens.session.notebook_view import reveal_cell
+        from screens.session.notebook_view import _SESSION_BRIDGES, reveal_cell
 
-            if reveal_cell(session_name, cell_id):
-                return
-            await asyncio.sleep(0.1)
+        session_name = getattr(self.state, "active_session_name", "") or ""
+        for _ in range(20):
+            bridges = _SESSION_BRIDGES.get(session_name)
+            if bridges is not None:
+                break
+            await asyncio.sleep(0.15)
+        else:
+            return
+        try:
+            tab_id = bridges["ensure_assistant_tab"]()
+            cell_id = None
+            refs = row.get("refs") or []
+            if refs:
+                cell_id = str(refs[0].get("cell_id") or refs[0].get("id") or "")
+            elif row.get("name") == "_exec":
+                code = str((row.get("args") or {}).get("code", "") or "")
+                cells = bridges["read_cells"](tab_id)
+                existing = next(
+                    (
+                        c
+                        for c in reversed(cells)
+                        if c.get("origin") == "assistant"
+                        and (c.get("source") or "").strip() == code.strip()
+                    ),
+                    None,
+                )
+                if existing is None and code.strip():
+                    inserted = bridges["insert_cells_into"](
+                        tab_id,
+                        [
+                            {
+                                "type": "code",
+                                "source": code,
+                                "outputs": row.get("outputs", []),
+                                "origin": "assistant",
+                            }
+                        ],
+                    )
+                    if inserted:
+                        cell_id = str(getattr(inserted[0], "id", "") or "")
+                elif existing is not None:
+                    cell_id = str(existing.get("id") or "")
+            if cell_id:
+                reveal_cell(session_name, cell_id)
+        except Exception:
+            logger.debug("assistant tab open failed", exc_info=True)
 
     def _copy_step_output(self, outputs: list) -> None:
         """Copy step output to clipboard."""
@@ -1410,7 +1426,6 @@ class ChatSession:
                 tool_name=tool_name,
                 outputs=row.get("outputs", []),
                 state=row["state"],
-                session_mode=str(getattr(self.state, "session_mode", "") or ""),
                 fallback_text=fallback,
                 page=self.page,
                 on_open_terminal=lambda r=row: self._open_terminal_for_session(r),

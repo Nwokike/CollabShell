@@ -37,7 +37,12 @@ async def ensure_online_impl(service):
             # An HTTP response (including a 404 for this root path) proves
             # DNS, TLS, and the remote service are reachable.
             return True
-        except (OSError, TimeoutError, urllib.error.URLError):
+        except Exception:
+            # Any other failure is offline. Importantly this catches the
+            # AttributeError urllib raises on Android (its proxy detection
+            # path), which used to escape the narrower tuple, crash the
+            # reachability check itself, and flip a working network to
+            # "offline" at boot.
             return False
 
     is_online = await asyncio.to_thread(_check)

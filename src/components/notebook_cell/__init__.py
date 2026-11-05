@@ -13,10 +13,15 @@ from collections.abc import Callable
 
 import flet as ft
 
-from components.notebook_cell.actions import copy_code, copy_output, make_actions_row
+from components.notebook_cell.actions import (
+    copy_code,
+    copy_output,
+    make_actions_row,
+)
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from core.theme import AppColors
+from services.cell_ai import looks_like_error
 
 
 @ft.observable
@@ -100,6 +105,8 @@ def NotebookCell(
     on_focus_change: Callable[[str, bool], None] | None = None,
     focus_token: int = 0,
     on_ask_ai: Callable[[], None] | None = None,
+    on_suggest_next: Callable[[], None] | None = None,
+    on_fix_error: Callable[[], None] | None = None,
 ) -> ft.Control:
     """Renders one notebook cell. Re-renders reactively when `cell` changes."""
     page = ft.context.page
@@ -150,6 +157,28 @@ def NotebookCell(
             on_copy=lambda: page.run_task(_copy_code_task),
             on_ask_ai=on_ask_ai,
         )
+
+    def _output_text() -> str:
+        """The cell's output as plain text, for the error-looks check."""
+        parts: list[str] = []
+        for out in cell.outputs:
+            if isinstance(out, dict):
+                if out.get("type") == "error":
+                    parts.append(
+                        "\n".join(str(t) for t in out.get("traceback", []) or [])
+                    )
+                    continue
+                text = out.get("text")
+                if text is None:
+                    data = out.get("data") or {}
+                    if isinstance(data, dict):
+                        plain = data.get("text/plain")
+                        if isinstance(plain, list):
+                            plain = "".join(str(p) for p in plain)
+                        text = plain
+                if text is not None:
+                    parts.append(str(text))
+        return "\n".join(parts)
 
     # ── Markdown cell ─────────────────────────────────────────────────────────
     if cell.type == "markdown":
@@ -335,6 +364,34 @@ def NotebookCell(
                         tooltip="Copy Output",
                         visible=bool(output_controls),
                         on_click=lambda e: page.run_task(_copy_output_task, e),
+                    ),
+                    # After-run AI actions: Suggest Next always, Fix Error
+                    # only when the run looks like it failed.
+                    *(
+                        [
+                            ft.IconButton(
+                                ft.Icons.AUTO_AWESOME_OUTLINED,
+                                icon_size=tokens.ICON_SM,
+                                tooltip="Suggest next cell",
+                                on_click=lambda e: (
+                                    on_suggest_next() if on_suggest_next else None
+                                ),
+                            ),
+                            ft.IconButton(
+                                ft.Icons.BUILD_ROUNDED,
+                                icon_size=tokens.ICON_SM,
+                                tooltip="Fix error",
+                                visible=(
+                                    on_fix_error is not None
+                                    and looks_like_error(_output_text())
+                                ),
+                                on_click=lambda e: (
+                                    on_fix_error() if on_fix_error else None
+                                ),
+                            ),
+                        ]
+                        if on_suggest_next is not None
+                        else []
                     ),
                     ft.IconButton(
                         ft.Icons.CLEAR_ALL_ROUNDED,

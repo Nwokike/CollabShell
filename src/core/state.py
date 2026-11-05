@@ -73,6 +73,9 @@ class AppState:
     terminal_reconnect = None
     is_loading: bool = False
     app_ready: bool = False
+    # What the splash shows under the spinner ("Checking sign-in…",
+    # "Loading sessions…") — the AnimePahe startup pattern.
+    startup_stage: str = ""
     cli_available: bool = False
     update_available: bool = False
     update_data: dict | None = None

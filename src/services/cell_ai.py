@@ -109,6 +109,11 @@ def _model_messages(
     ]
     if action == "fix":
         body += ["", "Its output (the error):", output or "(no output captured)"]
+    elif output:
+        # The cell was already run: the model must see what actually came
+        # back, or it hallucinates the output (the owner proved this on an
+        # explain that described an output it never saw).
+        body += ["", "Its output:", output]
     body += ["", ask]
     return [{"role": "user", "content": "\n".join(body)}]
 

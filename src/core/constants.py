@@ -3,7 +3,7 @@
 APP_NAME = "Colab Shell"
 APP_FULL_NAME = "Colab Shell: Notebook & TTY"
 APP_VERSION = "2.2.0"
-APP_BUILD_NUMBER = 17
+APP_BUILD_NUMBER = 18
 UPDATE_CONFIG_URL = (
     "https://raw.githubusercontent.com/Nwokike/CollabShell/main/version.json"
 )

@@ -209,9 +209,8 @@ def test_render_shows_the_outputs_for_a_done_row(tmp_path, monkeypatch):
     _walk_texts(control, texts)
     joined = " ".join(texts)
     assert "hi" in joined, "the tool output text did not render"
-    assert any("Open Notebook" in t or "Open Terminal" in t for t in texts), (
-        "no open-in action on the step row"
-    )
+    # Open Notebook / Open Terminal are removed pending the assistant-notebook
+    # redesign; the notebook's own Copy Output button stays.
     assert "Copy Output" in joined, "the notebook's own copy button is missing"
 
 

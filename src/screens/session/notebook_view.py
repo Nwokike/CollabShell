@@ -16,6 +16,11 @@ from pathlib import Path
 
 import flet as ft
 
+# The dedicated notebook tab where everything the AI runs lands — one per
+# session, so the AI's work is a notebook the user can continue from (the
+# kernel is shared with the user's own tabs).
+_ASSISTANT_TAB_NAME = "Assistant"
+
 from components.env_dialog import show_env_override_dialog
 from components.notebook_cell import CellData, NotebookCell
 from components.notebook_toolbar import build_notebook_toolbar
@@ -542,7 +547,7 @@ def NotebookView(
 
         Every failure path is a notice, never a raised exception: this runs
         from a button press, and an unhandled error there would take the cell
-        UI down with it.
+        UI down with it. A working spinner shows while the ask runs.
         """
         from services import cell_ai
 
@@ -550,6 +555,19 @@ def NotebookView(
         if cell is None:
             return
         credits = getattr(services, "credits", None)
+        page.show_dialog(
+            ft.AlertDialog(
+                modal=True,
+                content=ft.Row(
+                    [
+                        ft.ProgressRing(width=20, height=20, stroke_width=2.5),
+                        ft.Text("Assistant is working…", size=tokens.FONT_SM),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+            )
+        )
         try:
             text = await cell_ai.run_cell_action(
                 action=action,
@@ -562,15 +580,19 @@ def NotebookView(
                 cell=cell,
             )
         except cell_ai.OutOfCredits:
+            page.pop_dialog()
             _ai_notice("Out of assistant credits — top up in Assistant settings.")
             return
         except cell_ai.CellAIDisabled:
+            page.pop_dialog()
             _ai_notice("Assistant credits are unavailable in this build.")
             return
         except Exception as ex:
+            page.pop_dialog()
             logger.warning("In-cell AI %s failed: %s", action, ex)
             _ai_notice("The Assistant could not answer just now.")
             return
+        page.pop_dialog()
 
         if not _insert_ai_answer(cell_id, text, kind):
             _ai_notice("The Assistant returned nothing usable.")
@@ -1160,6 +1182,37 @@ def NotebookView(
             }
         )
 
+    # The dedicated "Assistant" notebook tab: one per session, the landing
+    # pad for everything the AI runs, so its work is a notebook the user can
+    # continue from (the kernel is shared with the user's own tabs).
+    def _ensure_assistant_tab() -> str:
+        existing = next(
+            (
+                t
+                for t in (tabs_ref.current or [])
+                if (t.get("name") or "") == _ASSISTANT_TAB_NAME
+            ),
+            None,
+        )
+        if existing is not None:
+            tab_id = existing["id"]
+        else:
+            tab = _new_tab(name=_ASSISTANT_TAB_NAME)
+            tabs = list(tabs_ref.current or [])
+            tabs.append(tab)
+            _set_tabs(tabs)
+            _save(tab)
+            _save_index()
+            tab_id = tab["id"]
+        if active_tab_id != tab_id:
+            _switch_tab(tab_id)
+        return tab_id
+
+    def _insert_cells_into(tab_id: str, cells: list[dict], *, after_id=None) -> list:
+        """Append cells into a SPECIFIC tab (the Assistant tab), not the
+        active one; returns the inserted CellData list."""
+        return _insert_cells(tab_id, cells, after_id=after_id)
+
     # Publish the live per-session bridges so the assistant (which holds no
     # component handle) can reach this session's tabs. Replaced on every
     # render so a rebuilt view is never stale.
@@ -1193,9 +1246,13 @@ def NotebookView(
         # Where a cell lives: (tab_id, index) or None. Used by the chat's
         # step→cell tap-through to switch to the right tab first.
         "locate_cell": _locate_cell,
+        # Ensure the session's dedicated "Assistant" notebook tab exists (one
+        # per session), switch to it, and return its id — the landing pad for
+        # everything the AI runs, so its work is a notebook the user can
+        # continue from (the kernel is shared with the user's tabs).
+        "ensure_assistant_tab": _ensure_assistant_tab,
+        "insert_cells_into": _insert_cells_into,
     }
-
-    # Refresh the shortcut binding table every render so the router always
     # sees current closures (cells, handlers). Writing to the session's ref
     # is side-effect free — no re-render loop.
     if register_bindings:
@@ -1388,9 +1445,18 @@ def NotebookView(
                 is_active=cell.id == active_cell_id,
                 on_focus_change=_on_cell_focus,
                 focus_token=(focus_req[1] if focus_req[0] == cell.id else 0),
-                # Always offered: the assistant is part of the app. A button
-                # that only works after flipping a switch is worse than none.
-                on_ask_ai=lambda c=cell: _show_cell_ai_menu(c.id),
+                # Always offered: the assistant is part of the app. One direct
+                # action instead of a three-option menu — the output row
+                # carries Suggest Next / Fix Error where they belong.
+                on_ask_ai=lambda c=cell: page.run_task(
+                    _run_cell_ai, "explain", c.id, "markdown"
+                ),
+                on_suggest_next=lambda c=cell: page.run_task(
+                    _run_cell_ai, "suggest", c.id, "code"
+                ),
+                on_fix_error=lambda c=cell: page.run_task(
+                    _run_cell_ai, "fix", c.id, "code"
+                ),
             )
         )
         if (i + 1) % 2 == 0:

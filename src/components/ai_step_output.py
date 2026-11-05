@@ -1,11 +1,10 @@
 """AI step output — the notebook's own output widget, verbatim.
 
 A tool step (run code, read terminal, …) renders its output in the SAME
-panel the notebook uses (same ANSI renderer, same terminal background, same
-Copy Output button), minus the Clear/Real-Terminal actions, plus one Open
-action: Open Notebook or Open Terminal, matching the session's current view.
-The owner's model is DDGS's search step: you SEE what the assistant sees,
-then click through to the live surface.
+panel the notebook uses: same ANSI renderer, same terminal background, same
+Copy Output button. Open Notebook / Open Terminal actions are removed
+pending the assistant-notebook redesign (they opened the wrong screen and
+showed an empty notebook).
 """
 
 from __future__ import annotations
@@ -18,63 +17,6 @@ from components.ansi_parser import parse_ansi_to_flet_text
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from core.theme import AppColors
-
-_OPENABLE_TOOLS = {
-    "_exec",
-    "read_terminal",
-    "read_notebook",
-    "write_cells",
-    "read_file",
-    "list_files",
-    "upload_file",
-    "install_package",
-}
-
-
-def _open_action_buttons(
-    tool_name: str,
-    state: str,
-    session_mode: str,
-    on_open_terminal: Callable[[], None] | None,
-    on_open_notebook: Callable[[], None] | None,
-) -> list:
-    """[Open Notebook | Open Terminal] for an openable tool.
-
-    The target follows WHAT the tool did, not the current view: _exec and the
-    file/notebook tools speak the session KERNEL, which is the notebook's
-    world; only read_terminal is a shell thing. The current view breaks ties.
-    """
-    if state not in ("running", "done") or tool_name not in _OPENABLE_TOOLS:
-        return []
-    if tool_name == "read_terminal":
-        target = "terminal"
-    elif tool_name in ("write_cells", "read_notebook"):
-        target = "notebook"
-    else:
-        # _exec/file tools: follow the tab the session is currently on, so both
-        # labels appear across usage instead of always notebook.
-        target = session_mode if session_mode in ("notebook", "terminal") else "notebook"
-    # The label is TEXT, not just an icon — "Open Notebook" vs "Open Terminal"
-    # must be readable at a glance.
-    if target == "notebook" and on_open_notebook is not None:
-        return [
-            ft.TextButton(
-                "Open Notebook",
-                icon=ft.Icons.DESCRIPTION_ROUNDED,
-                on_click=lambda e: on_open_notebook(),
-                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-            )
-        ]
-    if on_open_terminal is not None:
-        return [
-            ft.TextButton(
-                "Open Terminal",
-                icon=ft.Icons.TERMINAL_ROUNDED,
-                on_click=lambda e: on_open_terminal(),
-                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-            )
-        ]
-    return []
 
 
 def _copyable_text(outputs: list) -> str:
@@ -170,12 +112,43 @@ def _output_panel(
     )
 
 
+def _open_action_buttons(
+    tool_name: str,
+    state: str,
+    on_open_terminal: Callable[[], None] | None,
+    on_open_notebook: Callable[[], None] | None,
+) -> list:
+    """The Open action for a finished step, as a labeled TextButton:
+    Open Terminal ONLY for read_terminal steps, Open Notebook for
+    everything else (the owner-confirmed rule)."""
+    if state not in ("running", "done"):
+        return []
+    if tool_name == "read_terminal" and on_open_terminal is not None:
+        return [
+            ft.TextButton(
+                "Open Terminal",
+                icon=ft.Icons.TERMINAL_ROUNDED,
+                on_click=lambda e: on_open_terminal(),
+                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
+            )
+        ]
+    if tool_name != "read_terminal" and on_open_notebook is not None:
+        return [
+            ft.TextButton(
+                "Open Notebook",
+                icon=ft.Icons.DESCRIPTION_ROUNDED,
+                on_click=lambda e: on_open_notebook(),
+                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
+            )
+        ]
+    return []
+
+
 def build_ai_step_output(
     tool_name: str,
     outputs: list,
     state: str,  # "running" | "done" | "error"
     *,
-    session_mode: str = "",
     fallback_text: str = "",
     page=None,
     on_open_terminal: Callable[[], None] | None = None,
@@ -187,21 +160,18 @@ def build_ai_step_output(
         tool_name: The tool that produced this output (_exec, read_terminal, …)
         outputs: Output dicts in the notebook cell shape.
         state: Current step state ("running", "done", "error").
-        session_mode: The session's current view ("notebook"/"terminal"/"files")
-            — picks the Open action target.
         fallback_text: Shown through the same ANSI renderer when the tool
             produced no structured outputs (e.g. the streamed live text).
         page: The page, so Copy uses the notebook's own copy_output helper.
-        on_open_terminal / on_open_notebook: Open actions.
+        on_open_terminal / on_open_notebook: Open actions (labeled buttons).
     """
     output_controls = parse_outputs_to_controls(outputs)
 
     action_buttons = _open_action_buttons(
-        tool_name, state, session_mode, on_open_terminal, on_open_notebook
+        tool_name, state, on_open_terminal, on_open_notebook
     )
-    # The notebook's own Copy Output button (same helper, same icon) — but
-    # ONLY when there is something copyable: a button that copies nothing (or
-    # copies the string "None") is worse than no button.
+    # The notebook's own Copy Output button — ONLY when there is something
+    # copyable (never over a "None idle" placeholder).
     if page is not None and _copyable_text(outputs):
         from components.notebook_cell.actions import copy_output
 
@@ -229,18 +199,10 @@ def build_live_tool_output(
     tool_name: str,
     text: str,
     *,
-    session_mode: str = "",
     page=None,
-    on_open_terminal: Callable[[], None] | None = None,
-    on_open_notebook: Callable[[], None] | None = None,
 ) -> ft.Control:
     """Live streaming panel for a running tool — the same output panel."""
-    action_buttons = _open_action_buttons(
-        tool_name, "running", session_mode, on_open_terminal, on_open_notebook
-    )
-    panel = _output_panel(
-        [], action_buttons, fallback_text=text
-    )
+    panel = _output_panel([], [], fallback_text=text)
     return ft.Container(
         content=panel,
         padding=ft.Padding.only(left=tokens.SPACE_MD),

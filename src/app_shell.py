@@ -278,6 +278,7 @@ def AppShell() -> Control:
 
     # ── 2. Loading Splash Screen ──────────────────────────────────────────────
     if not state.app_ready:
+        _ = state.startup_stage  # the splash re-renders as the stage changes
         return ft.Container(
             content=ft.Column(
                 [
@@ -292,6 +293,12 @@ def AppShell() -> Control:
                         width=tokens.SPINNER_LG,
                         height=tokens.SPINNER_LG,
                         stroke_width=3,
+                    ),
+                    ft.Container(height=tokens.SPACE_MD),
+                    ft.Text(
+                        state.startup_stage or "",
+                        size=tokens.FONT_XS,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,

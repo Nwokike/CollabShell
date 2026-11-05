@@ -86,11 +86,11 @@ def test_workflow_defaults_in_sync():
 # terminal panel (flet-terminal 0.3.9 floors flet>=1.0.1). Fails loudly on the
 # next bump instead of silently drifting.
 FLET_PINS = {
-    "flet": "1.1.0.dev4",
-    "flet-ads": "1.1.0.dev4",
-    "flet-cli": "1.1.0.dev4",
-    "flet-desktop": "1.1.0.dev4",
-    "flet-notifications": "1.1.0.dev4",
+    "flet": "1.1.0",
+    "flet-ads": "1.1.0",
+    "flet-cli": "1.1.0",
+    "flet-desktop": "1.1.0",
+    "flet-notifications": "1.1.0",
     "flet-terminal": "0.4.2",
 }
 

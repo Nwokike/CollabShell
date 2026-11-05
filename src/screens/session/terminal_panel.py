@@ -32,6 +32,7 @@ from flet_terminal import BUILTIN_THEMES, MobileTerminal
 from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.state import state as app_state
+from core.styles import build_banner_ad
 from core.theme import AppColors, is_light_theme
 from state import ServiceCtx
 
@@ -721,6 +722,22 @@ def TerminalPanel(
         if not text:
             _ai_snack("Nothing in the terminal to explain yet.")
             return
+
+        # Loading indicator: the ask runs for seconds; without this the owner
+        # saw the button "do nothing" until the answer appeared.
+        page.show_dialog(
+            ft.AlertDialog(
+                modal=True,
+                content=ft.Row(
+                    [
+                        ft.ProgressRing(width=20, height=20, stroke_width=2.5),
+                        ft.Text("Assistant is working…", size=tokens.FONT_SM),
+                    ],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+            )
+        )
         try:
             answer = await ai_quick.ask(
                 action="explain",
@@ -738,15 +755,19 @@ def TerminalPanel(
                 system=ai_quick.system_for(app_state),
             )
         except ai_quick.OutOfCredits:
+            page.pop_dialog()
             _ai_snack("Out of assistant credits — top up in Assistant settings.")
             return
         except ai_quick.CellAIDisabled:
+            page.pop_dialog()
             _ai_snack("Assistant credits are unavailable in this build.")
             return
         except Exception as ex:
+            page.pop_dialog()
             logger.warning("Terminal explain failed: %s", ex)
             _ai_snack("The Assistant could not answer just now.")
             return
+        page.pop_dialog()
 
         if not answer.strip():
             _ai_snack("The Assistant returned nothing usable.")
@@ -757,15 +778,28 @@ def TerminalPanel(
                 title=ft.Row(
                     [
                         ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
-                        ft.Text("What the terminal is telling you"),
+                        # Contained: a long heading must wrap inside the
+                        # dialog, not overflow it.
+                        ft.Text(
+                            "What the terminal is telling you",
+                            size=tokens.FONT_MD,
+                            weight=ft.FontWeight.W_700,
+                            expand=True,
+                        ),
                     ],
                     spacing=tokens.SPACE_SM,
                 ),
                 content=ft.Container(
-                    content=ft.Markdown(
-                        answer,
-                        selectable=True,
-                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    content=ft.Column(
+                        controls=[
+                            ft.Markdown(
+                                answer,
+                                selectable=True,
+                                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                            )
+                        ],
+                        scroll=ft.ScrollMode.AUTO,
+                        tight=False,
                     ),
                     width=440,
                     height=320,
@@ -972,6 +1006,10 @@ def TerminalPanel(
     return ft.Column(
         controls=[
             status_bar,
+            # Sticky banner directly under the status bar (the proot-distro
+            # pattern): fresh control each render, never mutated while
+            # mounted — mobile-only, 0x0 for premium/desktop.
+            build_banner_ad(page),
             switcher_box,
             ft.Stack(controls=stack_children, expand=True),
         ],

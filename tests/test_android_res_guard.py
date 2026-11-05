@@ -36,13 +36,13 @@ def test_pyproject_points_at_res_dir_and_declares_fgs():
     assert android.get("legacy_packaging") is True
 
 
-def test_flet_notifications_pinned_to_dev4_line():
+def test_flet_notifications_pinned_to_stable():
     import tomllib
 
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     deps = pyproject["project"]["dependencies"]
-    assert any(d.startswith("flet-notifications==1.1.0.dev4") for d in deps)
-    assert any(d == "flet==1.1.0.dev4" for d in deps)
+    assert any(d.startswith("flet-notifications==1.1.0") for d in deps)
+    assert any(d == "flet==1.1.0" for d in deps)
 
 
 def test_session_notify_service_mounts_without_the_package():

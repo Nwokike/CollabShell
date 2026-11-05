@@ -272,6 +272,12 @@ class AppController:
         if self.wakelock not in page.services:
             page.services.append(self.wakelock)
 
+        # Single-flight boot: Android fires several connectivity events while
+        # the radio comes up, and each one triggers a bootstrap. Concurrent
+        # runs used to race and flip app_ready mid-boot (the splash/onboarding
+        # flash). AnimePahe's startup lock.
+        self._startup_lock = asyncio.Lock()
+
         # Persistent "session running" notification + Android foreground
         # service (flet-notifications 1.1.0-dev, ported from proot-distro):
         # the FGS keeps the process alive while minimized; the
@@ -722,73 +728,88 @@ class AppController:
         return True
 
     async def _bootstrap_state(self):
-        """Check initial connectivity and authenticate."""
-        try:
-            if not await self._refresh_auth_state():
-                state.active_sessions = []
-                # A flaky network must not flip app_ready onto a stale
-                # onboarding default: re-read the persisted flag so the shell
-                # lands on a definite screen (offline flow / onboarding / auth).
-                saved_onboarding = await self.storage.get(
-                    constants.STORAGE_ONBOARDING_DONE
-                )
-                state.onboarding_done = saved_onboarding == "true"
-                return
+        """Check initial connectivity and authenticate.
 
-            if state.is_authenticated:
-                state.onboarding_done = True
-                await self.storage.set(constants.STORAGE_ONBOARDING_DONE, "true")
-
-            # Preload active sessions ONLY if authenticated
-            if state.is_authenticated:
-                try:
-                    state.active_sessions = (
-                        await self.colab_service.list_sessions(
-                            auth_method=state.auth_method
-                        )
-                        or []
-                    )
-                except Exception as ex:
-                    from services.colab.session_ops import SessionListError
-
-                    if isinstance(ex, SessionListError):
-                        logger.warning(
-                            "Preload session assignments could not be verified"
-                        )
-                    else:
-                        logger.warning(
-                            "Preload sessions failed (%s)", type(ex).__name__
-                        )
-                    state.active_sessions = []
-                # Fire-and-forget usage prefetch (warms the shared 24h cache
-                # for Home chip + sheet dialog; never blocks app_ready).
-                try:
-                    from services.usage_cache import get_usage_cached
-
-                    async def _prefetch_usage():
-                        try:
-                            from types import SimpleNamespace
-
-                            await get_usage_cached(
-                                SimpleNamespace(
-                                    colab=self.colab_service, storage=self.storage
-                                ),
-                                state.auth_method,
-                            )
-                        except Exception as ex:
-                            logger.debug("Usage prefetch failed: %s", ex)
-
-                    self.page.run_task(_prefetch_usage)
-                except Exception as ex:
-                    logger.debug("Usage prefetch scheduling failed: %s", ex)
-            else:
-                state.active_sessions = []
-        finally:
-            state.app_ready = True
+        AnimePahe's startup pattern: the splash stays up for the whole flow
+        (single-flight via a lock, so overlapping triggers can't flip
+        app_ready mid-boot), with a stage line so the wait reads as progress.
+        """
+        async with self._startup_lock:
+            state.app_ready = False
+            state.startup_stage = "Checking sign-in…"
             try:
-                self.page.update()
-            except Exception as exc:
-                logger.debug("Bootstrap page update skipped: %s", exc)
+                if not await self._refresh_auth_state():
+                    state.active_sessions = []
+                    # A flaky network must not flip app_ready onto a stale
+                    # onboarding default: re-read the persisted flag so the
+                    # shell lands on a definite screen (offline flow /
+                    # onboarding / auth).
+                    saved_onboarding = await self.storage.get(
+                        constants.STORAGE_ONBOARDING_DONE
+                    )
+                    state.onboarding_done = saved_onboarding == "true"
+                    return
+
+                if state.is_authenticated:
+                    state.onboarding_done = True
+                    await self.storage.set(
+                        constants.STORAGE_ONBOARDING_DONE, "true"
+                    )
+
+                # Preload active sessions ONLY if authenticated
+                if state.is_authenticated:
+                    state.startup_stage = "Loading sessions…"
+                    try:
+                        state.active_sessions = (
+                            await self.colab_service.list_sessions(
+                                auth_method=state.auth_method
+                            )
+                            or []
+                        )
+                    except Exception as ex:
+                        from services.colab.session_ops import SessionListError
+
+                        if isinstance(ex, SessionListError):
+                            logger.warning(
+                                "Preload session assignments could not be verified"
+                            )
+                        else:
+                            logger.warning(
+                                "Preload sessions failed (%s)", type(ex).__name__
+                            )
+                        state.active_sessions = []
+                    # Fire-and-forget usage prefetch (warms the shared 24h
+                    # cache for Home chip + sheet dialog; never blocks
+                    # app_ready).
+                    try:
+                        from services.usage_cache import get_usage_cached
+
+                        async def _prefetch_usage():
+                            try:
+                                from types import SimpleNamespace
+
+                                await get_usage_cached(
+                                    SimpleNamespace(
+                                        colab=self.colab_service,
+                                        storage=self.storage,
+                                    ),
+                                    state.auth_method,
+                                )
+                            except Exception as ex:
+                                logger.debug("Usage prefetch failed: %s", ex)
+
+                        self.page.run_task(_prefetch_usage)
+                    except Exception as ex:
+                        logger.debug("Usage prefetch scheduling failed: %s", ex)
+                else:
+                    state.active_sessions = []
+            finally:
+                state.startup_stage = ""
+                state.app_ready = True
+                try:
+                    self.page.update()
+                except Exception as exc:
+                    logger.debug("Bootstrap page update skipped: %s", exc)
 
     def _register_lifecycle_handlers(self):
         page = self.page

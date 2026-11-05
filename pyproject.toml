@@ -6,14 +6,14 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     # The whole flet 1.1.0-dev family is co-released and cross-pinned
-    # (flet-notifications 1.1.0.dev4 requires flet==1.1.0.dev4 exactly), so
+    # (flet-notifications 1.1.0.dev4 requires flet==1.1.0 exactly), so
     # they move together. flet-terminal has no 1.1.0-dev line (stays 0.4.2).
-    "flet==1.1.0.dev4",
-    "flet-ads==1.1.0.dev4",
-    "flet-notifications==1.1.0.dev4",
+    "flet==1.1.0",
+    "flet-ads==1.1.0",
+    "flet-notifications==1.1.0",
     "httpx>=0.28.1",
-    "flet-cli==1.1.0.dev4; sys_platform == 'win32'",
-    "flet-desktop==1.1.0.dev4; sys_platform == 'win32'",
+    "flet-cli==1.1.0; sys_platform == 'win32'",
+    "flet-desktop==1.1.0; sys_platform == 'win32'",
     "flet-terminal==0.4.2",
     "google-colab-cli==0.7.5",
     # google-colab-cli imports jupyter_kernel_client.JupyterSubprotocol
@@ -30,7 +30,7 @@ dependencies = [
 [tool.flet]
 org = "ng.kiri"
 product = "Collab Shell"
-build_number = 17
+build_number = 18
 # The light desktop client does not bundle flet-terminal (terminals render as
 # unknown controls under `flet run`); the full client does.
 desktop_flavor = "full"
@@ -40,14 +40,7 @@ path = "src"
 
 
 [tool.flet.boot_screen]
-name = "flet"
-
-[tool.flet.boot_screen.flet]
 startup_message = "Initializing Collab Shell..."
-
-[tool.flet.splash]
-color = "#ffffff"
-dark_color = "#121212"
 
 [tool.flet.android]
 # Compress native libs in the APK (pre-0.86 behaviour): since 0.86 flet stores
