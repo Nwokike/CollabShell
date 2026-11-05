@@ -136,25 +136,23 @@ def AppShell() -> Control:
     use_keyboard_shortcuts(shortcuts_router)
 
     # ── 1. NavigationBar sync via use_effect (Deliberate Page Chrome) ──────────
+    # VERBATIM from v2.1.2 — the bar hides inside subviews, and every write is
+    # flushed with page.update() (the root View prop is dirty-only until a
+    # patch runs; without the update the bar vanishes until something else
+    # repaints).
     def _sync_navigation_bar():
         if not page or not page.views:
             return
 
-        # The bottom navigation stays visible on EVERY app screen — including
-        # subview pages (history, session). It is hidden only while the app is
-        # still loading, in onboarding, or unauthenticated. (Hiding it inside
-        # subviews made the bar vanish whenever a page opened — a 2.2.0
-        # regression the owner hit constantly.)
+        # Hide navigation bar when loading, in onboarding, or inside a subview
         if (
             not state.app_ready
             or not state.onboarding_done
             or not state.is_authenticated
+            or bool(state.active_subview)
         ):
             if page.views[0].navigation_bar is not None:
                 page.views[0].navigation_bar = None
-                # The View prop is dirty-only until a patch runs; effects run
-                # after render, so page.update() here is legal and REQUIRED
-                # for the chrome to actually reach the client (flet 1.1).
                 try:
                     page.update()
                 except Exception:
