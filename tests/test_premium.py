@@ -86,17 +86,15 @@ def test_banner_is_hidden_on_desktop_even_when_free():
     assert getattr(banner, "width", 0) == 0
 
 
-def test_styled_banner_builds_for_every_user(monkeypatch):
-    """The banner is Sherlock's: mobile-only, NO premium gate.
+def test_styled_banner_skips_construction_when_premium(monkeypatch):
+    """Premium must not even build an ad control.
 
-    The owner's rule — ads are the revenue, and Sherlock's builder gates on
-    platform alone. The banner also must be POOLED: the same slot returns the
-    same control, because a fresh BannerAd per render threw away live ads and
-    made the terminal banner flash like it had vanished.
+    The real constructor needs a live page (0x0 either way headlessly), so this
+    counts constructions instead of measuring pixels.
     """
     import flet_ads as fta
 
-    from components.banner_ad import clear_banner_pool
+    from core.styles import build_banner_ad
 
     built = []
     original = fta.BannerAd
@@ -108,68 +106,46 @@ def test_styled_banner_builds_for_every_user(monkeypatch):
     monkeypatch.setattr(fta, "BannerAd", _Spy)
 
     page = _FakePage(mobile=True)
-    clear_banner_pool()
-    try:
-        from components.banner_ad import pooled_banner_ad
+    state.is_premium = False
+    build_banner_ad(page)
+    assert built, "a free user must get a banner built"
 
-        state.is_premium = False
-        first = pooled_banner_ad("terminal-1", page)
-        assert built, "a banner must be built on mobile"
-
-        # Premium does not gate the banner (Sherlock-verbatim): a fresh slot
-        # still builds while premium.
-        built.clear()
-        state.is_premium = True
-        pooled_banner_ad("script-1", page)
-        assert built, "banner shows regardless of premium (Sherlock rule)"
-
-        # Pooled: the same slot returns the same control, builds nothing new.
-        before = len(built)
-        assert pooled_banner_ad("terminal-1", page) is first
-        assert len(built) == before, "a pooled slot rebuilt its ad"
-    finally:
-        clear_banner_pool()
-        monkeypatch.setattr(fta, "BannerAd", original)
-
+    built.clear()
+    state.is_premium = True
+    build_banner_ad(page)
+    assert built == [], "a premium user must get no ad control at all"
+    monkeypatch.setattr(fta, "BannerAd", original)
 
 # ── interstitials ──────────────────────────────────────────────────────────
 
 
-def test_preload_runs_even_when_premium():
-    """proot parity: the interstitial path has NO premium gate — the owner
-    (a paying user) never saw a single interstitial because of that gate."""
+def test_preload_skipped_when_premium():
     import asyncio
 
     svc = _ad_service()
     state.is_premium = True
     asyncio.run(svc.preload_interstitial())
-    assert svc.interstitial is not None, "premium users get interstitials too"
+    assert svc.interstitial is None
 
 
-def test_preload_runs_when_free():
+def test_preload_is_not_premium_gated_when_free():
+    """Premium is the only reason preload returns early."""
     import asyncio
 
     svc = _ad_service()
     state.is_premium = False
     asyncio.run(svc.preload_interstitial())
+    assert svc._premium is False, "the premium gate must not fire when free"
     assert svc.interstitial is not None, "a free user gets an interstitial built"
 
 
-def test_show_interstitial_shows_even_when_premium():
-    """proot parity: premium never blocks the show."""
+def test_show_interstitial_blocked_when_premium():
     import asyncio
 
     svc = _ad_service()
-
-    class _Ad:
-        async def show(self):
-            return None
-
-    svc.interstitial = _Ad()
-    svc._interstitial_loaded = True
+    svc.interstitial = object()  # a preloaded ad
     state.is_premium = True
-    state.last_interstitial_ts = 0.0  # not inside another test's cooldown
-    assert asyncio.run(svc.show_interstitial()) is True
+    assert asyncio.run(svc.show_interstitial()) is False
 
 
 def test_show_interstitial_allowed_when_free():

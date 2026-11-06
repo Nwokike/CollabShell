@@ -92,6 +92,13 @@ def build_banner_ad(page: ft.Page | None = None) -> Control:
     except Exception:
         return ft.Container(width=0, height=0)
 
+    # Premium users never see ads — the owner's rule for every premium app.
+    # (Sherlock is free-only and omits this; CollabShell has premium.)
+    from core.state import state
+
+    if getattr(state, "is_premium", False):
+        return ft.Container(width=0, height=0)
+
     try:
         import flet_ads as fta
 
