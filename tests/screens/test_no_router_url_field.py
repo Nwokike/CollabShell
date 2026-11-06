@@ -102,10 +102,12 @@ def test_premium_still_lives_in_the_one_card():
     """Removing the row did not remove the feature."""
     text = (_SRC / "screens/settings/premium_section.py").read_text(encoding="utf-8")
     assert "build_premium_section" in text
-    assert 'CHANNEL == "play"' in text, "the card's channel gate is gone"
-    # And the screen still mounts it.
+    # KTV-verbatim: the card's kiri rows check the channel, and the SCREEN is
+    # where the Play build is excluded from building the card at all.
+    assert "CHANNEL != \"play\"" in text, "the card's channel gate is gone"
     screen = (_SRC / "screens/settings/__init__.py").read_text(encoding="utf-8")
     assert "build_premium_section" in screen
+    assert "CHANNEL == \"play\"" in screen, "the screen's channel gate is gone"
 
 
 def test_the_assistant_section_reads_no_premium_service():

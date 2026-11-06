@@ -57,6 +57,11 @@ class AppState:
     # license_prices maps product id -> price label; empty means "not loaded".
     # Never mutated in place — the loader REPLACES it, like `default_env` below.
     license_prices: dict = {}  # noqa: RUF012
+    # KTV-verbatim premium card state: the fetched catalog objects, the
+    # in-flight flag and the last catalog error (empty = none).
+    license_products: list = []  # noqa: RUF012
+    license_busy: bool = False
+    license_error: str = ""
     # The recovery ID from the licence token (also in the receipt email).
     license_recovery_id: str = ""
     # Bumped when the Settings router row has new status to show, so the

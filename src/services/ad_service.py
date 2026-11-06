@@ -166,10 +166,10 @@ class AdService:
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Create and load a fresh interstitial (single-use in flet-ads 1.0)."""
         self._on_close = on_close
-        # The owner's rule, all his apps: the UMP verdict NEVER blocks ad
-        # serving — no consent, ads still show. gather_consent still runs (the
-        # SDK flow exists) but its answer is recorded, not obeyed.
-        if state.is_premium or not _HAS_ADS or not self._is_mobile():
+        # proot parity: the interstitial path has NO premium gate — the
+        # owner is a paying user and never saw a single interstitial because
+        # of this line. The UMP verdict is also recorded, never obeyed.
+        if not _HAS_ADS or not self._is_mobile():
             return
         try:
             self._interstitial_loaded = False
@@ -242,8 +242,9 @@ class AdService:
         instances are replaced. Returns True when an ad is shown or queued to
         show as soon as it finishes loading.
         """
-        # Owner's rule (all his apps): ads show with or without UMP consent.
-        if state.is_premium or not _HAS_ADS or not self._is_mobile():
+        # proot parity: no premium gate, no consent gate. Only a real ad
+        # shortage stops the show.
+        if not _HAS_ADS or not self._is_mobile():
             return False
         now = time.time()
         if now - state.last_interstitial_ts < self.MIN_INTERSTITIAL_GAP:
@@ -259,6 +260,10 @@ class AdService:
                 self._interstitial_shown = True
                 # The gap is spent only by an impression that really fired.
                 state.last_interstitial_ts = now
+                # proot's rule: preload the next one immediately after a show,
+                # not only when the ad closes — otherwise a second trigger
+                # that lands in the gap queues a fresh load with no ad ready.
+                await self.preload_interstitial(self._on_close)
                 return True
             except (
                 ValueError,

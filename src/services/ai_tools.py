@@ -832,6 +832,14 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             ) or []
         except Exception:
             logger.debug("session list refresh after create failed", exc_info=True)
+        # Interstitial at the natural break (proot fires after every
+        # completed major action, whoever triggered it — the AI included).
+        ad_service = getattr(state, "ad_service", None)
+        if ad_service is not None:
+            try:
+                await ad_service.show_interstitial()
+            except Exception:
+                logger.debug("post-create interstitial failed", exc_info=True)
         if created:
             if not str(getattr(state, "active_session_name", "") or "").strip():
                 state.active_session_name = created
@@ -899,6 +907,13 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         try:
             ok = await services.colab.stop_session(target, state.auth_method)
             if ok:
+                # Interstitial at the natural break (proot's close rule).
+                ad_service = getattr(state, "ad_service", None)
+                if ad_service is not None:
+                    try:
+                        await ad_service.show_interstitial()
+                    except Exception:
+                        logger.debug("post-stop interstitial failed", exc_info=True)
                 # Parity with create_session: the observable session list must
                 # reflect the stop, or the home screen shows a dead session.
                 try:

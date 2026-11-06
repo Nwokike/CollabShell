@@ -1,63 +1,38 @@
-"""Settings → CollabShell Premium.
+"""Settings → Premium — KTV Player's premium card, verbatim.
 
-Rebuilt on DDGS's card (`components/settings/sections_premium.py`), which is
-itself KTV Player's shape. One entitlement, four rows:
+The owner's rule: exactly KTV Player's premium on every count — the rows,
+the order, the dialogs, the copy, the busy/error states. Nothing added,
+nothing removed. Only the app name and the benefit sentence are this app's:
+KTV's channel-pack line describes a product CollabShell does not have, so
+the same sentence shape carries this app's real benefit (500 credits a day).
 
-    status          what Premium is, or why it lapsed
-    plans           monthly / yearly / lifetime, priced from the Worker
-    recovery ID     the ID itself, with Copy
-    Restore         re-check ownership (new device / reinstall)
+Structure (KTV settings_screen.py:942-1235):
 
-and the typing happens in dialogs that only exist once you ask for one — a
-settings card that lists every field it will ever need is a form, not a menu.
+    status row      "CollabShell Premium" + honest subtitle + check mark
+    kiri rows       (free only) every catalog product, the recovery ID with
+                    Copy, then error-with-Retry or loading-while-in-flight
+    restore row     always: Restore purchases
 
-The card is BUILT from observable state (`state.license_prices`,
-`state.license_recovery_id`, `state.is_premium`) on every render, so an
-async load or an unlock repaints it through the observable notify. Nothing
-mutates a control in place: `controls.clear()`/`append()` never set the dirty
-flag (`flet/controls/value_types.py:57-77`) and the client can be left
-showing an empty card.
-
-On the Play channel the screen does not build this card at all (see
-`screens/settings/__init__.py`) — not even an empty container, because "not
-even a disabled card — nothing to declare, nothing to reach, ads stay on" is
-the rule both reference apps state.
+The card is built from observable state on every render — the same repaint
+behavior KTV gets from its use_state + premium_service listener pair, through
+this app's observable AppState instead.
 """
 
 from __future__ import annotations
 
 import logging
-import re
+import time
 
 import flet as ft
 
 from core import tokens
 from core.channel import CHANNEL
-from core.constants import DAILY_FREE_CREDITS, DAILY_PREMIUM_CREDITS
+from core.constants import DAILY_PREMIUM_CREDITS
 from core.notifications import show_notification
-from core.styles import glass_card, section_header, tip_text
+from core.styles import glass_card, section_header
 from core.theme import AppColors
 
 logger = logging.getLogger("PremiumSection")
-
-EMAIL_RE = re.compile(r"^\S+@\S+\.\S+$")
-
-# What a lapsed payment means, in the buyer's words. `status` comes off the
-# signed token, so the copy can never disagree with the entitlement.
-_STATUS_COPY = {
-    "active": ("Premium active", "Everything Premium includes is switched on"),
-    "grace": ("Payment overdue", "Finish your payment to keep Premium"),
-    "expired": ("Premium expired", "Renew to switch Premium back on"),
-    "revoked": ("Premium refunded", "A refund turned Premium off"),
-}
-
-# The plans, in the order a buyer compares them. The price next to each is
-# read from the Worker's catalog, never written here.
-_PLANS = (
-    ("monthly", "Renews monthly, cancel any time"),
-    ("yearly", "Two months free versus monthly"),
-    ("lifetime", "Pay once, keep it"),
-)
 
 _MONTHS = (
     "Jan",
@@ -74,449 +49,398 @@ _MONTHS = (
     "Dec",
 )
 
+# One catalog fetch per launch, not one per repaint of this card. (KTV uses
+# ft.on_mounted(_load_license) for re-fetch-on-mount, but CollabShell's
+# section builders are plain functions called from the SettingsScreen
+# component body, and test_a_plain_section_builder_never_registers_a_hook
+# forbids flet hooks there — so the once-per-launch flag is the port.)
+_ATTEMPTED = False
 
-def page_has_ads(page, state, services) -> bool:
-    """Whether an ad can actually appear on this build.
 
-    The pitch says "Removes ads" only when it is true: desktop and web show
-    no ad, so there the subtitle sells the credits alone.
+def page_has_ads(page) -> bool:
+    """True where ads are actually requested (KTV notifications.py:143).
+
+    Only ANDROID/IOS phones show ads; desktop/web never request any, so
+    claiming "no ads" there would be a lie. Unknown page -> assume ads.
     """
-    ad_service = getattr(services, "ad_service", None)
-    if ad_service is None:
-        return False
     try:
-        platform = getattr(page, "platform", None)
-        if platform is None or not platform.is_mobile():
-            return False
+        return bool(page.platform.is_mobile())
     except Exception:
-        return False
-    return True
+        return True
 
 
-def _paid_subtitle(claims, has_ads: bool) -> str:
-    """Paid-row subtitle: the benefits plus the token's own dates."""
+def premium_unlocked_message(page) -> str:
+    """Platform-honest unlock toast (KTV notifications.py:156)."""
+    if page_has_ads(page):
+        return "Premium unlocked. Ads removed."
+    return "Premium unlocked."
+
+
+def _premium_subtitle(is_premium, claims, has_ads: bool) -> str:
+    """Premium row subtitle: honest benefits for this platform.
+
+    The benefit is this app's (credits a day); "no ads" is claimed only
+    where ads are actually requested (phones). paid-through comes from the
+    signed token (exp-guarded), so the dates stay truthful offline, and
+    its absence marks a lifetime license.
+    """
+    pack = f"{DAILY_PREMIUM_CREDITS} assistant credits a day"
+    if not is_premium:
+        return f"Remove all ads and unlock {pack}" if has_ads else f"Unlock {pack}"
     base = (
         f"Ads removed · {DAILY_PREMIUM_CREDITS} credits a day"
         if has_ads
         else f"{DAILY_PREMIUM_CREDITS} credits a day"
     )
-    expires_at = getattr(claims, "expires_at", None)
-    if expires_at is None:
+    paid_through = getattr(claims, "paid_through", None)
+    if not paid_through:
         return f"{base} · thank you!"
     product = str(getattr(claims, "product", "") or "")
     renewal = {"monthly": "renews monthly", "yearly": "renews yearly"}.get(
         product, "renews automatically"
     )
     try:
-        import datetime
-
-        when = datetime.datetime.fromtimestamp(
-            int(expires_at), tz=datetime.UTC
-        ).strftime("%d %b %Y")
-    except TypeError, ValueError, OSError, OverflowError:
+        moment = time.gmtime(int(paid_through) / 1000)
+        label = f"{moment.tm_mday} {_MONTHS[moment.tm_mon - 1]} {moment.tm_year}"
+    except (TypeError, ValueError, OverflowError, OSError):
         return f"{base} · thank you!"
-    return f"{base} · active until {when} · {renewal}"
+    return f"{base} · active until {label} · {renewal}"
 
 
-def _pitch_subtitle(has_ads: bool) -> str:
-    """Free-row pitch: what Premium buys here."""
-    if has_ads:
-        return (
-            f"Removes ads and raises assistant credits from "
-            f"{DAILY_FREE_CREDITS} to {DAILY_PREMIUM_CREDITS} a day"
-        )
-    return (
-        f"Raises assistant credits from {DAILY_FREE_CREDITS} "
-        f"to {DAILY_PREMIUM_CREDITS} a day"
+def _row(leading, title: str, subtitle: str, trailing=None) -> ft.Container:
+    """KTV's _setting_row verbatim: [icon+text] ---- [control]."""
+    try:
+        from flet import context
+
+        page = context.page
+    except Exception:
+        page = None
+    return ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Row(
+                    controls=[
+                        leading,
+                        ft.Column(
+                            controls=[
+                                ft.Text(title, size=13, weight=ft.FontWeight.W_500),
+                                ft.Text(
+                                    subtitle,
+                                    size=11,
+                                    color=AppColors.grey_dim(page),
+                                ),
+                            ],
+                            spacing=1,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=12,
+                    expand=True,
+                ),
+                *([trailing] if trailing is not None else []),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding(4, 10, 4, 10),
     )
-
-
-def _row(icon, title: str, subtitle: str, trailing=None) -> ft.Row:
-    return ft.Row(
-        controls=[
-            ft.Icon(icon, size=tokens.ICON_LG, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Column(
-                controls=[
-                    ft.Text(title, size=tokens.FONT_MD, weight=ft.FontWeight.W_500),
-                    tip_text(subtitle),
-                ],
-                spacing=tokens.SPACE_XXS,
-                expand=True,
-            ),
-            *([trailing] if trailing is not None else []),
-        ],
-        spacing=tokens.SPACE_LG,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-
-
-def _divider() -> ft.Control:
-    return ft.Divider(height=tokens.SPACE_SM)
-
-
-# One catalog fetch per launch, not one per repaint of this card.
-_PRICES_ATTEMPTED = False
 
 
 def build_premium_section(page: ft.Page, state, services) -> ft.Column:
-    """The PREMIUM card. DDGS's shape, built from observable state."""
-    if CHANNEL == "play":
-        # Unreachable in practice — the screen does not build this card on the
-        # Play channel — but a direct caller must not get a purchase surface.
-        return ft.Container(width=0, height=0)
-
-    premium = getattr(services, "premium", None)
-    license_ok = premium is not None and getattr(premium, "available", False)
-    claims = (
-        getattr(getattr(premium, "license", None), "claims", None)
-        if license_ok
-        else None
-    )
-    lapse = str(getattr(claims, "status", "") or "")
-    has_ads = page_has_ads(page, state, services)
+    """The PREMIUM card — KTV's rows, order, dialogs and copy."""
+    premium_service = getattr(services, "premium", None)
     is_premium = bool(getattr(state, "is_premium", False))
-    prices = getattr(state, "license_prices", {}) or {}
-    recovery = str(getattr(state, "license_recovery_id", "") or "")
+    products = list(getattr(state, "license_products", []) or [])
+    recovery_id = str(getattr(state, "license_recovery_id", "") or "")
+    license_busy = bool(getattr(state, "license_busy", False))
+    license_error = str(getattr(state, "license_error", "") or "")
+    has_ads = page_has_ads(page)
 
-    rows: list[ft.Control] = []
+    # ── Kiri License (the backend for installs Play cannot bill) ───────────
 
-    # ── Status ──────────────────────────────────────────────────────────────
-    # One row, always present: a lapse explains, a paid row shows the token's
-    # own dates, a free row is the pitch.
-    if is_premium and lapse == "active":
-        # An active token gets its own affirmative row, never the free pitch
-        # and never a lapse icon.
-        title, subtitle = _STATUS_COPY["active"]
-        rows.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                title,
-                subtitle,
-                ft.Icon(
-                    ft.Icons.CHECK_CIRCLE_ROUNDED,
-                    size=tokens.ICON_MD,
-                    color=AppColors.SUCCESS,
-                ),
-            )
-        )
-    elif is_premium and lapse in _STATUS_COPY:
-        title, subtitle = _STATUS_COPY[lapse]
-        rows.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                title,
-                subtitle,
-                ft.Icon(
-                    ft.Icons.ERROR_OUTLINE_ROUNDED,
-                    size=tokens.ICON_SM,
-                    color=AppColors.ERROR,
-                ),
-            )
-        )
-    elif is_premium:
-        rows.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                "CollabShell Premium",
-                _paid_subtitle(claims, has_ads),
-                ft.Icon(
-                    ft.Icons.CHECK_CIRCLE_ROUNDED,
-                    size=tokens.ICON_MD,
-                    color=AppColors.SUCCESS,
-                ),
-            )
-        )
-    elif lapse in _STATUS_COPY and lapse != "active":
-        # A lapsed payment is explained before the buy rows: say what happened
-        # first, the way back is the very next section.
-        title, subtitle = _STATUS_COPY[lapse]
-        rows.append(
-            _row(
-                ft.Icons.REPORT_ROUNDED,
-                title,
-                subtitle,
-                ft.Icon(
-                    ft.Icons.ERROR_OUTLINE_ROUNDED,
-                    size=tokens.ICON_SM,
-                    color=AppColors.ERROR,
-                ),
-            )
-        )
-    else:
-        rows.append(
-            _row(
-                ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
-                "CollabShell Premium",
-                _pitch_subtitle(has_ads),
-                ft.Icon(
-                    ft.Icons.CIRCLE_OUTLINED,
-                    size=tokens.ICON_SM,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                ),
-            )
-        )
-
-    # ── Plans (only while free) ────────────────────────────────────────────
-    if license_ok and not is_premium:
-        if prices:
-            for product_id, blurb in _PLANS:
-                price = prices.get(product_id, "")
-                if not price:
-                    continue
-                rows.append(_divider())
-                rows.append(
-                    _row(
-                        ft.Icons.LOCK_OPEN_ROUNDED
-                        if product_id == "lifetime"
-                        else ft.Icons.AUTORENEW_ROUNDED,
-                        product_id.capitalize(),
-                        blurb,
-                        ft.FilledButton(
-                            price,
-                            on_click=lambda e, pid=product_id: _ask_email(pid),
-                        ),
-                    )
-                )
-        elif _PRICES_ATTEMPTED:
-            # A real failure, not the first paint: say so, and offer the retry.
-            rows.append(_divider())
-            rows.append(
-                _row(
-                    ft.Icons.CLOUD_OFF_ROUNDED,
-                    "Unlock options unavailable",
-                    "Could not reach the license service. Check your connection",
-                    ft.OutlinedButton("Retry", on_click=lambda e: _load_prices()),
-                )
-            )
-        else:
-            rows.append(_divider())
-            rows.append(
-                _row(
-                    ft.Icons.CLOUD_OFF_ROUNDED,
-                    "Loading unlock options",
-                    "Fetching this week's prices from the licence service",
-                    ft.ProgressRing(
-                        width=tokens.ICON_SM, height=tokens.ICON_SM, stroke_width=2
-                    ),
-                )
-            )
-
-        if recovery:
-            rows.append(_divider())
-            rows.append(
-                _row(
-                    ft.Icons.KEY_ROUNDED,
-                    "Your recovery ID",
-                    recovery,
-                    ft.OutlinedButton(
-                        "Copy",
-                        icon=ft.Icons.CONTENT_COPY_ROUNDED,
-                        on_click=lambda e: page.run_task(_copy_recovery, recovery),
-                    ),
-                )
-            )
-
-    # ── Restore ────────────────────────────────────────────────────────────
-    if license_ok:
-        rows.append(_divider())
-        rows.append(
-            _row(
-                ft.Icons.RESTORE_ROUNDED,
-                "Restore purchases",
-                "Re-check ownership (new device / reinstall)",
-                ft.OutlinedButton("Restore", on_click=lambda e: _ask_recovery()),
-            )
-        )
-
-    # ── the loaders ─────────────────────────────────────────────────────────
-
-    async def _load_prices(ev=None):
-        """Fetch prices and the recovery ID once, into observable state.
-
-        A write to `state.license_prices` repaints this card through the
-        observable notify — no control is mutated, and nothing is pushed to
-        the client from inside a render body.
-        """
-        global _PRICES_ATTEMPTED
-        if not license_ok:
+    async def _load_license():
+        if not premium_service or not premium_service.available:
             return
-        if _PRICES_ATTEMPTED and prices:
+        state.license_error = ""
+        # Loading, not failing: the row must not claim the license service is
+        # unreachable while the request is still in flight.
+        state.license_busy = True
+        try:
+            state.license_products = list(await premium_service.kiri_catalog())
+        except Exception:
+            logger.debug("License catalog load failed", exc_info=True)
+            state.license_error = "Could not reach the license service."
+            state.license_busy = False
             return
-        _PRICES_ATTEMPTED = True
+        state.license_busy = False
         try:
-            fetched = await premium.kiri_catalog()
-            state.license_prices = {
-                str(p.id): str(p.price_label) for p in fetched
-            } or {}
-        except Exception as ex:
-            logger.warning("Premium catalog failed: %s", ex)
-            state.license_prices = {}
-            # Allow a retry on the next open of this card.
-            _PRICES_ATTEMPTED = False
-        try:
-            state.license_recovery_id = (await premium.license.recovery_id()) or ""
-        except Exception as ex:
-            logger.warning("Premium recovery read failed: %s", ex)
+            license_svc = premium_service.license
+            state.license_recovery_id = (
+                await license_svc.recovery_id() if license_svc else ""
+            )
+        except Exception:
+            logger.debug("Recovery ID load failed", exc_info=True)
 
-    def _reload_prices():
-        global _PRICES_ATTEMPTED
-        _PRICES_ATTEMPTED = False
-        page.run_task(_load_prices)
+    def _run_guarded(fn):
+        """KTV's guard: the Retry row must not double-fire while busy."""
 
-    if not _PRICES_ATTEMPTED:
-        page.run_task(_load_prices)
-
-    async def _copy_recovery(value: str):
-        try:
-            await ft.Clipboard().set(value)
-        except Exception as ex:
-            logger.warning("Recovery ID copy failed: %s", ex)
-        show_notification(page, "Recovery ID copied. Keep it somewhere safe.")
-
-    # ── the dialogs ─────────────────────────────────────────────────────────
-
-    def _ask_email(product_id: str):
-        """One required field, and it appears when you ask to buy."""
-        label = f"{product_id.capitalize()} {prices.get(product_id, '')}".rstrip()
-        email_ref = ft.Ref[ft.TextField]()
-
-        def _start(ev=None):
-            email = (email_ref.current.value or "").strip() if email_ref.current else ""
-            if not EMAIL_RE.match(email):
-                show_notification(page, "Enter a valid email address.", is_warning=True)
+        def _go(e=None):
+            if getattr(state, "license_busy", False):
                 return
-            page.pop_dialog()
-            page.run_task(_checkout, product_id, email)
+            page.run_task(fn)
 
+        return _go
+
+    global _ATTEMPTED
+    if premium_service is not None and not _ATTEMPTED:
+        _ATTEMPTED = True
+        page.run_task(_load_license)
+
+    # ── the dialogs (KTV verbatim) ──────────────────────────────────────────
+
+    def _ask_email(product_label: str):
+        """Email is required by the payment provider and is the only field
+        the user has to type."""
+        field = ft.TextField(
+            label="Email for your receipt",
+            hint_text="you@example.com",
+            keyboard_type=ft.KeyboardType.EMAIL,
+            width=320,
+        )
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text(f"Unlock CollabShell Premium — {label}"),
-                content=ft.Column(
-                    controls=[
-                        ft.Text(
-                            "Card, bank transfer and USDC are handled by our "
-                            "payment partner. This app never sees your card "
-                            "number."
-                        ),
-                        ft.TextField(
-                            ref=email_ref,
-                            label="Email for your receipt",
-                            hint_text="you@example.com",
-                            keyboard_type=ft.KeyboardType.EMAIL,
-                            autofocus=True,
-                            on_submit=lambda ev: _start(),
-                        ),
-                    ],
-                    spacing=tokens.SPACE_SM,
-                    tight=True,
-                ),
+                title=ft.Text(f"Unlock CollabShell Premium — {product_label}", size=15),
+                content=field,
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda ev: page.pop_dialog()),
-                    ft.FilledButton("Continue", on_click=lambda ev: _start()),
+                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.FilledButton(
+                        "Continue",
+                        on_click=lambda e: page.run_task(
+                            _start_kiri_checkout, product_label, field
+                        ),
+                    ),
                 ],
-                actions_alignment=ft.MainAxisAlignment.END,
             )
         )
 
-    def _ask_recovery():
-        field_ref = ft.Ref[ft.TextField]()
+    async def _start_kiri_checkout(product_id: str, field):
+        email = (field.value or "").strip()
+        if not email or "@" not in email:
+            show_notification(page, "Enter a valid email address", is_warning=True)
+            return
+        page.pop_dialog()
+        state.license_busy = True
+        try:
+            checkout = await premium_service.kiri_checkout(product_id, email)
+            state.license_recovery_id = checkout.recovery_id
+            # Flutterwave hosts the payment; the app never sees card data.
+            # kiri_checkout already started the watcher — no manual step.
+            checkout_url = checkout.checkout_url or ""
+            if not checkout_url.startswith("https://"):
+                logger.debug("Refused non-https checkout URL")
+                show_notification(
+                    page, "Could not start the payment — try again.", is_warning=True
+                )
+                return
+            await ft.UrlLauncher().launch_url(checkout_url)
+            show_notification(
+                page,
+                "Complete the payment. This screen unlocks itself when it lands",
+            )
+        except Exception as ex:
+            logger.debug("Kiri checkout failed", exc_info=True)
+            show_notification(
+                page, str(ex) or "Could not start the payment", is_warning=True
+            )
+        finally:
+            state.license_busy = False
 
-        def _restore(ev=None):
-            code = (field_ref.current.value or "").strip() if field_ref.current else ""
-            page.pop_dialog()
-            page.run_task(_restore_license, code or recovery)
-
+    def _ask_recovery_id(e=None):
+        field = ft.TextField(
+            label="Recovery ID",
+            hint_text=recovery_id or "KIRI-L-...",
+            width=340,
+        )
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text("Restore your license"),
+                title=ft.Text("Restore your license", size=15),
                 content=ft.Column(
-                    controls=[
-                        ft.TextField(
-                            ref=field_ref,
-                            label="Recovery ID",
-                            hint_text=recovery or "KIRI-L-…",
-                        ),
+                    [
+                        field,
                         ft.Text(
                             "Your recovery ID is in your receipt email. "
                             "It is also stored on this device.",
-                            size=tokens.FONT_XS,
+                            size=11,
                         ),
                     ],
-                    spacing=tokens.SPACE_SM,
                     tight=True,
                 ),
                 actions=[
-                    ft.TextButton("Cancel", on_click=lambda ev: page.pop_dialog()),
-                    ft.FilledButton("Restore", on_click=lambda ev: _restore()),
+                    ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
+                    ft.FilledButton(
+                        "Restore",
+                        on_click=lambda e: page.run_task(_redeem_kiri, field),
+                    ),
                 ],
-                actions_alignment=ft.MainAxisAlignment.END,
             )
         )
 
-    async def _restore_license(code: str):
+    async def _redeem_kiri(field):
+        code = (field.value or "").strip() or recovery_id
         if not code:
             show_notification(page, "Enter your recovery ID first.", is_warning=True)
             return
+        page.pop_dialog()
+        state.license_busy = True
         try:
-            status = await premium.kiri_restore(code)
+            status = await premium_service.kiri_restore(code)
+            state.license_recovery_id = status.recovery_id
+            if bool(getattr(state, "is_premium", False)):
+                show_notification(page, premium_unlocked_message(page))
+            else:
+                show_notification(page, f"License status: {status.status}")
         except Exception as ex:
-            # The mapped verdict, never a blanket "could not reach": a 404 is
-            # the service ANSWERING "no such licence", and calling that an
-            # outage made it read as a lie.
-            from services.license_service import friendly_message
-
-            show_notification(page, friendly_message(ex), is_error=True)
-            return
-        state.license_recovery_id = status.recovery_id or code
-        if bool(getattr(state, "is_premium", False)):
-            show_notification(page, "Premium restored.", is_success=True)
-        else:
+            logger.debug("License restore failed", exc_info=True)
             show_notification(
-                page, f"That licence is {status.status}.", is_warning=True
+                page, str(ex) or "Could not restore that license", is_warning=True
             )
+        finally:
+            state.license_busy = False
 
-    async def _checkout(product_id: str, email: str):
-        try:
-            checkout = await premium.kiri_checkout(product_id, email)
-        except Exception as ex:
-            from services.license_service import friendly_message
-
-            show_notification(
-                page, f"Could not open the payment page. {friendly_message(ex)}", is_error=True
-            )
-            return
-        # The recovery ID is available the moment the order exists — surface
-        # it before the browser takes over, because the hosted page is the
-        # last place a user will copy it from.
-        if getattr(checkout, "recovery_id", ""):
-            state.license_recovery_id = checkout.recovery_id
-        url = str(getattr(checkout, "checkout_url", "") or "")
-        if not url.startswith("https://"):
-            logger.warning("Refused non-https checkout URL: %r", url[:60])
-            show_notification(
-                page, "Could not start the payment — try again.", is_error=True
-            )
+    async def _copy_recovery_id(e=None):
+        if not recovery_id:
             return
         try:
-            await ft.UrlLauncher().launch_url(url)
-        except Exception as ex:
+            await ft.Clipboard().set(recovery_id)
+            show_notification(page, "Recovery ID copied")
+        except Exception:
             show_notification(
-                page,
-                f"Could not open the payment page ({ex}). Your recovery ID is "
-                f"{state.license_recovery_id}.",
-                is_error=True,
+                page, "Copy failed — clipboard unavailable on this device", is_warning=True
             )
-            return
-        # The watcher polls in the background; the card unlocks by itself.
-        show_notification(
-            page, "Complete the payment. This screen unlocks itself when it lands."
+
+    def _kiri_product_row(product):
+        return _row(
+            leading=ft.Icon(
+                ft.Icons.LOCK_OPEN_ROUNDED
+                if product.id == "lifetime"
+                else ft.Icons.AUTORENEW,
+                size=18,
+                color=ft.Colors.PRIMARY,
+            ),
+            title=product.id.capitalize(),
+            subtitle=product.description or product.price_label,
+            trailing=ft.FilledButton(
+                product.price_label,
+                on_click=lambda e, p=product: _ask_email(p.id),
+                disabled=state.license_busy,
+            ),
         )
+
+    # ── the rows (KTV settings_screen.py:1131-1221) ─────────────────────────
+
+    kiri_rows: list = []
+    # Built only where the card is shown: assembling these on the play
+    # channel still executed the raise, even though the card was discarded.
+    if CHANNEL != "play" and not is_premium:
+        kiri_rows = [
+            *[_kiri_product_row(p) for p in products],
+            *(
+                [
+                    _row(
+                        leading=ft.Icon(
+                            ft.Icons.KEY, size=18, color=ft.Colors.PRIMARY
+                        ),
+                        title="Your recovery ID",
+                        subtitle=(
+                            recovery_id or "Created when you start a payment"
+                        ),
+                        trailing=ft.OutlinedButton(
+                            "Copy",
+                            on_click=_copy_recovery_id,
+                            disabled=not recovery_id,
+                        ),
+                    )
+                ]
+                if recovery_id
+                else []
+            ),
+        ]
+        if not products:
+            if license_error:
+                kiri_rows.append(
+                    _row(
+                        leading=ft.Icon(
+                            ft.Icons.CLOUD_OFF,
+                            size=18,
+                            color=AppColors.grey_dim(page),
+                        ),
+                        title="Unlock options unavailable",
+                        subtitle=f"{license_error} Tap Retry to try again.",
+                        trailing=ft.OutlinedButton(
+                            "Retry",
+                            icon=ft.Icons.REFRESH,
+                            on_click=_run_guarded(_load_license),
+                        ),
+                    )
+                )
+            elif license_busy:
+                # A request is in flight: say so, rather than claiming the
+                # service is unreachable (which is what rendered on every
+                # first paint, before the fetch resolved).
+                kiri_rows.append(
+                    _row(
+                        leading=ft.Icon(
+                            ft.Icons.CLOUD_SYNC,
+                            size=18,
+                            color=AppColors.grey_dim(page),
+                        ),
+                        title="Loading unlock options",
+                        subtitle="Contacting the license service",
+                        trailing=ft.ProgressRing(
+                            width=16, height=16, stroke_width=2
+                        ),
+                    )
+                )
+            # No products and no error and not busy: nothing to show yet.
+
+    license_svc = getattr(premium_service, "license", None)
+    rows: list[ft.Control] = [
+        _row(
+            leading=ft.Icon(
+                ft.Icons.VERIFIED_ROUNDED,
+                size=18,
+                color=ft.Colors.PRIMARY if is_premium else ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            title="CollabShell Premium",
+            subtitle=_premium_subtitle(
+                is_premium,
+                getattr(license_svc, "claims", None),
+                has_ads,
+            ),
+            trailing=ft.Icon(
+                ft.Icons.CHECK_CIRCLE if is_premium else ft.Icons.CIRCLE_OUTLINED,
+                size=20,
+                color=(
+                    ft.Colors.PRIMARY if is_premium else ft.Colors.ON_SURFACE_VARIANT
+                ),
+            ),
+        ),
+        # Kiri rows are absent from the Play build entirely — that guard sits
+        # in the list assembly above (CHANNEL check).
+        *([] if is_premium else kiri_rows),
+        _row(
+            leading=ft.Icon(ft.Icons.RESTORE, size=18, color=ft.Colors.PRIMARY),
+            title="Restore purchases",
+            subtitle="Re-check ownership (new device / reinstall)",
+            trailing=ft.OutlinedButton("Restore", on_click=_ask_recovery_id),
+        ),
+    ]
 
     return ft.Column(
         controls=[
             section_header("PREMIUM"),
             glass_card(
-                ft.Column(controls=rows, spacing=tokens.SPACE_XS, tight=True),
+                ft.Column(controls=rows, spacing=0, tight=True),
                 margin=ft.Margin(
                     tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
                 ),

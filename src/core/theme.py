@@ -4,6 +4,22 @@ import flet as ft
 
 
 class AppColors:
+
+    @staticmethod
+    def grey_dim(page: ft.Page | None = None) -> str:
+        """KTV-verbatim: theme-adaptive grey for muted icons/text.
+
+        Same values as KTV Player's AppColors.grey_dim (#AAAAAA on dark,
+        #555555 on light) so the premium card reads identically across apps.
+        """
+        try:
+            from core.theme import is_light_theme
+
+            return "#555555" if is_light_theme(page) else "#AAAAAA"
+        except Exception:
+            return "#AAAAAA"
+
+
     # ─── COLAB BRAND PALETTE ──────────────────────────────────────────────────
     # Google Colab primary: warm amber/orange #F9AB00
     # Adapted into a premium two-tone palette for light & dark modes.

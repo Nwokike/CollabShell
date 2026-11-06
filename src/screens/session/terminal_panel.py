@@ -442,6 +442,11 @@ def TerminalPanel(
                 entry.client.close()
             except Exception:
                 logger.exception("Terminal client close failed")
+        # Interstitial at the natural break (proot's close_session rule): the
+        # shell closed, then the ad — the 60s global gap throttles repeats.
+        ad_service = getattr(services_ctx, "ad_service", None)
+        if ad_service is not None:
+            page.run_task(ad_service.show_interstitial)
         if not ps.terminals:
             _create_terminal()
             return

@@ -1686,6 +1686,10 @@ def NotebookView(
             padding=ft.Padding(tokens.SPACE_MD, 0, tokens.SPACE_MD, tokens.SPACE_XL),
         )
 
+    # The bottom banner belongs to notebook tabs only: a script tab already
+    # carries the sticky banner in its toolbar (script_view's own slot), and
+    # the owner wants ONE banner per screen, not two stacked.
+    tab_is_script = (_get_tab() or {}).get("view") == "script"
     notebook_body = ft.Column(
         controls=[
             action_row,
@@ -1696,7 +1700,11 @@ def NotebookView(
                 ),
             ),
             _document_container(),
-            pooled_banner_ad("notebook-bottom-1", page),
+            *(
+                []
+                if tab_is_script
+                else [pooled_banner_ad("notebook-bottom-1", page)]
+            ),
             ft.Container(height=tokens.SPACE_XXXL * 3),
             focus_sink,
         ],

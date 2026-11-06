@@ -135,33 +135,41 @@ def test_styled_banner_builds_for_every_user(monkeypatch):
 # ── interstitials ──────────────────────────────────────────────────────────
 
 
-def test_preload_skipped_when_premium():
+def test_preload_runs_even_when_premium():
+    """proot parity: the interstitial path has NO premium gate — the owner
+    (a paying user) never saw a single interstitial because of that gate."""
     import asyncio
 
     svc = _ad_service()
     state.is_premium = True
     asyncio.run(svc.preload_interstitial())
-    assert svc.interstitial is None
+    assert svc.interstitial is not None, "premium users get interstitials too"
 
 
-def test_preload_is_not_premium_gated_when_free():
-    """Premium is the only reason preload returns early."""
+def test_preload_runs_when_free():
     import asyncio
 
     svc = _ad_service()
     state.is_premium = False
     asyncio.run(svc.preload_interstitial())
-    assert svc._premium is False, "the premium gate must not fire when free"
     assert svc.interstitial is not None, "a free user gets an interstitial built"
 
 
-def test_show_interstitial_blocked_when_premium():
+def test_show_interstitial_shows_even_when_premium():
+    """proot parity: premium never blocks the show."""
     import asyncio
 
     svc = _ad_service()
-    svc.interstitial = object()  # a preloaded ad
+
+    class _Ad:
+        async def show(self):
+            return None
+
+    svc.interstitial = _Ad()
+    svc._interstitial_loaded = True
     state.is_premium = True
-    assert asyncio.run(svc.show_interstitial()) is False
+    state.last_interstitial_ts = 0.0  # not inside another test's cooldown
+    assert asyncio.run(svc.show_interstitial()) is True
 
 
 def test_show_interstitial_allowed_when_free():
@@ -174,6 +182,8 @@ def test_show_interstitial_allowed_when_free():
             return None
 
     svc.interstitial = _Ad()
+    svc._interstitial_loaded = True
+    state.last_interstitial_ts = 0.0  # not inside another test's cooldown
     assert asyncio.run(svc.show_interstitial()) is True
 
 
