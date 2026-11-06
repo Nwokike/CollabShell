@@ -499,6 +499,53 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             logger.warning("AI tool list_notebook_tabs failed: %s", ex)
             return f"Could not list tabs: {ex}"
 
+    async def create_notebook_tab(
+        name: Annotated[
+            str,
+            AIParam("The name for the new notebook tab (e.g. 'Starter', 'Data Analysis')."),
+        ] = "Notebook",
+    ) -> str:
+        """Create a new notebook tab in the active session and switch to it.
+
+        Use this to create a clean, dedicated notebook tab (like a starter
+        notebook) rather than appending to an existing tab.
+        """
+        if not _has_session():
+            return NO_SESSION
+        try:
+            from screens.session.notebook_view import create_notebook_tab as _create_tab
+
+            tab = _create_tab(_live_session(), name=name)
+            if not tab:
+                return (
+                    f"Could not create notebook tab: session {_live_session()} "
+                    "is not open on screen."
+                )
+            return f"Created notebook tab '{tab.get('name')}' (id: {tab.get('id')}). It is now active."
+        except Exception as ex:
+            logger.warning("AI tool create_notebook_tab failed: %s", ex)
+            return f"Could not create tab: {ex}"
+
+    async def switch_notebook_tab(
+        tab_id: Annotated[
+            str,
+            AIParam("The id of the notebook tab to switch to (e.g. 'nb1')."),
+        ],
+    ) -> str:
+        """Switch to a specific notebook tab in the active session."""
+        if not _has_session():
+            return NO_SESSION
+        try:
+            from screens.session.notebook_view import switch_notebook_tab as _switch_tab
+
+            ok = _switch_tab(_live_session(), tab_id)
+            if not ok:
+                return f"Could not switch to tab {tab_id}: tab not found or session not open."
+            return f"Switched to notebook tab {tab_id}."
+        except Exception as ex:
+            logger.warning("AI tool switch_notebook_tab failed: %s", ex)
+            return f"Could not switch tab: {ex}"
+
     async def get_usage() -> str:
         """Read the account compute-unit balance and burn rate. Read-only."""
         try:
@@ -748,6 +795,8 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         upload_file,
         write_cells,
         list_notebook_tabs,
+        create_notebook_tab,
+        switch_notebook_tab,
         get_usage,
         get_log,
         restart_kernel,

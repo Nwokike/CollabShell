@@ -723,6 +723,39 @@ def TerminalPanel(
             _ai_snack("Nothing in the terminal to explain yet.")
             return
 
+        # The snapshot every follow-up is asked against. Re-reading the
+        # scrollback per question would change the subject mid-thread, so the
+        # lines captured at ask time anchor the whole conversation.
+        terminal_text = text[-4000:]
+        first_question = (
+            "This is output from a Linux shell on a Google Colab "
+            "runtime.\n\n"
+            "Explain what just happened and, if there is an error, "
+            "what caused it and the exact command to fix it. Be "
+            "specific about paths and exit codes.\n\n"
+            f"```\n{terminal_text}\n```"
+        )
+
+        async def _ask(question: str | None) -> str:
+            """One metered turn. Shared by the first ask and every follow-up,
+            so both spend credits through exactly the same gate.
+
+            `question is None` is the implicit first ask; everything after it
+            replays the terminal snapshot plus the recent exchange.
+            """
+            return await ai_quick.ask(
+                action="explain",
+                state=app_state,
+                credits=getattr(services_ctx, "credits", None),
+                services=services_ctx,
+                prompt=(
+                    first_question
+                    if question is None
+                    else _followup_prompt(question)
+                ),
+                system=ai_quick.system_for(app_state),
+            )
+
         # Loading indicator: the ask runs for seconds; without this the owner
         # saw the button "do nothing" until the answer appeared.
         page.show_dialog(
@@ -739,21 +772,7 @@ def TerminalPanel(
             )
         )
         try:
-            answer = await ai_quick.ask(
-                action="explain",
-                state=app_state,
-                credits=getattr(services_ctx, "credits", None),
-                services=services_ctx,
-                prompt=(
-                    "This is output from a Linux shell on a Google Colab "
-                    "runtime.\n\n"
-                    "Explain what just happened and, if there is an error, "
-                    "what caused it and the exact command to fix it. Be "
-                    "specific about paths and exit codes.\n\n"
-                    f"```\n{text[-4000:]}\n```"
-                ),
-                system=ai_quick.system_for(app_state),
-            )
+            answer = await _ask(None)
         except ai_quick.OutOfCredits:
             page.pop_dialog()
             _ai_snack("Out of assistant credits — top up in Assistant settings.")
@@ -772,42 +791,284 @@ def TerminalPanel(
         if not answer.strip():
             _ai_snack("The Assistant returned nothing usable.")
             return
-        page.show_dialog(
-            ft.AlertDialog(
-                modal=True,
-                title=ft.Row(
-                    [
-                        ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
-                        # Contained: a long heading must wrap inside the
-                        # dialog, not overflow it.
-                        ft.Text(
-                            "What the terminal is telling you",
-                            size=tokens.FONT_MD,
-                            weight=ft.FontWeight.W_700,
-                            expand=True,
+
+        # ── the live thread this dialog owns from here on ──────────────────
+        # `history` is the ordered exchange: the first entry's question is the
+        # implicit "explain this", and each follow-up appends one. The whole
+        # thread is what "Continue in chat" hands to the conversation, so a
+        # question asked here is never a dead end outside it.
+        history: list[dict] = [{"question": None, "answer": answer}]
+        flags = {"busy": False, "closed": False}
+
+        def _user_bubble(question: str) -> ft.Control:
+            # The chat's own user bubble shape — same colour, same tail
+            # corner — so the two reads as one conversation.
+            return ft.Column(
+                horizontal_alignment=ft.CrossAxisAlignment.END,
+                controls=[
+                    ft.Container(
+                        content=ft.Text(
+                            question,
+                            size=tokens.FONT_SM,
+                            color=ft.Colors.WHITE,
+                            selectable=True,
                         ),
-                    ],
-                    spacing=tokens.SPACE_SM,
-                ),
-                content=ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Markdown(
-                                answer,
-                                selectable=True,
-                                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                            )
-                        ],
-                        scroll=ft.ScrollMode.AUTO,
-                        tight=False,
-                    ),
-                    width=440,
-                    height=320,
-                ),
-                actions=[ft.TextButton("Close", on_click=lambda e: page.pop_dialog())],
-                actions_alignment=ft.MainAxisAlignment.END,
+                        padding=ft.Padding.all(tokens.SPACE_MD),
+                        border_radius=ft.BorderRadius(
+                            tokens.RADIUS_XL,
+                            tokens.RADIUS_XL,
+                            tokens.RADIUS_XS,
+                            tokens.RADIUS_XL,
+                        ),
+                        bgcolor=ft.Colors.PRIMARY,
+                        width=min(320, (page.width or 320) * 0.8),
+                    )
+                ],
             )
+
+        def _assistant_block(text_body: str) -> ft.Control:
+            return ft.Markdown(
+                text_body,
+                selectable=True,
+                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+            )
+
+        def _repaint() -> None:
+            """Redraw the transcript and push only the transcript.
+
+            The dialog stays mounted, so the field's caret and the scroll
+            position survive; patching one Column also keeps this off the
+            page's full update path.
+            """
+            if flags["closed"]:
+                return
+            controls: list[ft.Control] = []
+            for index, item in enumerate(history):
+                if index == 0:
+                    # No question bubble for the implicit ask: the subject is
+                    # stated once, above the first answer.
+                    controls.append(
+                        ft.Row(
+                            [
+                                ft.Icon(
+                                    ft.Icons.TERMINAL_ROUNDED,
+                                    size=tokens.ICON_XS,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                                ft.Text(
+                                    "Terminal output explained",
+                                    size=tokens.FONT_XS,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=tokens.SPACE_XS,
+                            tight=True,
+                        )
+                    )
+                else:
+                    controls.append(_user_bubble(item["question"]))
+                controls.append(_assistant_block(item["answer"]))
+            transcript.controls = controls
+            try:
+                transcript.update()
+            except Exception:
+                logger.debug("terminal explain: transcript update failed")
+
+        def _set_working(on: bool) -> None:
+            if flags["closed"]:
+                return
+            working_row.visible = on
+            ask_row.visible = not on
+            for control in (working_row, ask_row):
+                try:
+                    control.update()
+                except Exception:
+                    logger.debug("terminal explain: ask row update failed")
+
+        def _close_dialog() -> None:
+            """Dismiss once, and stop every pending repaint from touching it.
+
+            A follow-up in flight outlives the dialog it belongs to, so the
+            flag (not the control's visibility) is what gates the updates.
+            Nothing is adopted here: closing without "Continue in chat" is a
+            deliberate discard, and the thread was already charged for the
+            asks it contains.
+            """
+            if flags["closed"]:
+                return
+            flags["closed"] = True
+            page.pop_dialog()
+
+        def _followup_prompt(question: str) -> str:
+            # Only the recent exchange rides along: an unbounded replay would
+            # grow the prompt (and the spend) with every question asked.
+            recent = history[-3:]
+            prior = ""
+            if recent:
+                lines = [
+                    f"You asked: {h['question']}\nYou answered:\n{h['answer']}"
+                    for h in recent
+                    if h["question"]
+                ]
+                if lines:
+                    prior = "Earlier in this conversation:\n" + "\n\n".join(lines) + "\n\n"
+            return (
+                "This is output from a Linux shell on a Google Colab "
+                "runtime.\n\n"
+                f"```\n{terminal_text}\n```\n\n"
+                f"{prior}"
+                "Answer the owner's follow-up specifically and plainly. If "
+                "there is an error behind it, give the exact command that "
+                "fixes it.\n\n"
+                f"Follow-up: {question}"
+            )
+
+        async def _ask_followup() -> None:
+            if flags["busy"] or flags["closed"]:
+                return
+            question = (followup_field.value or "").strip()
+            if not question:
+                return
+            flags["busy"] = True
+            followup_field.value = ""
+            _set_working(True)
+            try:
+                reply = await _ask(question)
+            except ai_quick.OutOfCredits:
+                flags["busy"] = False
+                # The question goes back in the field: a failed ask must not
+                # eat what the owner typed.
+                followup_field.value = question
+                _set_working(False)
+                _ai_snack("Out of assistant credits — top up in Assistant settings.")
+                return
+            except ai_quick.CellAIDisabled:
+                flags["busy"] = False
+                followup_field.value = question
+                _set_working(False)
+                _ai_snack("Assistant credits are unavailable in this build.")
+                return
+            except Exception as ex:
+                flags["busy"] = False
+                followup_field.value = question
+                _set_working(False)
+                logger.warning("Terminal follow-up failed: %s", ex)
+                _ai_snack("The Assistant could not answer just now.")
+                return
+
+            flags["busy"] = False
+            _set_working(False)
+            if not reply.strip():
+                _ai_snack("The Assistant returned nothing usable.")
+                return
+            history.append({"question": question, "answer": reply})
+            _repaint()
+
+        def _continue_in_chat() -> None:
+            """Hand the thread to the conversation and open the assistant.
+
+            The asks were already paid for here, so this adopts the exchange as
+            history — no second metered turn, and the chat continues from
+            exactly what was just discussed.
+            """
+            _close_dialog()
+            exchanges = [
+                {
+                    "question": f"Explain this terminal output:\n```\n{terminal_text}\n```",
+                    "answer": history[0]["answer"],
+                }
+            ]
+            exchanges.extend(
+                {"question": h["question"], "answer": h["answer"]}
+                for h in history[1:]
+            )
+            from screens.assistant_view import open_assistant
+
+            session = open_assistant(page, app_state, services_ctx)
+            if session.adopt_transcript(exchanges):
+                _ai_snack("Continued in chat")
+                return
+            _ai_snack(
+                "The Assistant is answering right now — the thread will be "
+                "waiting when it finishes."
+            )
+
+        transcript = ft.Column(
+            controls=[],
+            spacing=tokens.SPACE_SM,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+            tight=False,
         )
+        working_row = ft.Row(
+            [
+                ft.ProgressRing(width=16, height=16, stroke_width=2.5),
+                ft.Text("Assistant is working…", size=tokens.FONT_SM),
+            ],
+            spacing=tokens.SPACE_SM,
+            tight=True,
+            visible=False,
+        )
+        followup_field = ft.TextField(
+            hint_text="Ask a follow-up…",
+            border_radius=tokens.RADIUS_MD,
+            dense=True,
+            text_size=tokens.FONT_SM,
+            expand=True,
+            # Enter sends, the way every composer in the app does.
+            on_submit=lambda e: page.run_task(_ask_followup),
+        )
+        ask_row = ft.Row(
+            [
+                followup_field,
+                ft.FilledButton(
+                    "Ask",
+                    icon=ft.Icons.SEND_ROUNDED,
+                    on_click=lambda e: page.run_task(_ask_followup),
+                ),
+            ],
+            spacing=tokens.SPACE_SM,
+        )
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                [
+                    ft.Icon(tokens.ASSISTANT_ICON, size=tokens.ICON_SM),
+                    # Contained: a long heading must wrap inside the
+                    # dialog, not overflow it.
+                    ft.Text(
+                        "What the terminal is telling you",
+                        size=tokens.FONT_MD,
+                        weight=ft.FontWeight.W_700,
+                        expand=True,
+                    ),
+                ],
+                spacing=tokens.SPACE_SM,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[transcript, working_row, ask_row],
+                    spacing=tokens.SPACE_SM,
+                    tight=True,
+                ),
+                width=440,
+                height=380,
+            ),
+            actions=[
+                ft.FilledTonalButton(
+                    "Continue in chat",
+                    icon=ft.Icons.FORUM_ROUNDED,
+                    on_click=lambda e: _continue_in_chat(),
+                ),
+                ft.TextButton("Close", on_click=lambda e: _close_dialog()),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        dialog.on_dismiss = lambda e: flags.update({"closed": True})
+
+        page.show_dialog(dialog)
+        _repaint()
 
     # Publish the live bridge so the assistant (which holds no component handle)
     # can read terminal output for this session. Replaced every render.

@@ -21,10 +21,8 @@ import logging
 
 import flet as ft
 
-from components.notebook_cell.actions import copy_output
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
-from core.theme import AppColors
 from services.colab.text_files import upload_text_file
 from services.script_runner import build_run_file_payload
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
@@ -150,73 +148,19 @@ def ScriptView(
             on_script_change(value)
 
     # ── Inline output panel ────────────────────────────────────────────────
-    # Rendered through the same parser and the same panel shape the notebook
-    # cells use — same terminal background, same dynamic height, same actions
-    # — so Run File output looks exactly like notebook output.
-    output_controls = parse_outputs_to_controls(outputs)
-    line_count = 0
-    for ctrl in output_controls:
-        text = getattr(ctrl, "value", "") or ""
-        if not text:
-            text = "".join(
-                getattr(span, "text", "") or ""
-                for span in (getattr(ctrl, "spans", None) or [])
-            )
-        line_count += max(text.count("\n") + 1, 1)
-    calc_height = min(max(line_count * 20 + 16, 36), 220) if output_controls else None
-
-    async def _copy_output_task(e=None):
-        await copy_output(page, list(outputs))
-
-    output_actions = ft.Row(
-        controls=[
-            ft.Text(
-                "OUTPUT",
-                size=tokens.FONT_XXS,
-                color=ft.Colors.with_opacity(0.5, ft.Colors.ON_SURFACE),
-                weight=ft.FontWeight.W_600,
-            ),
-            ft.Row(
-                controls=[
-                    ft.IconButton(
-                        ft.Icons.COPY_ALL_ROUNDED,
-                        icon_size=tokens.ICON_SM,
-                        tooltip="Copy Output",
-                        visible=bool(output_controls),
-                        on_click=lambda e: page.run_task(_copy_output_task, e),
-                    ),
-                    ft.IconButton(
-                        ft.Icons.CLEAR_ALL_ROUNDED,
-                        icon_size=tokens.ICON_SM,
-                        tooltip="Clear Output",
-                        on_click=lambda e: set_outputs([]),
-                    ),
-                ],
-                spacing=0,
-            ),
-        ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-    )
-
+    # Rendered through the same parser the notebook cells use, so ANSI colour,
+    # images, and tracebacks look identical in both views. Transient by
+    # design: a script has no persisted outputs and .py cannot carry them.
     output_panel = ft.Container(
         content=ft.Column(
-            controls=[
-                ft.ListView(
-                    controls=output_controls,
-                    spacing=tokens.SPACE_XXS,
-                    auto_scroll=True,
-                    height=calc_height,
-                    expand=False,
-                ),
-                output_actions,
-            ],
-            spacing=tokens.SPACE_XXS,
+            controls=parse_outputs_to_controls(outputs),
+            spacing=tokens.SPACE_XS,
+            scroll=ft.ScrollMode.AUTO,
         ),
-        padding=tokens.SPACE_SM,
-        bgcolor=AppColors.TERMINAL_BG,
-        border_radius=tokens.RADIUS_SM,
+        bgcolor=ft.Colors.ON_SURFACE,
+        padding=ft.Padding(tokens.SPACE_SM),
+        border_radius=tokens.RADIUS_MD,
         visible=bool(outputs) or is_running,
-        width=float("inf"),
     )
 
     editor = ft.TextField(

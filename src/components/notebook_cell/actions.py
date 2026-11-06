@@ -22,11 +22,11 @@ def make_actions_row(
             )
         )
     if on_ask_ai:
-        # Sparkle rather than a word: the row is already four buttons wide and
-        # the menu that opens names all three actions in full.
+        # The sparkle icon the Suggest action uses — one visual language
+        # between the cell button and the menu it opens.
         controls.append(
             ft.IconButton(
-                tokens.ASSISTANT_ICON,
+                ft.Icons.AUTO_AWESOME_OUTLINED,
                 icon_size=tokens.ICON_SM,
                 tooltip="Ask AI about this cell",
                 on_click=lambda e: on_ask_ai() if on_ask_ai else None,
@@ -60,19 +60,15 @@ def make_actions_row(
 
 # The three in-cell actions, in the order they are offered. Each entry is the
 # action key (what the service dispatches on), its label, its icon, and a line
-# of help so the menu explains itself without a tour.
+# of help so the menu explains itself without a tour. Two options only: the
+# cell-level menu is Explain + Suggest Next — Fix Error lives in the output
+# row, where it appears only when the run actually failed.
 AI_CELL_ACTIONS = (
     (
         "explain",
         "Explain this cell",
         ft.Icons.MENU_BOOK_OUTLINED,
         "What it does and why, in plain language",
-    ),
-    (
-        "fix",
-        "Fix the error",
-        ft.Icons.BUG_REPORT_OUTLINED,
-        "Diagnose the output and write the corrected code",
     ),
     (
         "suggest",

@@ -304,8 +304,9 @@ class AppController:
         from services.license_service import KiriLicenseService
         from services.premium_service import PremiumService
 
-        self.credit_service = CreditService()
-        # Background sweep so a crashed turn never strands a credit hold.
+        self.credit_service = CreditService(self.storage)
+        # Load credits and sync daily cap, then start background sweep for crashed turns.
+        page.run_task(self.credit_service.initialize)
         page.run_task(self.credit_service.astart)
         self.license_service = KiriLicenseService(self.storage)
         self.premium_service = PremiumService(page, state, self.storage)
@@ -498,20 +499,6 @@ class AppController:
                 page, "That cell is no longer in the notebook.", is_warning=True
             )
 
-        def _open_terminal(session_name: str):
-            """Open the SESSION's terminal screen — not the home terminal tab.
-
-            `_navigate_tab` routes through `_apply_route`, whose tab branch
-            clears `active_session_name`/`active_subview` and lands on the
-            session LIST. The assistant's Open-Terminal action must land
-            inside the session screen showing the live PTY.
-            """
-            _open_session(session_name, "terminal")
-
-        def _open_notebook(session_name: str):
-            """Open the SESSION's notebook screen (same reasoning as terminal)."""
-            _open_session(session_name, "notebook")
-
         def _toggle_theme():
             if page.theme_mode == ft.ThemeMode.SYSTEM:
                 page.theme_mode = ft.ThemeMode.LIGHT
@@ -546,8 +533,6 @@ class AppController:
             open_assistant=_open_assistant,
             open_assistant_history=_open_assistant_history,
             reveal_cell=_reveal_cell,
-            open_terminal=_open_terminal,
-            open_notebook=_open_notebook,
         )
 
         services = Services(
@@ -893,6 +878,8 @@ class AppController:
                 # itself survives until the user closes the app; a foreground
                 # service for Doze-proofing lands with Flet 1.1.0.
                 await self._wakelock_set(False)
+                if hasattr(self, "router_watchdog") and self.router_watchdog:
+                    self.router_watchdog.set_background(True)
                 return
             if e.state not in (
                 ft.AppLifecycleState.RESUME,
@@ -900,8 +887,16 @@ class AppController:
             ):
                 return
 
+            if hasattr(self, "router_watchdog") and self.router_watchdog:
+                self.router_watchdog.set_background(False)
+
             # Foreground again: screen on while a session is active.
             await self._wakelock_set(bool(getattr(state, "active_session_name", "")))
+            if hasattr(self, "premium_service") and self.premium_service:
+                try:
+                    await self.premium_service.resume_reconcile()
+                except Exception:
+                    logger.debug("resume reconcile failed", exc_info=True)
 
             logger.info("[lifecycle] app resumed — re-probing connectivity")
             await self._refresh_auth_state()
@@ -981,21 +976,32 @@ class AppController:
         except Exception:
             logger.debug("wakelock set(%s) failed", on, exc_info=True)
 
+    def _safe_run_task(self, fn, *args) -> None:
+        """Schedule a page task, tolerating a destroyed Flet session.
+
+        On app teardown the page's session can be gone by the time a route
+        change fires; `page.run_task` then raises "An attempt to fetch
+        destroyed session" and crashed the shell on every tab tap.
+        """
+        if self.page is None:
+            return
+        try:
+            self.page.run_task(fn, *args)
+        except Exception:
+            logger.debug("run_task skipped (session gone): %s", fn, exc_info=True)
+
     def _sync_wakelock(self) -> None:
         """Screen stays on while the app is up with an active session."""
         on = bool(getattr(state, "active_session_name", ""))
-        if self.page is not None:
-            self.page.run_task(self._wakelock_set, on)
+        self._safe_run_task(self._wakelock_set, on)
 
     def _sync_session_notification(self) -> None:
         """Foreground-service notification follows the active session."""
         name = str(getattr(state, "active_session_name", "") or "").strip()
-        if self.page is None:
-            return
         if name:
-            self.page.run_task(self.session_notify.start_for_session, name)
+            self._safe_run_task(self.session_notify.start_for_session, name)
         else:
-            self.page.run_task(self.session_notify.stop)
+            self._safe_run_task(self.session_notify.stop)
 
     def _notification_tap(self, session_name: str | None) -> None:
         """Tap on the running-session notification: open that session."""

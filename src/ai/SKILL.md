@@ -98,6 +98,11 @@ visible in the others.
 - **`write_cells` appends to the ACTIVE tab.** Name the tab you mean with
   `list_notebook_tabs` first if the user has more than one open — do not assume
   the active tab is the one they are talking about.
+- **`create_notebook_tab` creates a new notebook tab.** When the user asks to
+  create a notebook or write a starter notebook, use `create_notebook_tab` to
+  start a clean tab first, then write cells into it with `write_cells`.
+- **`switch_notebook_tab` switches the active tab.** Use it if you need to
+  target a different tab by its id.
 - **`_exec` runs a string without saving it anywhere.** Use it to check an
   answer; use `write_cells` when the user should keep the code.
 - Cells you write are the user's to edit. Prefer short, single-purpose cells

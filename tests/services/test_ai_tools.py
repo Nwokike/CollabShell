@@ -80,6 +80,8 @@ def test_full_tool_set_is_exposed():
         "upload_file",
         "write_cells",
         "list_notebook_tabs",
+        "create_notebook_tab",
+        "switch_notebook_tab",
         "get_usage",
         "get_log",
         "restart_kernel",
@@ -341,6 +343,71 @@ def test_write_cells_reports_when_no_notebook_is_open():
             _by_name(tools)["write_cells"]([{"type": "code", "source": "x = 1"}])
         )
         assert "no notebook tab" in out, out
+    finally:
+        notebook_view._SESSION_BRIDGES.pop("sess", None)
+
+
+def test_create_notebook_tab_tool_creates_and_activates_tab():
+    from screens.session import notebook_view
+
+    created = []
+    notebook_view._SESSION_BRIDGES["sess"] = {
+        "create_tab": lambda name=None: (
+            created.append(name or "Notebook"),
+            {"id": "nb2", "name": name or "Notebook"},
+        )[1],
+    }
+    try:
+        services, state = _fresh()
+        tools = ai_tools.build_tools("sess", services, state)
+        out = _run(_by_name(tools)["create_notebook_tab"](name="My Analysis"))
+        assert "Created notebook tab 'My Analysis'" in out
+        assert created == ["My Analysis"]
+    finally:
+        notebook_view._SESSION_BRIDGES.pop("sess", None)
+
+
+def test_switch_notebook_tab_tool_switches_tab():
+    from screens.session import notebook_view
+
+    switched = []
+    notebook_view._SESSION_BRIDGES["sess"] = {
+        "switch_tab": lambda tab_id: switched.append(tab_id),
+    }
+    try:
+        services, state = _fresh()
+        tools = ai_tools.build_tools("sess", services, state)
+        out = _run(_by_name(tools)["switch_notebook_tab"]("nb3"))
+        assert "Switched to notebook tab nb3." in out
+        assert switched == ["nb3"]
+    finally:
+        notebook_view._SESSION_BRIDGES.pop("sess", None)
+
+
+def test_write_cells_auto_creates_tab_when_active_tab_is_script():
+    from screens.session import notebook_view
+
+    created = []
+    inserted = []
+    notebook_view._SESSION_BRIDGES["sess"] = {
+        "active_tab": lambda: {"id": "py1", "view": "script"},
+        "create_tab": lambda name=None: (
+            created.append(name),
+            {"id": "nb2", "name": name or "Notebook"},
+        )[1],
+        "insert_cells": lambda tab_id, cells: (inserted.append((tab_id, cells)), cells)[
+            1
+        ],
+    }
+    try:
+        services, state = _fresh()
+        tools = ai_tools.build_tools("sess", services, state)
+        out = _run(
+            _by_name(tools)["write_cells"]([{"type": "code", "source": "import pandas as pd"}])
+        )
+        assert "Wrote 1 cell" in out
+        assert created == ["Notebook"]
+        assert inserted[0][0] == "nb2"
     finally:
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 
@@ -695,7 +762,14 @@ def test_every_vm_reading_tool_warns_about_untrusted_content():
         "read_file",
         "list_files",
     )
-    non_readers = ("get_log", "get_usage", "install_package", "list_notebook_tabs")
+    non_readers = (
+        "get_log",
+        "get_usage",
+        "install_package",
+        "list_notebook_tabs",
+        "create_notebook_tab",
+        "switch_notebook_tab",
+    )
     built = {fn.__name__: fn for fn in mod.build_tools("sess", *_fresh())}
     for name in readers:
         doc = built[name].__doc__ or ""

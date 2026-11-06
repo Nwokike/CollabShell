@@ -18,6 +18,11 @@
 | `audit-05-notebook-files-storage.md` | Audit | Notebook, Files, Scripts, Local Storage, Updates (ipynb_converter, file_read, storage_service, script_runner, changelog, version.json) — 13 findings |
 | `audit-06-settings-ui-core.md` | Audit | App Shell, Settings Screen, Core/State/Hooks, Remaining Components (Flet 1.0.4 lifecycle violations, page.update in use_effect, hooks) — 20 findings |
 | `audit-07-build-ci-config.md` | Audit | Build, CI, Packaging & Config (workflow missing flet-notifications patch, stale README, unpinned deps, Python 3.14 refs) — 14 findings |
+| `audit-08-ai-in-session.md` | Audit | Session-level AI integration and cell actions |
+| `audit-09-ai-output-rendering.md` | Audit | Output rendering, ANSI escape sequences and markdown parser |
+| `audit-10-model-loading-ux.md` | Audit | Model picker, status watchdog and header pill synchronization |
+| `audit-11-session-store-lock.md` | Audit | Session store lock & concurrency analysis |
+| `audit-12-background-performance.md` | Audit | Background tasks & performance audit (keepalive, credit sweep, router watchdog, reconcile, storage) |
 | `dep-01-flet-core.md` | Dep | Flet 1.0.4 usage audit — critical `page.update()` in `use_effect`, hook misuse, missing `on_unmounted`, unexposed Flet APIs — 12 findings |
 | `dep-02-flet-ecosystem.md` | Dep | Flet satellite packages (flet_ads, flet_notifications, flet_desktop, flet_terminal, flet_platform_assets, flet_cli) — gaps, dead deps, rewarded ad policy violations — 6 package audits |
 | `dep-03-colab-libs.md` | Dep | google-colab-cli 0.7.4 API reference & gap analysis — auth duplication, session_ops reimplements CLI commands, singleton bypass, terminal endpoint mismatch — 30 gaps |

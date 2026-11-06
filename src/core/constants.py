@@ -94,6 +94,8 @@ ENGINE_USER_AGENT = f"CollabShell/{APP_VERSION}"
 COST_STEP = 1
 DAILY_FREE_CREDITS = 50
 DAILY_PREMIUM_CREDITS = 500
+STORAGE_CREDITS = "colab_credits"
+STORAGE_LAST_RESET = "colab_last_reset"
 
 # ── Kiri License (license.kiri.ng) ──────────────────────────────────────────
 # The only checkout in this build: direct APK installs, Windows and Linux.

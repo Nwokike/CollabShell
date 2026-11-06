@@ -194,3 +194,51 @@ def test_cost_step_is_one_credit():
 def test_not_enough_credits_carries_balance():
     err = NotEnoughCredits(3)
     assert err.balance == 3
+
+
+# ── persistent storage parity (DDGS shape) ───────────────────────────────────
+
+
+class _FakeStorage:
+    def __init__(self):
+        self.data: dict[str, str] = {}
+
+    async def get(self, key: str, default=None):
+        return self.data.get(key, default)
+
+    async def set(self, key: str, value: str):
+        self.data[key] = str(value)
+        return True
+
+
+def test_storage_preserves_balance_on_restart():
+    """Restarting the app on the same day must NOT reset to 50 — no cheat!"""
+    from core.constants import STORAGE_CREDITS
+
+    storage = _FakeStorage()
+    svc1 = CreditService(storage=storage)
+    assert asyncio.run(svc1.initialize()) == 50
+    # User spends 20 credits, 30 remaining
+    tx = asyncio.run(svc1.reserve(20))
+    assert asyncio.run(svc1.commit(tx)) == 30
+    assert storage.data[STORAGE_CREDITS] == "30"
+
+    # New app session starts with the same storage
+    svc2 = CreditService(storage=storage)
+    assert asyncio.run(svc2.initialize()) == 30
+    assert asyncio.run(svc2.get_balance()) == 30
+
+
+def test_storage_daily_reset_with_no_rollover():
+    """Yesterday's surplus or deficit resets to the daily cap on UTC day boundary."""
+    from core.constants import STORAGE_CREDITS, STORAGE_LAST_RESET
+
+    storage = _FakeStorage()
+    # Stored 70 credits (e.g. from ad rewards) on an old date
+    storage.data[STORAGE_CREDITS] = "70"
+    storage.data[STORAGE_LAST_RESET] = "1970-01-01"
+
+    svc = CreditService(storage=storage)
+    assert asyncio.run(svc.initialize()) == 50
+    assert storage.data[STORAGE_CREDITS] == "50"
+

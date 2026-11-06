@@ -70,6 +70,29 @@ def write_cells_to_active_tab(
     active_tab = bridges.get("active_tab")
     active_tab = active_tab() if callable(active_tab) else None
     if isinstance(active_tab, dict) and active_tab.get("view") == "script":
+        # A script tab is active — create a dedicated notebook tab
+        create = bridges.get("create_tab")
+        if create is not None:
+            new_tab = create(name="Notebook")
+            target_tab_id = new_tab.get("id") if isinstance(new_tab, dict) else None
+        else:
+            return None
+    else:
+        target_tab_id = (
+            bridges.get("active_tab_id")()
+            if callable(bridges.get("active_tab_id"))
+            else None
+        )
+        if not target_tab_id:
+            create = bridges.get("create_tab")
+            if create is not None:
+                new_tab = create(name="Notebook")
+                target_tab_id = (
+                    new_tab.get("id") if isinstance(new_tab, dict) else None
+                )
+            else:
+                return None
+    if not target_tab_id:
         return None
     insert = bridges.get("insert_cells")
     if insert is None:
@@ -89,7 +112,30 @@ def write_cells_to_active_tab(
     ]
     if not wire:
         return None
-    return insert(bridges.get("active_tab_id")(), wire)
+    return insert(target_tab_id, wire)
+
+
+def create_notebook_tab(session_name: str, name: str | None = None) -> dict | None:
+    """Create a new notebook tab in the session (assistant bridge)."""
+    bridges = _bridges(session_name)
+    if not bridges:
+        return None
+    create = bridges.get("create_tab")
+    if create is None:
+        return None
+    return create(name=name)
+
+
+def switch_notebook_tab(session_name: str, tab_id: str) -> bool:
+    """Switch the active notebook tab in the session (assistant bridge)."""
+    bridges = _bridges(session_name)
+    if not bridges:
+        return False
+    switch = bridges.get("switch_tab")
+    if switch is None:
+        return False
+    switch(tab_id)
+    return True
 
 
 def reveal_cell(session_name: str, cell_id: str) -> bool:
@@ -255,8 +301,17 @@ def NotebookView(
             on_cells_change(total)
 
     def _publish(tab, new_list):
-        tab["cells"] = new_list
-        _set_tabs(list(tabs_ref.current or []))
+        """Publish a new cell list for a tab as an IMMUTABLE update.
+
+        Mutating ``tab["cells"]`` in place left the outer tabs list equal
+        (same dict objects), so flet's use_state shallow-equality check
+        skipped the re-render — a moved cell never changed position on
+        screen. A fresh tab dict + fresh outer list always repaints.
+        """
+        new_tab = {**tab, "cells": new_list}
+        new_tabs = [new_tab if t is tab else t for t in (tabs_ref.current or [])]
+        _set_tabs(new_tabs)
+        return new_tab
 
     def _new_tab(name=None, cells=None, tab_id=None, view="notebook"):
         tab_seq_ref.current[0] += 1
@@ -505,12 +560,18 @@ def NotebookView(
     # they need. They are always offered: the assistant is part of the app, not
     # a mode to switch on.
 
-    def _insert_ai_answer(cell_id: str, text: str, kind: str) -> bool:
+    def _insert_ai_answer(
+        cell_id: str, text: str, kind: str, *, soft_fallback: bool = False
+    ) -> bool:
         """Put an answer under `cell_id` as a new cell, focused and editable.
 
         Markdown for prose (Explain), code for code (Fix, Suggest). Returns
         False when there was nothing to insert — the caller turns that into a
         notice rather than leaving an empty cell behind.
+
+        ``soft_fallback`` (Suggest only): when the reply is prose rather than
+        insertable code, the suggestion lands as a markdown cell instead of
+        being dropped.
         """
         from components.notebook_cell import CellData
 
@@ -520,19 +581,24 @@ def NotebookView(
         tab = _get_tab()
         if tab is None:
             return False
+        insert_kind = kind
         if kind == "code":
             from services.cell_ai import extract_code
 
-            body = extract_code(body)
-            if not body:
-                return False
+            code = extract_code(body)
             # A hedging model can return prose mixed with the code; only
             # insert something that actually parses.
             try:
-                compile(body, "<assistant>", "exec")
+                compile(code, "<assistant>", "exec")
             except SyntaxError:
+                code = ""
+            if code:
+                body = code
+            elif soft_fallback:
+                insert_kind = "markdown"
+            else:
                 return False
-        cell = CellData(cell_type=kind, source=body, origin="assistant")
+        cell = CellData(cell_type=insert_kind, source=body, origin="assistant")
         inserted = _insert_cells(tab["id"], [cell], after_id=cell_id)
         if not inserted:
             return False
@@ -594,7 +660,11 @@ def NotebookView(
             return
         page.pop_dialog()
 
-        if not _insert_ai_answer(cell_id, text, kind):
+        # A suggestion that arrives as prose still shows the idea: it lands as
+        # a markdown cell the user can read and lift code from, rather than
+        # "nothing usable". Fix keeps its strict code-cell behavior.
+        soft = action == "suggest"
+        if not _insert_ai_answer(cell_id, text, kind, soft_fallback=soft):
             _ai_notice("The Assistant returned nothing usable.")
 
     def _ai_notice(message: str):
@@ -611,7 +681,8 @@ def NotebookView(
         return _output_digest(cell)
 
     def _show_cell_ai_menu(cell_id: str):
-        """The Ask-AI menu: Explain / Fix error / Suggest next."""
+        """The Ask-AI menu: Explain / Suggest next (Fix Error lives in the
+        output row, shown only when the run failed)."""
         from components.notebook_cell.actions import ai_menu
 
         ai_menu(
@@ -633,7 +704,7 @@ def NotebookView(
             return
         c_list = list(tab["cells"] or [])
         c_list.append(CellData(cell_type=cell_type))
-        _publish(tab, c_list)
+        tab = _publish(tab, c_list)
         _save(tab)
 
     def _delete_cell(cell: CellData):
@@ -641,7 +712,7 @@ def NotebookView(
         if tab is None:
             return
         c_list = [c for c in tab["cells"] or [] if c.id != cell.id]
-        _publish(tab, c_list)
+        tab = _publish(tab, c_list)
         _save(tab)
 
     def _move_cell(cell: CellData, direction: int):
@@ -654,7 +725,7 @@ def NotebookView(
         if idx < 0 or not 0 <= new_idx < len(c_list):
             return
         c_list[idx], c_list[new_idx] = c_list[new_idx], c_list[idx]
-        _publish(tab, c_list)
+        tab = _publish(tab, c_list)
         _save(tab)
 
     def _clear_cell_output(cell: CellData):
@@ -703,7 +774,7 @@ def NotebookView(
             c_list.append(new_cell)
         else:
             c_list.insert(anchor_idx if above else anchor_idx + 1, new_cell)
-        _publish(tab, c_list)
+        tab = _publish(tab, c_list)
         _save(tab)
         set_active_cell_id(new_cell.id)
         _focus_cell(new_cell.id)
@@ -781,15 +852,18 @@ def NotebookView(
         if first is not None:
             set_active_cell_id(first.id)
 
-    def _create_tab(e=None):
-        tab = _new_tab()
+    def _create_tab(e=None, name=None):
+        tab_name = name if isinstance(name, str) and name.strip() else None
+        tab = _new_tab(name=tab_name)
         tabs = list(tabs_ref.current or [])
         tabs.append(tab)
         _set_tabs(tabs)
         _save(tab)
         _save_index()
         set_active_tab_id(tab["id"])
-        set_active_cell_id((tab["cells"][0]).id)
+        if tab.get("cells"):
+            set_active_cell_id((tab["cells"][0]).id)
+        return {"id": tab["id"], "name": tab["name"]}
 
     def _create_script_tab(name=None, path=None):
         """Open a new Python script tab and make it the active tab."""
@@ -1015,7 +1089,7 @@ def NotebookView(
         merged = insert_cells_into(target, cells, at_end, after_id)
         if merged is None:
             return None
-        _publish(target, merged)
+        target = _publish(target, merged)
         _save(target)
         return cells
 
@@ -1146,7 +1220,7 @@ def NotebookView(
                         imported = py_to_cells(raw)
                     else:
                         imported = ipynb_to_cells(json.loads(raw))
-                    _publish(tab, [CellData.from_dict(c) for c in imported])
+                    tab = _publish(tab, [CellData.from_dict(c) for c in imported])
                     _save(tab)
                     controller.show_snack(
                         f"✅ Imported {len(imported)} cell{'s' if len(imported) != 1 else ''} from {files[0].name}"
@@ -1218,6 +1292,7 @@ def NotebookView(
     # render so a rebuilt view is never stale.
     _SESSION_BRIDGES[session_name] = {
         "insert_cells": _insert_cells,
+        "create_tab": lambda name=None: _create_tab(name=name),
         "list_tabs": lambda: [
             {
                 "id": t["id"],
@@ -1445,15 +1520,11 @@ def NotebookView(
                 is_active=cell.id == active_cell_id,
                 on_focus_change=_on_cell_focus,
                 focus_token=(focus_req[1] if focus_req[0] == cell.id else 0),
-                # Always offered: the assistant is part of the app. One direct
-                # action instead of a three-option menu — the output row
-                # carries Suggest Next / Fix Error where they belong.
-                on_ask_ai=lambda c=cell: page.run_task(
-                    _run_cell_ai, "explain", c.id, "markdown"
-                ),
-                on_suggest_next=lambda c=cell: page.run_task(
-                    _run_cell_ai, "suggest", c.id, "code"
-                ),
+                # Always offered: the assistant is part of the app. The cell
+                # icon opens the two-option Ask-AI menu (Explain / Suggest
+                # next); Fix Error is in the output row, where it appears
+                # only when the run actually failed.
+                on_ask_ai=lambda c=cell: _show_cell_ai_menu(c.id),
                 on_fix_error=lambda c=cell: page.run_task(
                     _run_cell_ai, "fix", c.id, "code"
                 ),

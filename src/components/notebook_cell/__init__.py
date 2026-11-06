@@ -105,7 +105,6 @@ def NotebookCell(
     on_focus_change: Callable[[str, bool], None] | None = None,
     focus_token: int = 0,
     on_ask_ai: Callable[[], None] | None = None,
-    on_suggest_next: Callable[[], None] | None = None,
     on_fix_error: Callable[[], None] | None = None,
 ) -> ft.Control:
     """Renders one notebook cell. Re-renders reactively when `cell` changes."""
@@ -365,18 +364,11 @@ def NotebookCell(
                         visible=bool(output_controls),
                         on_click=lambda e: page.run_task(_copy_output_task, e),
                     ),
-                    # After-run AI actions: Suggest Next always, Fix Error
-                    # only when the run looks like it failed.
+                    # After-run AI actions: Fix Error ONLY when the run looks
+                    # like it failed (Suggest Next moved into the cell-level
+                    # Ask-AI menu on the owner's instruction).
                     *(
                         [
-                            ft.IconButton(
-                                ft.Icons.AUTO_AWESOME_OUTLINED,
-                                icon_size=tokens.ICON_SM,
-                                tooltip="Suggest next cell",
-                                on_click=lambda e: (
-                                    on_suggest_next() if on_suggest_next else None
-                                ),
-                            ),
                             ft.IconButton(
                                 ft.Icons.BUILD_ROUNDED,
                                 icon_size=tokens.ICON_SM,
@@ -390,7 +382,7 @@ def NotebookCell(
                                 ),
                             ),
                         ]
-                        if on_suggest_next is not None
+                        if on_fix_error is not None
                         else []
                     ),
                     ft.IconButton(

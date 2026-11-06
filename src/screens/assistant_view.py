@@ -107,6 +107,16 @@ def _starter_rows():
             "What notebook tabs are open?",
             "List the notebook tabs I have open",
         ),
+        (
+            ft.Icons.NOTE_ADD_ROUNDED,
+            "Create a new notebook",
+            "Create a new notebook tab named Starter",
+        ),
+        (
+            ft.Icons.SWAP_HORIZ_ROUNDED,
+            "Switch notebook tab",
+            "Switch to the notebook tab named nb1",
+        ),
         # ── files ──
         (
             ft.Icons.FOLDER_OPEN_ROUNDED,
@@ -195,6 +205,8 @@ _TOOL_LABELS = {
     "upload_file": "Uploading a file",
     "write_cells": "Writing cells",
     "list_notebook_tabs": "Listing notebook tabs",
+    "create_notebook_tab": "Creating a notebook tab",
+    "switch_notebook_tab": "Switching notebook tab",
     "get_usage": "Checking resource usage",
     "get_log": "Reading the session log",
     "restart_kernel": "Restarting the kernel",
@@ -724,6 +736,44 @@ class ChatSession:
         self._task = asyncio.ensure_future(self._run_turn(text))
         self._task.add_done_callback(self._on_turn_done)
 
+    def adopt_transcript(self, exchanges: list[dict]) -> bool:
+        """Adopt an exchange produced elsewhere, as history — not as a turn.
+
+        The terminal explain dialog asks its own questions through
+        `ai_quick.ask`, which already spent the credits for each answer. Those
+        turns belong in the conversation anyway ("continue from chat"), so each
+        ``{"question": ..., "answer": ...}`` lands as a user turn plus an
+        assistant turn and is persisted — with no second metered call, so the
+        exchange can never be paid for twice.
+
+        Returns False when a turn is running (that turn owns the transcript),
+        when teardown has started, or when nothing usable arrived, so the
+        caller can say so instead of silently dropping the thread.
+        """
+        if self._busy or self._closing:
+            return False
+
+        added = False
+        for item in exchanges or []:
+            if not isinstance(item, dict):
+                continue
+            question = str(item.get("question") or "").strip()
+            answer = str(item.get("answer") or "").strip()
+            if not question or not answer:
+                continue
+            self._turns.append({"role": "user", "text": question})
+            turn = _empty_turn()
+            turn["text"] = answer
+            turn["partial"] = False
+            self._turns.append(turn)
+            added = True
+
+        if not added:
+            return False
+        self._persist_history()
+        self._render()
+        return True
+
     async def _run_turn(self, text: str) -> None:
         from services import ai_credits
 
@@ -1011,101 +1061,6 @@ class ChatSession:
             handler(getattr(self.state, "active_session_name", "") or "", cell_id)
         except Exception:
             logger.debug("reveal_cell failed", exc_info=True)
-
-    def _open_terminal_for_session(self, row: dict | None = None) -> None:
-        """Switch to the terminal tab for the active session, showing the live
-        PTY the tool talked to.
-
-        The chat rides its own view on top of the shell: without minimizing
-        first, the tab switch happens UNDER the chat and the user sees
-        nothing happen.
-        """
-        try:
-            self.close()
-        except Exception:
-            logger.debug("assistant minimize failed", exc_info=True)
-        handler = getattr(self.controller, "open_terminal", None)
-        if not callable(handler):
-            return
-        try:
-            handler(getattr(self.state, "active_session_name", "") or "")
-        except Exception:
-            logger.debug("open_terminal failed", exc_info=True)
-
-    def _open_notebook_for_session(self, row: dict | None = None) -> None:
-        """Open the session's notebook screen ON the Assistant tab — the
-        notebook where the AI's runs live (one per session, tied to the AI
-        conversation). _exec steps write code + output into that tab, so it
-        always shows what the AI has been doing (DDGS open-in-results)."""
-        try:
-            self.close()
-        except Exception:
-            logger.debug("assistant minimize failed", exc_info=True)
-        handler = getattr(self.controller, "open_notebook", None)
-        if not callable(handler):
-            return
-        session_name = getattr(self.state, "active_session_name", "") or ""
-        try:
-            handler(session_name)
-        except Exception:
-            logger.debug("open_notebook failed", exc_info=True)
-        # Navigation races the notebook screen's mount, so the tab creation,
-        # insert and reveal all happen in the retry task.
-        self.page.run_task(self._open_assistant_tab, row or {})
-
-    async def _open_assistant_tab(self, row: dict) -> None:
-        """Ensure the session's Assistant tab exists, land the AI's run in it
-        (deduped by source), and reveal the newest cell."""
-        import asyncio
-
-        from screens.session.notebook_view import _SESSION_BRIDGES, reveal_cell
-
-        session_name = getattr(self.state, "active_session_name", "") or ""
-        for _ in range(20):
-            bridges = _SESSION_BRIDGES.get(session_name)
-            if bridges is not None:
-                break
-            await asyncio.sleep(0.15)
-        else:
-            return
-        try:
-            tab_id = bridges["ensure_assistant_tab"]()
-            cell_id = None
-            refs = row.get("refs") or []
-            if refs:
-                cell_id = str(refs[0].get("cell_id") or refs[0].get("id") or "")
-            elif row.get("name") == "_exec":
-                code = str((row.get("args") or {}).get("code", "") or "")
-                cells = bridges["read_cells"](tab_id)
-                existing = next(
-                    (
-                        c
-                        for c in reversed(cells)
-                        if c.get("origin") == "assistant"
-                        and (c.get("source") or "").strip() == code.strip()
-                    ),
-                    None,
-                )
-                if existing is None and code.strip():
-                    inserted = bridges["insert_cells_into"](
-                        tab_id,
-                        [
-                            {
-                                "type": "code",
-                                "source": code,
-                                "outputs": row.get("outputs", []),
-                                "origin": "assistant",
-                            }
-                        ],
-                    )
-                    if inserted:
-                        cell_id = str(getattr(inserted[0], "id", "") or "")
-                elif existing is not None:
-                    cell_id = str(existing.get("id") or "")
-            if cell_id:
-                reveal_cell(session_name, cell_id)
-        except Exception:
-            logger.debug("assistant tab open failed", exc_info=True)
 
     def _copy_step_output(self, outputs: list) -> None:
         """Copy step output to clipboard."""
@@ -1428,8 +1383,6 @@ class ChatSession:
                 state=row["state"],
                 fallback_text=fallback,
                 page=self.page,
-                on_open_terminal=lambda r=row: self._open_terminal_for_session(r),
-                on_open_notebook=lambda r=row: self._open_notebook_for_session(r),
             )
             kids.append(step_output)
 

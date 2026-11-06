@@ -30,6 +30,8 @@ from core.constants import (
     COST_STEP,
     DAILY_FREE_CREDITS,
     DAILY_PREMIUM_CREDITS,
+    STORAGE_CREDITS,
+    STORAGE_LAST_RESET,
 )
 
 # A hold older than this is released without charging.
@@ -80,16 +82,47 @@ class CreditService:
         except Exception:
             pass
 
-    def _reset_if_new_day(self) -> None:
+    async def _check_daily_reset(self, is_premium: bool = False) -> None:
         """Flat UTC reset with no rollover: yesterday's unused credits go."""
-        if UTC_MIDNIGHT_RESET and self._day != _today_utc():
-            self._day = _today_utc()
-            self._balance = None
+        if not UTC_MIDNIGHT_RESET:
+            return
+        today = _today_utc()
+        if self._storage is not None:
+            last_reset = await self._storage.get(STORAGE_LAST_RESET)
+            if last_reset != today:
+                new_balance = self.daily_cap(is_premium)
+                await self._storage.set(STORAGE_CREDITS, str(new_balance))
+                await self._storage.set(STORAGE_LAST_RESET, today)
+                self._balance = new_balance
+                self._day = today
+                self._sync_state(new_balance)
+                return
+            if self._balance is None:
+                val = await self._storage.get(STORAGE_CREDITS)
+                if val is not None:
+                    try:
+                        self._balance = int(val)
+                    except (TypeError, ValueError):
+                        self._balance = self.daily_cap(is_premium)
+                else:
+                    self._balance = self.daily_cap(is_premium)
+                self._day = today
+                self._sync_state(self._balance)
+            return
+
+        if self._day != today:
+            self._day = today
+            self._balance = self.daily_cap(is_premium)
+            self._sync_state(self._balance)
+
+    async def initialize(self, is_premium: bool = False) -> int:
+        """Load credits from storage, reset if new day. Returns current balance."""
+        return await self.get_balance(is_premium)
 
     async def get_balance(self, is_premium: bool = False) -> int:
-        """Balance remaining today._refills to the cap on a new UTC day."""
+        """Balance remaining today. Refills to the cap on a new UTC day."""
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
             balance = max(0, self._balance)
@@ -97,11 +130,13 @@ class CreditService:
             return balance
 
     async def add_credits(self, amount: int, is_premium: bool = False) -> int:
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
             self._balance = max(0, self._balance + int(amount))
+            if self._storage is not None:
+                await self._storage.set(STORAGE_CREDITS, str(self._balance))
             self._sync_state(self._balance)
             return self._balance
 
@@ -116,8 +151,8 @@ class CreditService:
         A hold reduces spendable balance immediately so a burst of turns cannot
         each see the full balance.
         """
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             balance = (
                 self._balance
                 if self._balance is not None
@@ -158,8 +193,8 @@ class CreditService:
         """
         if not tx:
             return await self.get_balance(is_premium)
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             if tx in self._settled:
                 return max(0, self._balance or 0)
             self._settled.add(tx)
@@ -168,12 +203,16 @@ class CreditService:
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
             self._balance = max(0, self._balance - charge)
+            if self._storage is not None:
+                await self._storage.set(STORAGE_CREDITS, str(self._balance))
+            self._sync_state(self._balance)
             return self._balance
 
     async def rollback(self, tx: str | None, is_premium: bool = False) -> int:
         """Release a hold without charging (cancelled or failed turn)."""
         if not tx:
             return await self.get_balance(is_premium)
+        await self._check_daily_reset(is_premium)
         async with self._lock:
             self._holds.pop(tx, None)
             self._settled.add(tx)
@@ -181,8 +220,8 @@ class CreditService:
 
     async def available(self, is_premium: bool = False) -> int:
         """Spendable now: balance minus outstanding holds."""
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             balance = (
                 self._balance
                 if self._balance is not None
@@ -197,11 +236,14 @@ class CreditService:
         balance 1, and credits must never block work, so the turn runs anyway
         and pays here instead. Clamps at zero like commit.
         """
+        await self._check_daily_reset(is_premium)
         async with self._lock:
-            self._reset_if_new_day()
             if self._balance is None:
                 self._balance = self.daily_cap(is_premium)
             self._balance = max(0, self._balance - max(0, int(amount)))
+            if self._storage is not None:
+                await self._storage.set(STORAGE_CREDITS, str(self._balance))
+            self._sync_state(self._balance)
             return self._balance
 
     async def sweep_expired_holds(self, max_age_sec: float = ROLLBACK_SECONDS) -> int:
@@ -215,8 +257,8 @@ class CreditService:
 
         Returns how many holds were released.
         """
+        await self._check_daily_reset()
         async with self._lock:
-            self._reset_if_new_day()
             now = time.monotonic()
             expired = [
                 tx

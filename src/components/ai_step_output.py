@@ -9,8 +9,6 @@ showed an empty notebook).
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import flet as ft
 
 from components.ansi_parser import parse_ansi_to_flet_text
@@ -112,38 +110,6 @@ def _output_panel(
     )
 
 
-def _open_action_buttons(
-    tool_name: str,
-    state: str,
-    on_open_terminal: Callable[[], None] | None,
-    on_open_notebook: Callable[[], None] | None,
-) -> list:
-    """The Open action for a finished step, as a labeled TextButton:
-    Open Terminal ONLY for read_terminal steps, Open Notebook for
-    everything else (the owner-confirmed rule)."""
-    if state not in ("running", "done"):
-        return []
-    if tool_name == "read_terminal" and on_open_terminal is not None:
-        return [
-            ft.TextButton(
-                "Open Terminal",
-                icon=ft.Icons.TERMINAL_ROUNDED,
-                on_click=lambda e: on_open_terminal(),
-                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-            )
-        ]
-    if tool_name != "read_terminal" and on_open_notebook is not None:
-        return [
-            ft.TextButton(
-                "Open Notebook",
-                icon=ft.Icons.DESCRIPTION_ROUNDED,
-                on_click=lambda e: on_open_notebook(),
-                style=ft.ButtonStyle(padding=ft.Padding(4, 2, 4, 2)),
-            )
-        ]
-    return []
-
-
 def build_ai_step_output(
     tool_name: str,
     outputs: list,
@@ -151,8 +117,6 @@ def build_ai_step_output(
     *,
     fallback_text: str = "",
     page=None,
-    on_open_terminal: Callable[[], None] | None = None,
-    on_open_notebook: Callable[[], None] | None = None,
 ) -> ft.Control:
     """The notebook output widget for one tool step.
 
@@ -163,13 +127,10 @@ def build_ai_step_output(
         fallback_text: Shown through the same ANSI renderer when the tool
             produced no structured outputs (e.g. the streamed live text).
         page: The page, so Copy uses the notebook's own copy_output helper.
-        on_open_terminal / on_open_notebook: Open actions (labeled buttons).
     """
     output_controls = parse_outputs_to_controls(outputs)
 
-    action_buttons = _open_action_buttons(
-        tool_name, state, on_open_terminal, on_open_notebook
-    )
+    action_buttons: list = []
     # The notebook's own Copy Output button — ONLY when there is something
     # copyable (never over a "None idle" placeholder).
     if page is not None and _copyable_text(outputs):

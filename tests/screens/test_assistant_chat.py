@@ -1032,6 +1032,8 @@ _STARTER_TOOL_MAP = {
     "read_notebook": "Read my active notebook and explain",
     "write_cells": "Write a cell that loads my data",
     "list_notebook_tabs": "List the notebook tabs I have open",
+    "create_notebook_tab": "Create a new notebook tab named",
+    "switch_notebook_tab": "Switch to the notebook tab named",
     "list_files": "List the files in my session",
     "read_file": "Read /content/data.csv",
     "upload_file": "Upload ~/data.csv",
@@ -1092,3 +1094,79 @@ def test_the_starters_are_prompts_not_tool_names():
         assert not prompt.endswith("."), (
             f"prompts are sentences, not instructions: {prompt!r}"
         )
+
+
+# ── adopting an exchange produced elsewhere ─────────────────────────────────
+
+
+def _terminal_exchange():
+    """What the terminal explain dialog hands over, in order."""
+    return [
+        {"question": "Explain this terminal output:\n```\nls: cannot open directory\n```",
+         "answer": "The directory does not exist."},
+        {"question": "which command makes it?",
+         "answer": "mkdir -p <the path>."},
+    ]
+
+
+def test_adopt_transcript_lands_both_sides_as_history(tmp_path, monkeypatch):
+    """The terminal thread must survive the trip into the chat."""
+    session = _session(tmp_path, monkeypatch)
+    session._turns.clear()
+
+    assert session.adopt_transcript(_terminal_exchange()) is True
+
+    assert [t["role"] for t in session._turns] == [
+        "user", "assistant", "user", "assistant",
+    ]
+    assert session._turns[1]["text"] == "The directory does not exist."
+    assert not session._turns[1]["partial"]
+    assert session._turns[3]["text"] == "mkdir -p <the path>."
+    # The answers carry no fake receipts: they were not run as a turn here.
+    assert session._turns[1]["steps"] == 0
+    assert session._turns[1]["cost"] == 0
+
+
+def test_adopt_transcript_persists_so_a_reopen_shows_it(tmp_path, monkeypatch):
+    """An adopted thread must outlive the session, or "continue in chat" is
+    a dead end once the app is reopened."""
+    session = _session(tmp_path, monkeypatch)
+    session._turns.clear()
+    session.adopt_transcript(_terminal_exchange())
+
+    reopened = assistant_view.ChatSession(
+        FakePage(), session.state, NS(credits=None), None
+    )
+    texts = [t.get("text") for t in reopened._turns]
+    assert "The directory does not exist." in texts
+    assert "mkdir -p <the path>." in texts
+
+
+def test_adopt_transcript_refuses_while_a_turn_is_running(tmp_path, monkeypatch):
+    """A running turn owns the transcript: adopting mid-answer would interleave
+    two conversations inside one bubble."""
+    session = _session(tmp_path, monkeypatch)
+    session._turns.clear()
+    session._busy = True
+
+    assert session.adopt_transcript(_terminal_exchange()) is False
+    assert session._turns == []
+
+
+def test_adopt_transcript_ignores_half_an_exchange(tmp_path, monkeypatch):
+    """A question with no answer (or the reverse) is not a turn to show."""
+    session = _session(tmp_path, monkeypatch)
+    session._turns.clear()
+
+    assert (
+        session.adopt_transcript(
+            [
+                {"question": "why?", "answer": ""},
+                {"question": "", "answer": "nothing asked"},
+                {"question": "ok", "answer": "fine"},
+            ]
+        )
+        is True
+    )
+    assert [t.get("role") for t in session._turns] == ["user", "assistant"]
+    assert [t.get("text") for t in session._turns] == ["ok", "fine"]
