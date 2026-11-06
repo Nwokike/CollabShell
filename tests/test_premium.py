@@ -213,12 +213,19 @@ def test_settings_ai_section_reports_the_premium_cap():
 
     page = _FakePage(mobile=False)
     credits = types.SimpleNamespace()
+    state_ = types.SimpleNamespace(
+        ai_model="auto",
+        ai_router_url="x",
+        is_premium=True,
+    )
 
-    async def _balance(is_premium=False):
-        return 500 if is_premium else 50
+    async def _balance():
+        # daily_cap/get_balance read state.is_premium LIVE (DDGS parity) —
+        # no parameters since the 50-vs-500 boot-order fix.
+        return 500 if state_.is_premium else 50
 
-    def _cap(is_premium=False):
-        return 500 if is_premium else 50
+    def _cap():
+        return 500 if state_.is_premium else 50
 
     credits.get_balance = _balance
     credits.daily_cap = _cap
@@ -227,11 +234,6 @@ def test_settings_ai_section_reports_the_premium_cap():
         storage=None,
         ad_service=None,
         premium=types.SimpleNamespace(available=True),
-    )
-    state_ = types.SimpleNamespace(
-        ai_model="auto",
-        ai_router_url="x",
-        is_premium=True,
     )
     ai_section.build_ai_section(page, state_, services)  # schedules the load
     column = ai_section.build_ai_section(page, state_, services)  # rebuild

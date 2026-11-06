@@ -25,7 +25,7 @@ def _stubs(**state_overrides):
     }
     base.update(state_overrides)
     state = NS(**base)
-    credits = _FakeCredits(balance=42, premium_balance=500)
+    credits = _FakeCredits(state, balance=42, premium_balance=500)
     services = NS(
         credits=credits,
         storage=None,
@@ -63,24 +63,27 @@ class _FakePage:
 
 
 class _FakeCredits:
-    def __init__(self, balance=50, premium_balance=500):
+    """Mirrors the real service: the cap reads state.is_premium LIVE."""
+
+    def __init__(self, state, balance=50, premium_balance=500):
+        self._state = state
         self._balance = balance
         self._premium = premium_balance
         self.added = []
 
-    async def get_balance(self, is_premium=False):
-        return self._premium if is_premium else self._balance
+    async def get_balance(self):
+        return self._premium if self._state.is_premium else self._balance
 
-    async def add_credits(self, amount, is_premium=False):
+    async def add_credits(self, amount):
         self.added.append(amount)
-        if is_premium:
+        if self._state.is_premium:
             self._premium += amount
         else:
             self._balance += amount
         return self._balance
 
-    def daily_cap(self, is_premium=False):
-        return 500 if is_premium else 50
+    def daily_cap(self):
+        return 500 if self._state.is_premium else 50
 
 
 # ── the section ─────────────────────────────────────────────────────────────

@@ -141,7 +141,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             if balance <= 0:
                 # Same wording the assistant gate shows, so the two agree.
                 return ai_credits.out_of_credits_notice(balance, is_premium)
-            cap = credits.daily_cap(is_premium=is_premium)
+            cap = credits.daily_cap()  # reads state.is_premium live (DDGS parity)
             return f"{balance} of {cap} credits left today · resets at 00:00 UTC"
         except Exception:
             return "Credits update as you use the assistant."

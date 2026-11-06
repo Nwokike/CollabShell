@@ -255,3 +255,20 @@ def test_storage_daily_reset_with_no_rollover():
     assert asyncio.run(svc.initialize()) == 50
     assert storage.data[STORAGE_CREDITS] == "50"
 
+
+
+def test_daily_cap_reads_premium_live_from_state():
+    """Regression (pre-ship verifier): ai_section called daily_cap with the
+    dead is_premium parameter and the TypeError was swallowed by the UI's
+    except — the credits line showed the fallback forever. The real service
+    takes NO parameters; the cap always reads state.is_premium."""
+    from core.state import state
+
+    svc = _svc()
+    state.is_premium = False
+    assert svc.daily_cap() == 50
+    state.is_premium = True
+    try:
+        assert svc.daily_cap() == 500
+    finally:
+        state.is_premium = False

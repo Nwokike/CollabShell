@@ -269,6 +269,12 @@ class AppController:
         self.storage = StorageService(page)
         self.ad_service = AdService(page)
         state.ad_service = self.ad_service
+        # ColabService exists BEFORE the first await: a connectivity event
+        # dispatched during gather_consent runs _bootstrap_state, which reads
+        # self.colab_service. Constructing it after that await was the second
+        # half of the boot race — the verifier caught the None-attribute
+        # misfire that misreported offline and flipped app_ready early.
+        self.colab_service = ColabService()
         await self.ad_service.gather_consent()
         page.run_task(self.ad_service.preload_interstitial)
 
@@ -296,7 +302,6 @@ class AppController:
         self.session_notify.mount()
         page.run_task(self.session_notify.request_permission)
 
-        self.colab_service = ColabService()
         # Keep the active runtime alive while the app is open: Colab
         # idle-prunes VMs after a few minutes without kernel activity, and
         # only real kernel activity (not WS pings) resets that timer.

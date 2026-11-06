@@ -6,8 +6,8 @@ import logging
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from core import tokens
-from core.styles import build_banner_ad
 from screens.settings.about_section import build_about_section
 from screens.settings.account_section import build_account_section
 from screens.settings.advanced_section import build_advanced_section
@@ -90,13 +90,13 @@ def SettingsScreen() -> ft.Control:
     sections: tuple[tuple[str, object], ...] = (
         ("APPEARANCE", build_preferences_section),
         ("AUTHENTICATION", build_account_section),
-        ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
+        ("SPONSOR", lambda page, state, services: pooled_banner_ad("settings-top", page)),
         ("ASSISTANT", build_ai_section),
         *([] if CHANNEL == "play" else [("PREMIUM", build_premium_section)]),
         ("HARDWARE DEFAULTS", build_hardware_section),
         ("EXECUTION", build_execution_section),
         ("SESSION BEHAVIOR", build_behavior_section),
-        ("SPONSOR", lambda page, state, services: build_banner_ad(page)),
+        ("SPONSOR", lambda page, state, services: pooled_banner_ad("settings-bottom", page)),
         ("ADVANCED", build_advanced_section),
         ("TROUBLESHOOTING & LOGS", build_logs_section),
         ("DATA & STORAGE", build_data_section),
