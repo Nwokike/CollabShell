@@ -69,8 +69,18 @@ class CreditService:
 
     # ── daily cap ──────────────────────────────────────────────────────────
 
-    def daily_cap(self, is_premium: bool = False) -> int:
-        return DAILY_PREMIUM_CREDITS if is_premium else DAILY_FREE_CREDITS
+    def daily_cap(self) -> int:
+        """The cap for WHO IS LOGGED IN RIGHT NOW, read live from state.
+
+        DDGS parity (credit_service.py:242-248): the premium flag is never a
+        parameter. A parameter made the boot order a trap — main.py ran
+        initialize() before the licence loaded, the day's reset stamped the
+        FREE cap, and a paying user sat at 50 until midnight. state.is_premium
+        at the moment of the read is always the truth.
+        """
+        from core.state import state
+
+        return DAILY_PREMIUM_CREDITS if getattr(state, "is_premium", False) else DAILY_FREE_CREDITS
 
     def _sync_state(self, balance: int) -> None:
         """Mirror the balance into the observable so readers (wallet dialog,
@@ -82,7 +92,7 @@ class CreditService:
         except Exception:
             pass
 
-    async def _check_daily_reset(self, is_premium: bool = False) -> None:
+    async def _check_daily_reset(self) -> None:
         """Flat UTC reset with no rollover: yesterday's unused credits go."""
         if not UTC_MIDNIGHT_RESET:
             return
@@ -90,7 +100,7 @@ class CreditService:
         if self._storage is not None:
             last_reset = await self._storage.get(STORAGE_LAST_RESET)
             if last_reset != today:
-                new_balance = self.daily_cap(is_premium)
+                new_balance = self.daily_cap()
                 await self._storage.set(STORAGE_CREDITS, str(new_balance))
                 await self._storage.set(STORAGE_LAST_RESET, today)
                 self._balance = new_balance
@@ -103,37 +113,37 @@ class CreditService:
                     try:
                         self._balance = int(val)
                     except (TypeError, ValueError):
-                        self._balance = self.daily_cap(is_premium)
+                        self._balance = self.daily_cap()
                 else:
-                    self._balance = self.daily_cap(is_premium)
+                    self._balance = self.daily_cap()
                 self._day = today
                 self._sync_state(self._balance)
             return
 
         if self._day != today:
             self._day = today
-            self._balance = self.daily_cap(is_premium)
+            self._balance = self.daily_cap()
             self._sync_state(self._balance)
 
-    async def initialize(self, is_premium: bool = False) -> int:
+    async def initialize(self) -> int:
         """Load credits from storage, reset if new day. Returns current balance."""
-        return await self.get_balance(is_premium)
+        return await self.get_balance()
 
-    async def get_balance(self, is_premium: bool = False) -> int:
+    async def get_balance(self) -> int:
         """Balance remaining today. Refills to the cap on a new UTC day."""
-        await self._check_daily_reset(is_premium)
+        await self._check_daily_reset()
         async with self._lock:
             if self._balance is None:
-                self._balance = self.daily_cap(is_premium)
+                self._balance = self.daily_cap()
             balance = max(0, self._balance)
             self._sync_state(balance)
             return balance
 
-    async def add_credits(self, amount: int, is_premium: bool = False) -> int:
-        await self._check_daily_reset(is_premium)
+    async def add_credits(self, amount: int) -> int:
+        await self._check_daily_reset()
         async with self._lock:
             if self._balance is None:
-                self._balance = self.daily_cap(is_premium)
+                self._balance = self.daily_cap()
             self._balance = max(0, self._balance + int(amount))
             if self._storage is not None:
                 await self._storage.set(STORAGE_CREDITS, str(self._balance))
@@ -143,7 +153,7 @@ class CreditService:
     # ── settlement ─────────────────────────────────────────────────────────
 
     async def reserve(
-        self, amount: int = COST_STEP, is_premium: bool = False
+        self, amount: int = COST_STEP
     ) -> str | None:
         """Hold credits for a turn. Returns a transaction id, or None when the
         balance cannot cover it (the caller reports out-of-credits).
@@ -151,12 +161,12 @@ class CreditService:
         A hold reduces spendable balance immediately so a burst of turns cannot
         each see the full balance.
         """
-        await self._check_daily_reset(is_premium)
+        await self._check_daily_reset()
         async with self._lock:
             balance = (
                 self._balance
                 if self._balance is not None
-                else self.daily_cap(is_premium)
+                else self.daily_cap()
             )
             available = balance - sum(a for a, _ in self._holds.values())
             if available < amount:
@@ -184,7 +194,7 @@ class CreditService:
             return True
 
     async def commit(
-        self, tx: str | None, amount: int | None = None, is_premium: bool = False
+        self, tx: str | None, amount: int | None = None
     ) -> int:
         """Charge a settled turn and release its hold.
 
@@ -192,8 +202,8 @@ class CreditService:
         settle cannot double-charge. ``amount=None`` charges the whole hold.
         """
         if not tx:
-            return await self.get_balance(is_premium)
-        await self._check_daily_reset(is_premium)
+            return await self.get_balance()
+        await self._check_daily_reset()
         async with self._lock:
             if tx in self._settled:
                 return max(0, self._balance or 0)
@@ -201,45 +211,45 @@ class CreditService:
             held = self._holds.pop(tx, (COST_STEP, 0.0))[0]
             charge = held if amount is None else max(0, int(amount))
             if self._balance is None:
-                self._balance = self.daily_cap(is_premium)
+                self._balance = self.daily_cap()
             self._balance = max(0, self._balance - charge)
             if self._storage is not None:
                 await self._storage.set(STORAGE_CREDITS, str(self._balance))
             self._sync_state(self._balance)
             return self._balance
 
-    async def rollback(self, tx: str | None, is_premium: bool = False) -> int:
+    async def rollback(self, tx: str | None) -> int:
         """Release a hold without charging (cancelled or failed turn)."""
         if not tx:
-            return await self.get_balance(is_premium)
-        await self._check_daily_reset(is_premium)
+            return await self.get_balance()
+        await self._check_daily_reset()
         async with self._lock:
             self._holds.pop(tx, None)
             self._settled.add(tx)
-            return max(0, self._balance or self.daily_cap(is_premium))
+            return max(0, self._balance or self.daily_cap())
 
-    async def available(self, is_premium: bool = False) -> int:
+    async def available(self) -> int:
         """Spendable now: balance minus outstanding holds."""
-        await self._check_daily_reset(is_premium)
+        await self._check_daily_reset()
         async with self._lock:
             balance = (
                 self._balance
                 if self._balance is not None
-                else self.daily_cap(is_premium)
+                else self.daily_cap()
             )
             return max(0, balance - sum(a for a, _ in self._holds.values()))
 
-    async def charge(self, amount: int, is_premium: bool = False) -> int:
+    async def charge(self, amount: int) -> int:
         """Subtract directly, with no hold.
 
         The hold-less half of settlement: `reserve` is best-effort and fails at
         balance 1, and credits must never block work, so the turn runs anyway
         and pays here instead. Clamps at zero like commit.
         """
-        await self._check_daily_reset(is_premium)
+        await self._check_daily_reset()
         async with self._lock:
             if self._balance is None:
-                self._balance = self.daily_cap(is_premium)
+                self._balance = self.daily_cap()
             self._balance = max(0, self._balance - max(0, int(amount)))
             if self._storage is not None:
                 await self._storage.set(STORAGE_CREDITS, str(self._balance))

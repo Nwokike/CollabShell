@@ -21,6 +21,7 @@ import flet as ft
 # kernel is shared with the user's own tabs).
 _ASSISTANT_TAB_NAME = "Assistant"
 
+from components.banner_ad import pooled_banner_ad
 from components.env_dialog import show_env_override_dialog
 from components.notebook_cell import CellData, NotebookCell
 from components.notebook_toolbar import build_notebook_toolbar
@@ -28,7 +29,6 @@ from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.shortcuts import Binding
 from core.stdin_hook import show_stdin_dialog
-from core.styles import build_banner_ad
 from screens.files.modal import show_manage_files_modal
 from screens.session.layout import build_action_row
 from screens.session.vm_ops import on_auth_gcp, on_mount_drive
@@ -621,6 +621,15 @@ def NotebookView(
         if cell is None:
             return
         credits = getattr(services, "credits", None)
+        # An ask the user can watch is an ask they can stop (owner's rule).
+        # Cancelling the running task aborts the HTTP request itself.
+        cancel_ref: dict = {}
+
+        def _cancel(e=None):
+            task = cancel_ref.get("task")
+            if task is not None:
+                task.cancel()
+
         page.show_dialog(
             ft.AlertDialog(
                 modal=True,
@@ -628,12 +637,14 @@ def NotebookView(
                     [
                         ft.ProgressRing(width=20, height=20, stroke_width=2.5),
                         ft.Text("Assistant is working…", size=tokens.FONT_SM),
+                        ft.TextButton("Cancel", on_click=_cancel),
                     ],
                     spacing=tokens.SPACE_SM,
                     tight=True,
                 ),
             )
         )
+        cancel_ref["task"] = asyncio.current_task()
         try:
             text = await cell_ai.run_cell_action(
                 action=action,
@@ -645,6 +656,13 @@ def NotebookView(
                 output=_output_text(cell),
                 cell=cell,
             )
+        except asyncio.CancelledError:
+            try:
+                page.pop_dialog()
+            except Exception:
+                pass
+            _ai_notice("Cancelled.")
+            return
         except cell_ai.OutOfCredits:
             page.pop_dialog()
             _ai_notice("Out of assistant credits — top up in Assistant settings.")
@@ -1177,9 +1195,9 @@ def NotebookView(
                             ),
                             on_click=lambda ev: _pick("py"),
                         ),
-                        # Banner inside the export dialog (mobile-only, 0x0 on
-                        # desktop/premium) — the owner asked for a banner here.
-                        build_banner_ad(page),
+                        # Banner inside the export dialog — the owner asked
+                        # for a banner here. Pooled: one build, reused.
+                        pooled_banner_ad("notebook-export-1", page),
                     ],
                     spacing=tokens.SPACE_XS,
                     tight=True,
@@ -1413,6 +1431,11 @@ def NotebookView(
             except Exception:
                 logger.exception("Suppressed exception")
             controller.close_session()
+            # Interstitial at the natural break (proot-distro's close/leave
+            # rule); the 60s global gap prevents back-to-back ads.
+            ad_service = getattr(services, "ad_service", None)
+            if ad_service is not None:
+                page.run_task(ad_service.show_interstitial)
         except Exception as ex:
             controller.show_snack(f"❌ {ex}", is_error=True)
 
@@ -1531,7 +1554,9 @@ def NotebookView(
             )
         )
         if (i + 1) % 2 == 0:
-            cell_controls.append(build_banner_ad(page))
+            # Sherlock's results pattern: one pooled banner per ordinal, so
+            # re-renders never rebuild a live ad.
+            cell_controls.append(pooled_banner_ad(f"notebook-cell-{i}", page))
 
     # ── Notebook tab bar (mirrors the terminal panel's tab pattern) ─────────
     def _tab_button(tab):
@@ -1671,7 +1696,7 @@ def NotebookView(
                 ),
             ),
             _document_container(),
-            build_banner_ad(page),
+            pooled_banner_ad("notebook-bottom-1", page),
             ft.Container(height=tokens.SPACE_XXXL * 3),
             focus_sink,
         ],

@@ -137,12 +137,8 @@ class AdService:
 
     def get_banner_ad(self) -> ft.Control:
         """Return a banner ad control, or empty container on desktop."""
-        if (
-            state.is_premium
-            or not _HAS_ADS
-            or not self._is_mobile()
-            or not self._can_request_ads
-        ):
+        # Owner's rule (all his apps): no consent check — ads show anyway.
+        if state.is_premium or not _HAS_ADS or not self._is_mobile():
             return ft.Container(width=0, height=0)
         try:
             ad = fta.BannerAd(
@@ -170,12 +166,10 @@ class AdService:
     async def preload_interstitial(self, on_close: Callable | None = None):
         """Create and load a fresh interstitial (single-use in flet-ads 1.0)."""
         self._on_close = on_close
-        if (
-            state.is_premium
-            or not _HAS_ADS
-            or not self._is_mobile()
-            or not self._can_request_ads
-        ):
+        # The owner's rule, all his apps: the UMP verdict NEVER blocks ad
+        # serving — no consent, ads still show. gather_consent still runs (the
+        # SDK flow exists) but its answer is recorded, not obeyed.
+        if state.is_premium or not _HAS_ADS or not self._is_mobile():
             return
         try:
             self._interstitial_loaded = False
@@ -248,12 +242,8 @@ class AdService:
         instances are replaced. Returns True when an ad is shown or queued to
         show as soon as it finishes loading.
         """
-        if (
-            state.is_premium
-            or not _HAS_ADS
-            or not self._is_mobile()
-            or not self._can_request_ads
-        ):
+        # Owner's rule (all his apps): ads show with or without UMP consent.
+        if state.is_premium or not _HAS_ADS or not self._is_mobile():
             return False
         now = time.time()
         if now - state.last_interstitial_ts < self.MIN_INTERSTITIAL_GAP:

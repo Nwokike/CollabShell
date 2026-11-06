@@ -5,10 +5,11 @@ import os
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from components.brand_header import build_brand_header
 from core import tokens
 from core.notifications import show_notification
-from core.styles import build_banner_ad, glass_card, section_header
+from core.styles import glass_card, section_header
 from state import AppStateCtx, ServiceCtx
 
 logger = logging.getLogger("HistoryScreen")
@@ -229,7 +230,7 @@ def HistoryScreen() -> ft.Control:
             # Banner at the TOP of the content (files/selector pattern) — the
             # owner flagged a banner parked at the very bottom as an
             # afterthought, and there must be exactly one on this screen.
-            build_banner_ad(page),
+            pooled_banner_ad("history-1", page),
             ft.Container(
                 content=ft.Column(
                     controls=[

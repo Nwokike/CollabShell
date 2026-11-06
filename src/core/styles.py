@@ -106,56 +106,17 @@ def solid_card(content: ft.Control, **kwargs) -> ft.Container:
 
 
 def build_banner_ad(page: ft.Page, unit_id: str | None = None) -> ft.Control:
-    """Build a glass-container-wrapped banner ad (mobile only).
+    """The canonical Sherlock banner builder (components/banner_ad.py).
 
-    Collapses to 0x0 for premium: a paying user never sees an ad.
+    Kept here as an alias because a dozen screens still import it from
+    styles; new code should import pooled_banner_ad and use a slot. The
+    old styles-local body (premium gate, per-render fresh BannerAd) is gone —
+    the per-render rebuild was what made the terminal banner flash and look
+    like it vanished on the phone.
     """
-    if page.platform not in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS):
-        return ft.Container(width=0, height=0)
+    from components.banner_ad import build_banner_ad as _build
 
-    from core.state import state
-
-    if getattr(state, "is_premium", False):
-        return ft.Container(width=0, height=0)
-
-    from core.theme import adaptive_glass_bg, adaptive_glass_border
-
-    try:
-        import flet_ads as fta
-
-        from services.ad_service import AdService
-
-        if not unit_id:
-            ad_service = AdService(page)
-            unit_id = ad_service.banner_id
-
-        ad = fta.BannerAd(
-            unit_id=unit_id,
-            width=320,
-            height=50,
-            on_error=lambda e: None,
-        )
-    except Exception as e:
-        logger.warning("Failed to load BannerAd: %s", e)
-        return ft.Container(width=0, height=0)
-
-    return ft.Container(
-        content=ft.Column(
-            [
-                ad,
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=tokens.SPACE_XS,
-        ),
-        alignment=ft.Alignment.CENTER,
-        padding=tokens.SPACE_SM,
-        border_radius=tokens.RADIUS_LG,
-        bgcolor=adaptive_glass_bg(),
-        border=ft.Border.all(1, color=adaptive_glass_border()),
-        margin=ft.Margin(
-            tokens.SPACE_LG, tokens.SPACE_XS, tokens.SPACE_LG, tokens.SPACE_XS
-        ),
-    )
+    return _build(page)
 
 
 def hardware_badge(accelerator: str, variant: str = "") -> ft.Container:

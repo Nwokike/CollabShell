@@ -18,31 +18,65 @@ from services import ai_credits
 logger = logging.getLogger("AssistantSettings")
 
 
-def _row(title: str, subtitle: str, trailing=None, icon=None) -> ft.Row:
+def _row(title: str, subtitle: str, trailing=None, icon=None) -> ft.Control:
     # Every row carries an icon that says what the row IS — a brain for
     # thinking, a memory chip for the model, a bolt for credits — so the
     # assistant card scans like every other settings card instead of one
     # repeated glyph. DDGS's card uses a distinct icon per row too
     # (sections_ai.py:149, 165, 197, 216).
+    icon_ctrl = ft.Icon(
+        icon or tokens.ASSISTANT_ICON,
+        size=tokens.ICON_LG,
+        color=ft.Colors.ON_SURFACE_VARIANT,
+    )
+    label = ft.Column(
+        controls=[
+            ft.Text(
+                title,
+                size=tokens.FONT_MD,
+                weight=ft.FontWeight.W_500,
+            ),
+            tip_text(subtitle),
+        ],
+        spacing=tokens.SPACE_XXS,
+        expand=True,
+    )
+
+    # Sherlock breakpoint (proot build_view.py:97): on a narrow screen a row's
+    # control goes UNDER the label — stacked, never beside it. The model row's
+    # "Assistant model · ~200 req/hr … [Change]" crammed three things into one
+    # line on a phone and wrapped badly; wide screens keep them side by side.
+    try:
+        page = ft.context.page
+    except Exception:
+        page = None
+    is_narrow = bool(page and getattr(page, "width", None) and page.width < 600)
+
+    if trailing is not None and is_narrow:
+        return ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[icon_ctrl, label],
+                    spacing=tokens.SPACE_LG,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(
+                    content=trailing,
+                    # Indented to the label's left edge so the stacked control
+                    # reads as belonging to the row, not floating.
+                    padding=ft.Padding.only(
+                        left=tokens.ICON_LG + tokens.SPACE_LG,
+                        bottom=tokens.SPACE_XXS,
+                    ),
+                ),
+            ],
+            spacing=tokens.SPACE_XXS,
+        )
+
     return ft.Row(
         controls=[
-            ft.Icon(
-                icon or tokens.ASSISTANT_ICON,
-                size=tokens.ICON_LG,
-                color=ft.Colors.ON_SURFACE_VARIANT,
-            ),
-            ft.Column(
-                controls=[
-                    ft.Text(
-                        title,
-                        size=tokens.FONT_MD,
-                        weight=ft.FontWeight.W_500,
-                    ),
-                    tip_text(subtitle),
-                ],
-                spacing=tokens.SPACE_XXS,
-                expand=True,
-            ),
+            icon_ctrl,
+            label,
             *([trailing] if trailing is not None else []),
         ],
         spacing=tokens.SPACE_LG,
@@ -103,7 +137,7 @@ def build_ai_section(page: ft.Page, state, services) -> ft.Column:
             return "Assistant credits are unavailable in this build."
         try:
             is_premium = bool(getattr(state, "is_premium", False))
-            balance = await credits.get_balance(is_premium=is_premium)
+            balance = await credits.get_balance()
             if balance <= 0:
                 # Same wording the assistant gate shows, so the two agree.
                 return ai_credits.out_of_credits_notice(balance, is_premium)

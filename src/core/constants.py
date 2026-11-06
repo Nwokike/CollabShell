@@ -97,6 +97,11 @@ DAILY_PREMIUM_CREDITS = 500
 STORAGE_CREDITS = "colab_credits"
 STORAGE_LAST_RESET = "colab_last_reset"
 
+# The one banner unit every pooled banner uses (Sherlock's layout: the unit
+# id lives in constants, the builder in components/banner_ad.py). Matches
+# AdService.BANNER_ID_ANDROID_PROD.
+AD_BANNER_UNIT_ID = "ca-app-pub-5679949845754640/8726930570"
+
 # ── Kiri License (license.kiri.ng) ──────────────────────────────────────────
 # The only checkout in this build: direct APK installs, Windows and Linux.
 # The Worker owns payment policy; we hold a recovery ID and a signed

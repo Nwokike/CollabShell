@@ -122,6 +122,12 @@ class AppController:
         self.ad_service: AdService | None = None
         self.colab_service: ColabService | None = None
         self.update_service: UpdateService | None = None
+        # Created HERE, not in setup: Android fires connectivity events while
+        # setup is still running, and the handler reaches _bootstrap_state
+        # before the setup line that used to create this lock — the phone
+        # crashed with `AttributeError: 'AppController' object has no
+        # attribute '_startup_lock'` seconds after launch.
+        self._startup_lock = asyncio.Lock()
 
     async def check_for_updates(self, notify_if_latest: bool = False) -> None:
         """Check version.json on main for a newer build or announcement.
@@ -275,8 +281,8 @@ class AppController:
         # Single-flight boot: Android fires several connectivity events while
         # the radio comes up, and each one triggers a bootstrap. Concurrent
         # runs used to race and flip app_ready mid-boot (the splash/onboarding
-        # flash). AnimePahe's startup lock.
-        self._startup_lock = asyncio.Lock()
+        # flash). AnimePahe's startup lock — created in __init__ above, so a
+        # connectivity event that lands before this line cannot miss it.
 
         # Persistent "session running" notification + Android foreground
         # service (flet-notifications 1.1.0-dev, ported from proot-distro):
@@ -305,13 +311,20 @@ class AppController:
         from services.premium_service import PremiumService
 
         self.credit_service = CreditService(self.storage)
-        # Load credits and sync daily cap, then start background sweep for crashed turns.
-        page.run_task(self.credit_service.initialize)
-        page.run_task(self.credit_service.astart)
         self.license_service = KiriLicenseService(self.storage)
         self.premium_service = PremiumService(page, state, self.storage)
-        # Unlock from the cached token, then start the hourly re-check.
-        page.run_task(self.premium_service.load_local)
+        # Boot order is DDGS's documented rule (app_controller.py:126-146):
+        # the licence verdict lands BEFORE the first credit read, because the
+        # daily reset stamps the cap for the whole day — reading credits first
+        # stamped the FREE cap and a paying user sat at 50 until midnight.
+        # Awaited here, not scheduled: a task would race the first read.
+        try:
+            await self.premium_service.load_local()
+        except Exception:
+            logger.warning("offline licence check failed", exc_info=True)
+        await self.credit_service.initialize()
+        # Background sweep so a crashed turn never strands a credit hold.
+        page.run_task(self.credit_service.astart)
         self.premium_service.start_reconcile_loop()
         # The router status loop. Without it `ai_router_status` is written and
         # nothing reads it: the header pill is built once and would say
@@ -449,9 +462,17 @@ class AppController:
                 _navigate(f"/terminal?session={encoded}")
             else:
                 _navigate(f"/session?session={encoded}")
+            # Interstitial at the natural break AFTER the session opens
+            # (proot-distro's open_session rule): the action completes first,
+            # the ad follows, and the 60s global gap in AdService keeps it
+            # from ever firing twice in a row.
+            if getattr(self, "ad_service", None) is not None:
+                page.run_task(self.ad_service.show_interstitial)
 
         def _close_session():
             _navigate("/home")
+            if getattr(self, "ad_service", None) is not None:
+                page.run_task(self.ad_service.show_interstitial)
 
         def _open_history(session_name: str = ""):
             if session_name:

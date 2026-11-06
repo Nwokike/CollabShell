@@ -19,6 +19,15 @@ def build_preferences_section(page: ft.Page, state, services) -> ft.Control:
     def _select(m: ft.ThemeMode, lbl: str):
         page.theme_mode = m
         state.theme_mode = m
+        # Pooled banner ads capture their glass colours when first built, so a
+        # theme swap leaves stale light/dark glass on every banner until the
+        # app restarts. Sherlock's app_header does exactly this on theme swap.
+        try:
+            from components.banner_ad import clear_banner_pool
+
+            clear_banner_pool()
+        except Exception:
+            pass
         if services and services.storage:
             page.run_task(services.storage.set, constants.STORAGE_THEME, lbl.lower())
         page.update()

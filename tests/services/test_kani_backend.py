@@ -707,7 +707,7 @@ def test_turn_raises_unavailable_when_every_candidate_fails():
         _run(_turn([], system="SYS", base_url=f"http://127.0.0.1:{port}/v1"))
         raise AssertionError("should have raised AIUnavailable")
     except ai_service.AIUnavailable as ex:
-        assert "did not answer" in str(ex).lower(), ex
+        assert "no model answered" in str(ex).lower(), ex
 
 
 def test_a_dead_endpoint_never_becomes_a_model_failure():

@@ -8,12 +8,12 @@ import posixpath
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from components.file_item import build_file_item
 from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.notifications import show_notification
 from core.shortcuts import Binding, shortcuts_router
-from core.styles import build_banner_ad
 from core.theme import adaptive_glass_bg, adaptive_glass_border
 from screens.files.actions import (
     do_delete_async,
@@ -595,7 +595,7 @@ def FilesScreen(session_name: str) -> ft.Control:
                 bgcolor=ft.Colors.TRANSPARENT,
             ),
             ft.Divider(height=1, thickness=1),
-            build_banner_ad(page),
+            pooled_banner_ad("files-1", page),
             ft.Container(content=body, expand=True, padding=0),
         ],
         spacing=0,

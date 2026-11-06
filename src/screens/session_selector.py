@@ -6,9 +6,10 @@ import logging
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from components.session_card import build_session_card
 from core import constants, tokens
-from core.styles import build_banner_ad, section_header
+from core.styles import section_header
 from state import AppStateCtx, ControllerMethodsCtx, ServiceCtx
 
 logger = logging.getLogger("SessionSelector")
@@ -108,7 +109,7 @@ def SessionSelectorTab(mode: str) -> ft.Control:
     return ft.Column(
         controls=[
             new_session_btn,
-            build_banner_ad(page),
+            pooled_banner_ad("sessions-1", page),
             section_header(constants.LBL_ACTIVE_SESSIONS.upper()),
             ft.Column(controls=controls, spacing=0),
         ],

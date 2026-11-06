@@ -457,3 +457,28 @@ class KiriLicenseService:
         except Exception:
             pass
         return f"{fallback} (HTTP {response.status_code})"
+
+
+def friendly_message(exc: BaseException) -> str:
+    """The honest user copy for a restore/checkout failure.
+
+    The restore dialog used to prefix EVERY failure with "could not reach the
+    licence service" — a clean 404 refusal (a wrong recovery ID) read as a
+    network outage, and the owner proved it: a deliberately wrong ID said
+    "could not reach + not found" while the service was answering fine. An
+    answer is not an outage; each verdict gets its own words.
+    """
+    if not isinstance(exc, LicenseUnavailable):
+        return str(exc)
+    code = exc.status_code
+    if code == 404:
+        return "No licence matches that recovery ID."
+    if code == 402:
+        return "Payment for that licence is not valid."
+    if code == 403:
+        return "That licence is not entitled to this app."
+    if code == 429:
+        return "Too many attempts — wait a moment and try again."
+    if code is not None:
+        return str(exc)
+    return "Could not reach the licence service. Check your connection."

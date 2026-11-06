@@ -117,7 +117,6 @@ async def run_metered_turn(
     exhausted router comes back as ``ok=False`` with an ``error`` string so
     the UI can retry.
     """
-    is_premium = bool(getattr(state, "is_premium", False))
 
     # The question is recorded before any gate, so an out-of-credits turn
     # still shows what was asked and Retry can re-send it.
@@ -131,7 +130,7 @@ async def run_metered_turn(
             "error": "Assistant credits are unavailable in this build.",
         }
 
-    balance = await credits.get_balance(is_premium)
+    balance = await credits.get_balance()
     if balance <= 0:
         return {
             "ok": False,
@@ -143,7 +142,7 @@ async def run_metered_turn(
         }
 
     # Best-effort hold; at balance 1 it fails and we run hold-less.
-    tx = await credits.reserve(COST_STEP, is_premium)
+    tx = await credits.reserve(COST_STEP)
     low_balance = balance < LOW_BALANCE_NUDGE
     streamed_text: list[str] = []
     model_steps = 0
@@ -169,11 +168,11 @@ async def run_metered_turn(
     async def _settle(steps: int):
         if steps <= 0:
             if tx:
-                await credits.rollback(tx, is_premium)
+                await credits.rollback(tx)
         elif tx:
-            await credits.commit(tx, steps, is_premium)
+            await credits.commit(tx, steps)
         else:
-            await credits.charge(steps, is_premium)
+            await credits.charge(steps)
 
     try:
         result = await ai_service.run_turn(
@@ -208,7 +207,7 @@ async def run_metered_turn(
             "ok": False,
             "out_of_credits": False,
             "low_balance": low_balance,
-            "balance": await credits.get_balance(is_premium),
+            "balance": await credits.get_balance(),
             "cost": steps,
             "error": safe_error_message(ex),
         }
@@ -216,7 +215,7 @@ async def run_metered_turn(
     steps = charged_steps(result.get("model_steps", 0), result.get("text", ""))
     await _settle(steps)
 
-    balance = await credits.get_balance(is_premium)
+    balance = await credits.get_balance()
     _bump_revision(state)
     return {
         "ok": True,
@@ -248,4 +247,4 @@ async def refresh_balance(state, credits) -> int:
     """Read the balance for display, applying the daily reset."""
     if credits is None:
         return 0
-    return await credits.get_balance(bool(getattr(state, "is_premium", False)))
+    return await credits.get_balance()

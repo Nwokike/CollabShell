@@ -446,8 +446,10 @@ async def run_turn(
     should_stop: Callable[[], bool] | None = None,
     base_url: str | None = None,
     model: str | None = None,
-    max_rounds: int = 6,
-    timeout_s: float = 240.0,
+    # Defaults mirror ai_service.MAX_TOOL_ROUNDS / TURN_TIMEOUT_SEC; the
+    # production caller threads the constants through explicitly.
+    max_rounds: int = 30,
+    timeout_s: float = 900.0,
     max_tokens: int = 2048,
 ) -> dict:
     """Run one agent turn through kani's `full_round_stream`.
@@ -488,6 +490,14 @@ async def run_turn(
 
     for candidate in candidates:
         if _stopped():
+            break
+        # The step budget is per TURN, and it is shared: once spent, every
+        # later candidate is capped too. Walking then cannot produce a tool
+        # call (functions are stripped at cap) — it just burns one dead model
+        # after another until the "tried N models" error, which is how a
+        # working turn died after 17 healthy models. Real work done + no text
+        # = the budget boundary, and the walk ends honestly right here.
+        if 0 < max_rounds <= model_steps:
             break
         last_model = candidate
         try:
@@ -672,9 +682,24 @@ async def run_turn(
         # never had — and ai_credits reads AIUnavailable as exactly that.
         if cancel.is_set():
             return {"text": "", "model_steps": model_steps, "model": last_model}
+        if 0 < max_rounds <= model_steps:
+            # The STEP BUDGET, not a dead model: tool rounds ran and are
+            # billed — the turn hit the working boundary. Ending honestly
+            # (the work exists; ask to continue) beats burning every model on
+            # a walk that cannot help. A turn under budget with no text is a
+            # transport failure and stays AIUnavailable.
+            return {
+                "text": (
+                    "I reached this reply's working budget mid-task — the "
+                    "steps already ran. Ask me to continue and I will pick up "
+                    "where the work stopped."
+                ),
+                "model_steps": model_steps,
+                "model": last_model,
+            }
         raise AIUnavailable(
-            f"The Assistant did not answer after trying {len(candidates)} "
-            "available model(s). Check the router/model status and retry."
+            "No model answered this turn — every available one was tried and "
+            "none returned anything. Check the router's model status and retry."
         )
     return {"text": text, "model_steps": model_steps, "model": last_model}
 

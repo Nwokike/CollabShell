@@ -4,11 +4,12 @@ import logging
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from components.brand_header import build_brand_header
 from components.new_session_sheet import show_new_session_sheet
 from components.session_card import build_session_card
 from core import constants, tokens
-from core.styles import build_banner_ad, glass_card
+from core.styles import glass_card
 from core.theme import AppColors, adaptive_glass_bg
 from screens.home.cards import action_button, feature_card, step_row
 from services.colab.session_ops import SessionListError
@@ -347,9 +348,9 @@ def HomeScreen() -> ft.Control:
                     tokens.SPACE_LG, 0, tokens.SPACE_LG, tokens.SPACE_LG
                 ),
             ),
-            build_banner_ad(page),
+            pooled_banner_ad("home-1", page),
             features_section,
-            build_banner_ad(page),
+            pooled_banner_ad("home-2", page),
             how_it_works,
             ft.Container(height=tokens.ICON_XXXL),
         ],

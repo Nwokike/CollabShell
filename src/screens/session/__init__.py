@@ -154,6 +154,11 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             except Exception:
                 logger.exception("Suppressed exception")
             controller.close_session()
+            # Interstitial at the natural break (proot-distro's close/leave
+            # rule); the 60s global gap prevents back-to-back ads.
+            ad_service = getattr(services, "ad_service", None)
+            if ad_service is not None:
+                page.run_task(ad_service.show_interstitial)
         except Exception as ex:
             controller.show_snack(f"❌ {ex}", is_error=True)
 

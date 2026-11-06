@@ -460,9 +460,12 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
         try:
             status = await premium.kiri_restore(code)
         except Exception as ex:
-            show_notification(
-                page, f"Could not reach the licence service: {ex}", is_error=True
-            )
+            # The mapped verdict, never a blanket "could not reach": a 404 is
+            # the service ANSWERING "no such licence", and calling that an
+            # outage made it read as a lie.
+            from services.license_service import friendly_message
+
+            show_notification(page, friendly_message(ex), is_error=True)
             return
         state.license_recovery_id = status.recovery_id or code
         if bool(getattr(state, "is_premium", False)):
@@ -476,8 +479,10 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
         try:
             checkout = await premium.kiri_checkout(product_id, email)
         except Exception as ex:
+            from services.license_service import friendly_message
+
             show_notification(
-                page, f"Could not open the payment page: {ex}", is_error=True
+                page, f"Could not open the payment page. {friendly_message(ex)}", is_error=True
             )
             return
         # The recovery ID is available the moment the order exists — surface

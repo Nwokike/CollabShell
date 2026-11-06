@@ -243,6 +243,65 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             logger.warning("AI tool _exec failed: %s", ex)
             return f"Execution failed: {type(ex).__name__}: {ex}"
 
+    # ── persisted-notebook helpers (the no-UI path) ────────────────────────
+    # The session screen does not have to be open for the assistant to work:
+    # tabs and cells live in the same storage files the NotebookView loads on
+    # mount, so writing through them lands the work in the notebook the user
+    # sees when they open the session. The old "session is not open on screen"
+    # refusal made the model retry in a loop (create tab → fail → create
+    # session → fail) until it burned every tool round and every model — the
+    # "did not answer after trying 17 models" the owner hit was THIS refusal.
+
+    def _storage_ok() -> bool:
+        return getattr(services, "storage", None) is not None
+
+    async def _stored_tabs(session: str) -> list[dict]:
+        """Tab metas from the persisted index, in the order the UI restores."""
+        index = await services.storage.load_tab_index(session)
+        return [t for t in (index or []) if isinstance(t, dict) and t.get("id")]
+
+    def _next_notebook_id(tabs: list[dict], extra_ids: list[str]) -> str:
+        nums = [0]
+        for entry in list(tabs) + [{"id": i} for i in extra_ids]:
+            tid = str(entry.get("id", ""))
+            if tid.startswith("nb") and tid[2:].isdigit():
+                nums.append(int(tid[2:]))
+        return f"nb{max(nums) + 1}"
+
+    def _cell_wire(c: dict) -> dict:
+        """One AI cell in the exact shape CellData.from_dict restores."""
+        import uuid
+
+        return {
+            "id": uuid.uuid4().hex,
+            "type": c.get("type", "code"),
+            "source": str(c.get("source", "")),
+            "outputs": [],
+            "origin": "assistant",
+            "tool_call_id": c.get("tool_call_id"),
+        }
+
+    async def _stored_create_tab(session: str, tab_name: str) -> str:
+        """Create a notebook tab in storage; front of the index = active on open."""
+        tabs = await _stored_tabs(session)
+        try:
+            saved_ids = await services.storage.list_notebooks(session) or []
+        except Exception:
+            saved_ids = []
+        new_id = _next_notebook_id(tabs, saved_ids)
+        entry = {
+            "id": new_id,
+            "name": tab_name or "Notebook",
+            "view": "notebook",
+            "path": "",
+        }
+        await services.storage.save_tab_index(session, [entry, *tabs])
+        # The document must exist: list_notebooks reads the index, but the UI
+        # loads each tab's cells from its own file and a fresh notebook gets
+        # one empty cell on restore — exactly what a new tab looks like.
+        await services.storage.save_notebook(session, [], new_id)
+        return new_id
+
     async def read_notebook() -> str:
         """Read every cell of the active notebook, with its source and output.
 
@@ -255,12 +314,38 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         """
         if not _has_session():
             return NO_SESSION
+        session = _live_session()
         try:
             from screens.session import notebook_view
 
-            bridges = notebook_view._bridges(_live_session())
+            bridges = notebook_view._bridges(session)
             if not bridges:
-                return "(no notebook is open for this session)"
+                # The session screen is not open — read the saved notebook
+                # instead of refusing. The cells exist whether or not the
+                # screen does.
+                if not _storage_ok():
+                    return "(no notebook is open for this session)"
+                tabs = await _stored_tabs(session)
+                target = next(
+                    (t for t in tabs if (t.get("view") or "notebook") == "notebook"),
+                    None,
+                )
+                if target is None:
+                    return "(no notebook tab exists for this session yet — create one with create_notebook_tab)"
+                cells = await services.storage.load_notebook(session, target["id"])
+                tab_label = target.get("name") or target["id"]
+                if not cells:
+                    return (
+                        f"(notebook tab '{tab_label}' of session '{session}' is empty)"
+                    )
+                parts = [
+                    f"[saved notebook tab '{tab_label}' of session '{session}']",
+                    *[
+                        f"[cell {i}] ({c.get('type', 'code')})\n{c.get('source', '')}"
+                        for i, c in enumerate(cells, start=1)
+                    ],
+                ]
+                return _clip_text("\n\n".join(parts))
             # The active tab may be a Python script, which is a document of its
             # own and has no cells. Say so and name its path rather than
             # reporting an empty notebook.
@@ -470,31 +555,76 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
         """
         if not _has_session():
             return NO_SESSION
+        session = _live_session()
         try:
+            # Live path first: the session screen open means the cells land in
+            # the mounted tab and the user watches them appear.
             from screens.session.notebook_view import write_cells_to_active_tab
 
-            inserted = write_cells_to_active_tab(_live_session(), cells)
-            if not inserted:
-                return (
-                    "(no notebook tab is open to write into — the active tab "
-                    "may be a Python script, which has no cells)"
-                )
-            # The ids matter twice: the user can be pointed at the exact cell,
-            # and the chat turns this step row into a tap-through to it.
-            ids = ", ".join(c.id for c in inserted if hasattr(c, "id"))
-            return f"Wrote {len(inserted)} cell(s) into the open notebook. Cells: {ids}"
+            inserted = write_cells_to_active_tab(session, cells)
+            if inserted:
+                # The ids matter twice: the user can be pointed at the exact
+                # cell, and the chat turns this step row into a tap-through.
+                ids = ", ".join(c.id for c in inserted if hasattr(c, "id"))
+                return f"Wrote {len(inserted)} cell(s) into the open notebook. Cells: {ids}"
+            if not _storage_ok():
+                return "(no notebook tab is open to write into)"
+            wire = [_cell_wire(c) for c in (cells or []) if isinstance(c, dict)]
+            if not wire:
+                return "(no cells were provided)"
+            # Persisted path: the session screen does not need to be open.
+            # Write into the tab the UI opens first (the index's front), or
+            # make one when the session has no notebook tab at all — telling
+            # the model to come back later just made it retry in a loop.
+            tabs = await _stored_tabs(session)
+            target = next(
+                (t for t in tabs if (t.get("view") or "notebook") == "notebook"), None
+            )
+            if target is None:
+                new_id = await _stored_create_tab(session, "Notebook")
+                target = {"id": new_id, "name": "Notebook"}
+            saved = await services.storage.load_notebook(session, target["id"]) or []
+            await services.storage.save_notebook(
+                session, list(saved) + wire, target["id"]
+            )
+            ids = ", ".join(c["id"] for c in wire)
+            return (
+                f"Wrote {len(wire)} cell(s) into notebook tab '{target.get('name')}' "
+                f"of session '{session}'. Cells: {ids}. They are saved and will be "
+                "in the notebook when the session screen is opened — tell the user."
+            )
         except Exception as ex:
             logger.warning("AI tool write_cells failed: %s", ex)
             return f"Could not write cells: {ex}"
 
     async def list_notebook_tabs() -> str:
-        """List the notebook tabs open in this session. Read-only."""
+        """List the notebook tabs of this session. Read-only."""
         if not _has_session():
             return NO_SESSION
+        session = _live_session()
         try:
+            # Live view first (names the active tab); the persisted index is
+            # the truth when the session screen is not open — the tabs exist
+            # whether or not the screen does.
             from screens.session.notebook_view import list_tab_summaries
 
-            return _clip_text(list_tab_summaries(_live_session()) or "(no tabs)")
+            live = list_tab_summaries(session)
+            if live:
+                return _clip_text(live)
+            if not _storage_ok():
+                return "(no tabs)"
+            tabs = await _stored_tabs(session)
+            if not tabs:
+                return "(no tabs)"
+            lines = [
+                f"- {t.get('name') or t['id']} (id: {t['id']}, "
+                f"{'script' if (t.get('view') or 'notebook') == 'script' else 'notebook'})"
+                for t in tabs
+            ]
+            return _clip_text(
+                "Tabs of session "
+                f"'{session}' (first line is the active one):\n" + "\n".join(lines)
+            )
         except Exception as ex:
             logger.warning("AI tool list_notebook_tabs failed: %s", ex)
             return f"Could not list tabs: {ex}"
@@ -502,26 +632,38 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
     async def create_notebook_tab(
         name: Annotated[
             str,
-            AIParam("The name for the new notebook tab (e.g. 'Starter', 'Data Analysis')."),
+            AIParam(
+                "The name for the new notebook tab (e.g. 'Starter', 'Data Analysis')."
+            ),
         ] = "Notebook",
     ) -> str:
-        """Create a new notebook tab in the active session and switch to it.
+        """Create a new notebook tab in the active session and make it active.
 
         Use this to create a clean, dedicated notebook tab (like a starter
-        notebook) rather than appending to an existing tab.
+        notebook) rather than appending to an existing tab. Works whether or
+        not the session screen is open — with the screen closed the tab is
+        written to the session's saved notebook and is there when it opens.
         """
         if not _has_session():
             return NO_SESSION
+        session = _live_session()
         try:
-            from screens.session.notebook_view import create_notebook_tab as _create_tab
+            from screens.session.notebook_view import create_notebook_tab as _create
 
-            tab = _create_tab(_live_session(), name=name)
-            if not tab:
+            tab = _create(session, name=name)
+            if tab:
                 return (
-                    f"Could not create notebook tab: session {_live_session()} "
-                    "is not open on screen."
+                    f"Created notebook tab '{tab.get('name')}' (id: {tab.get('id')}) "
+                    f"in session '{session}' and made it active."
                 )
-            return f"Created notebook tab '{tab.get('name')}' (id: {tab.get('id')}). It is now active."
+            if not _storage_ok():
+                return f"Could not create the notebook tab in '{session}'."
+            new_id = await _stored_create_tab(session, name)
+            return (
+                f"Created the notebook tab '{name}' (id: {new_id}) in session "
+                f"'{session}'. It is saved and will be the active tab when the "
+                "session screen is opened — write into it with write_cells."
+            )
         except Exception as ex:
             logger.warning("AI tool create_notebook_tab failed: %s", ex)
             return f"Could not create tab: {ex}"
@@ -532,16 +674,33 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             AIParam("The id of the notebook tab to switch to (e.g. 'nb1')."),
         ],
     ) -> str:
-        """Switch to a specific notebook tab in the active session."""
+        """Switch to a specific notebook tab of the active session."""
         if not _has_session():
             return NO_SESSION
+        session = _live_session()
         try:
-            from screens.session.notebook_view import switch_notebook_tab as _switch_tab
+            from screens.session.notebook_view import switch_notebook_tab as _switch
 
-            ok = _switch_tab(_live_session(), tab_id)
-            if not ok:
-                return f"Could not switch to tab {tab_id}: tab not found or session not open."
-            return f"Switched to notebook tab {tab_id}."
+            if _switch(session, tab_id):
+                return f"Switched to notebook tab {tab_id}."
+            if not _storage_ok():
+                return f"Could not switch to tab {tab_id}."
+            tabs = await _stored_tabs(session)
+            target = next(
+                (t for t in tabs if str(t.get("id")) == str(tab_id)), None
+            )
+            if target is None:
+                known = ", ".join(str(t.get("id")) for t in tabs) or "(none)"
+                return (
+                    f"No tab '{tab_id}' exists in session '{session}'. "
+                    f"Known ids: {known}."
+                )
+            reordered = [t for t in tabs if str(t.get("id")) != str(tab_id)]
+            await services.storage.save_tab_index(session, [target, *reordered])
+            return (
+                f"Switched to notebook tab {tab_id} of session '{session}'. It "
+                "becomes the active tab when the session screen is opened."
+            )
         except Exception as ex:
             logger.warning("AI tool switch_notebook_tab failed: %s", ex)
             return f"Could not switch tab: {ex}"
@@ -677,9 +836,9 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             if not str(getattr(state, "active_session_name", "") or "").strip():
                 state.active_session_name = created
             return (
-                f"Created the session '{created}'. It is not open in the UI — "
-                "tell the user the name so they can open it, and you can run "
-                "code in it now."
+                f"Created the session '{created}'. Tell the user its name — and "
+                "note you can work in it right away (run code, create notebook "
+                "tabs, write cells) without anyone opening it first."
             )
         return f"Created the session. {result}"
 

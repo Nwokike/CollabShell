@@ -22,6 +22,8 @@ class FakeStorage:
     def __init__(self):
         self.data = {}
         self.deleted = []
+        self.tab_index: dict[str, list[dict]] = {}
+        self.notebooks: dict[tuple[str, str], list[dict]] = {}
 
     async def get(self, key, default=None):
         return self.data.get(key, default)
@@ -31,7 +33,24 @@ class FakeStorage:
 
     async def delete(self, key):
         self.deleted.append(key)
-        self.data.pop(key, None)
+
+    async def load_tab_index(self, session_name):
+        return self.tab_index.get(session_name)
+
+    async def save_tab_index(self, session_name, tabs):
+        self.tab_index[session_name] = list(tabs)
+
+    async def load_notebook(self, session_name, notebook_id=None):
+        return self.notebooks.get((session_name, str(notebook_id)), [])
+
+    async def save_notebook(self, session_name, cells, notebook_id=None):
+        self.notebooks[(session_name, str(notebook_id))] = list(cells)
+
+    async def list_notebooks(self, session_name):
+        index = self.tab_index.get(session_name)
+        if index is not None:
+            return [str(t["id"]) for t in index]
+        return sorted({k[1] for k in self.notebooks if k[0] == session_name})
 
 
 def _fresh():
@@ -333,16 +352,24 @@ def test_write_cells_reaches_the_notebook_bridge():
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 
 
-def test_write_cells_reports_when_no_notebook_is_open():
+def test_write_cells_creates_a_tab_when_session_is_closed():
+    """No screen, no tabs — the owner's order: write anyway, via storage."""
     from screens.session import notebook_view
 
     notebook_view._SESSION_BRIDGES.pop("sess", None)
     try:
-        tools, _, _ = _tools()
+        services, state = _fresh()
+        tools = ai_tools.build_tools("sess", services, state)
         out = _run(
             _by_name(tools)["write_cells"]([{"type": "code", "source": "x = 1"}])
         )
-        assert "no notebook tab" in out, out
+        assert "Wrote 1 cell" in out, out
+        assert "Notebook" in out, out
+        saved = services.storage.notebooks[("sess", "nb1")]
+        assert [c["source"] for c in saved] == ["x = 1"]
+        assert saved[0]["origin"] == "assistant"
+        # The new tab fronts the index: it is the tab the UI opens first.
+        assert services.storage.tab_index["sess"][0]["name"] == "Notebook"
     finally:
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 
@@ -412,14 +439,28 @@ def test_write_cells_auto_creates_tab_when_active_tab_is_script():
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 
 
-def test_read_notebook_reports_when_session_is_closed():
+def test_read_notebook_reads_the_saved_notebook_when_session_is_closed():
+    """The screen being closed is not "no notebook": the AI reads storage."""
     from screens.session import notebook_view
 
     notebook_view._SESSION_BRIDGES.pop("sess", None)
     try:
-        tools, _, _ = _tools()
+        services, state = _fresh()
+        services.storage.tab_index["sess"] = [
+            {"id": "nb1", "name": "Notes", "view": "notebook", "path": ""}
+        ]
+        services.storage.notebooks[("sess", "nb1")] = [
+            {"id": "c1", "type": "code", "source": "x = 1", "outputs": []}
+        ]
+        tools = ai_tools.build_tools("sess", services, state)
         out = _run(_by_name(tools)["read_notebook"]())
-        assert "no notebook is open" in str(out), out
+        assert "x = 1" in str(out), out
+        assert "Notes" in str(out), out
+
+        # A session with no tabs at all says so honestly, with the way out.
+        services.storage.tab_index["sess"] = []
+        out = _run(_by_name(tools)["read_notebook"]())
+        assert "no notebook tab exists" in str(out), out
     finally:
         notebook_view._SESSION_BRIDGES.pop("sess", None)
 

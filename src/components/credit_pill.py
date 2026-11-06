@@ -84,7 +84,7 @@ def CreditPill() -> ft.Control:
         if credits is None:
             return
         try:
-            set_balance(await credits.get_balance(is_premium=bool(is_premium)))
+            set_balance(await credits.get_balance())
         except Exception:
             # A failed read must not blank the header; keep the last number.
             pass

@@ -29,10 +29,10 @@ from collections.abc import Callable
 import flet as ft
 from flet_terminal import BUILTIN_THEMES, MobileTerminal
 
+from components.banner_ad import pooled_banner_ad
 from components.shortcuts_help import open_shortcuts_help
 from core import tokens
 from core.state import state as app_state
-from core.styles import build_banner_ad
 from core.theme import AppColors, is_light_theme
 from state import ServiceCtx
 
@@ -757,7 +757,16 @@ def TerminalPanel(
             )
 
         # Loading indicator: the ask runs for seconds; without this the owner
-        # saw the button "do nothing" until the answer appeared.
+        # saw the button "do nothing" until the answer appeared. The Cancel
+        # button aborts the running ask — an ask you can watch is an ask you
+        # can stop (the same rule as the cell AI and the chat's Stop).
+        cancel_ref: dict = {}
+
+        def _cancel(e=None):
+            task = cancel_ref.get("task")
+            if task is not None:
+                task.cancel()
+
         page.show_dialog(
             ft.AlertDialog(
                 modal=True,
@@ -765,14 +774,20 @@ def TerminalPanel(
                     [
                         ft.ProgressRing(width=20, height=20, stroke_width=2.5),
                         ft.Text("Assistant is working…", size=tokens.FONT_SM),
+                        ft.TextButton("Cancel", on_click=_cancel),
                     ],
                     spacing=tokens.SPACE_SM,
                     tight=True,
                 ),
             )
         )
+        cancel_ref["task"] = asyncio.current_task()
         try:
             answer = await _ask(None)
+        except asyncio.CancelledError:
+            page.pop_dialog()
+            _ai_snack("Cancelled.")
+            return
         except ai_quick.OutOfCredits:
             page.pop_dialog()
             _ai_snack("Out of assistant credits — top up in Assistant settings.")
@@ -885,6 +900,13 @@ def TerminalPanel(
                 except Exception:
                     logger.debug("terminal explain: ask row update failed")
 
+        cancel_ref: dict = {}
+
+        def _cancel_followup(e=None):
+            task = cancel_ref.get("task")
+            if task is not None:
+                task.cancel()
+
         def _close_dialog() -> None:
             """Dismiss once, and stop every pending repaint from touching it.
 
@@ -931,9 +953,16 @@ def TerminalPanel(
                 return
             flags["busy"] = True
             followup_field.value = ""
+            cancel_ref["task"] = asyncio.current_task()
             _set_working(True)
             try:
                 reply = await _ask(question)
+            except asyncio.CancelledError:
+                flags["busy"] = False
+                followup_field.value = question
+                _set_working(False)
+                _ai_snack("Cancelled.")
+                return
             except ai_quick.OutOfCredits:
                 flags["busy"] = False
                 # The question goes back in the field: a failed ask must not
@@ -1004,6 +1033,7 @@ def TerminalPanel(
             [
                 ft.ProgressRing(width=16, height=16, stroke_width=2.5),
                 ft.Text("Assistant is working…", size=tokens.FONT_SM),
+                ft.TextButton("Cancel", on_click=_cancel_followup),
             ],
             spacing=tokens.SPACE_SM,
             tight=True,
@@ -1270,7 +1300,7 @@ def TerminalPanel(
             # Sticky banner directly under the status bar (the proot-distro
             # pattern): fresh control each render, never mutated while
             # mounted — mobile-only, 0x0 for premium/desktop.
-            build_banner_ad(page),
+            pooled_banner_ad("terminal-1", page),
             switcher_box,
             ft.Stack(controls=stack_children, expand=True),
         ],

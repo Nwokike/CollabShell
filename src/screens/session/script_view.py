@@ -21,6 +21,7 @@ import logging
 
 import flet as ft
 
+from components.banner_ad import pooled_banner_ad
 from components.notebook_cell.output import parse_outputs_to_controls
 from core import tokens
 from services.colab.text_files import upload_text_file
@@ -219,6 +220,10 @@ def ScriptView(
                 ],
                 spacing=tokens.SPACE_SM,
             ),
+            # The sticky banner, in the spot that is empty here but holds the
+            # code/markdown selector in a notebook tab. Pooled (Sherlock): one
+            # build per app run, never rebuilt by a re-render; 0x0 on desktop.
+            pooled_banner_ad("script-1", page),
             output_panel,
         ],
         spacing=tokens.SPACE_SM,

@@ -17,10 +17,15 @@ from collections.abc import Callable
 
 logger = logging.getLogger("ai_service")
 
-# Hard ceilings. A turn is capped in rounds and wall-clock so a confused model
-# cannot bill the user forever or wedge a session.
-MAX_TOOL_ROUNDS = 6
-TURN_TIMEOUT_SEC = 240.0
+# Ceilings, not tripwires. The old round cap (6) cut the model off mid-task —
+# the owner watched it die halfway through real work and call it a bug, and he
+# is right: a cap that fires during normal multi-tool work is a defect, not a
+# guard. 30 rounds is more than any legitimate task has needed; it still ends
+# a confused retry loop before it can bill unbounded steps. The wall-clock cap
+# exists for a wedged connection, not for a model that is working: a long
+# multi-model walk with real tool rounds needs minutes, so the budget matches.
+MAX_TOOL_ROUNDS = 30
+TURN_TIMEOUT_SEC = 900.0
 
 
 class TurnCancelled(Exception):
@@ -229,6 +234,7 @@ async def run_turn(
         base_url=base_url,
         model=model,
         max_rounds=max_rounds,
+        timeout_s=TURN_TIMEOUT_SEC,
     )
     result["cancelled"] = cancel.is_set()
     return result

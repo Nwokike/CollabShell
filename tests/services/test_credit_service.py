@@ -23,18 +23,31 @@ def _svc(balance: int | None = None) -> CreditService:
 
 
 def test_default_balance_is_the_daily_cap():
-    # Fresh services: the cap is applied on first read of the day.
+    # Fresh services: the cap is applied on first read of the day. The cap
+    # reads state.is_premium LIVE (DDGS parity) — it is never a parameter.
+    from core.state import state
+
     assert asyncio.run(_svc().get_balance()) == 50
-    assert asyncio.run(_svc().get_balance(is_premium=True)) == 500
+    state.is_premium = True
+    try:
+        assert asyncio.run(_svc().get_balance()) == 500
+    finally:
+        state.is_premium = False
 
 
 def test_premium_upgrade_does_not_retroactively_refill():
     """Once a balance is established it persists for the day; the premium cap
     applies on the next daily reset, not mid-session (DDGS's flat-reset rule).
     """
+    from core.state import state
+
     svc = _svc()
     assert asyncio.run(svc.get_balance()) == 50
-    assert asyncio.run(svc.get_balance(is_premium=True)) == 50
+    state.is_premium = True
+    try:
+        assert asyncio.run(svc.get_balance()) == 50
+    finally:
+        state.is_premium = False
 
 
 def test_balance_never_goes_negative():
