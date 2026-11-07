@@ -2,7 +2,7 @@
 
 **Branch:** main (HEAD 76a9d4b, squashed commit of all changes since v2.1.2)  
 **Baseline:** tag `v2.1.2` (50fe98b) vs HEAD `76a9d4b`  
-**Flet Source of Truth:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/flet/` (v1.0.4)  
+**Flet Source of Truth:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/flet/` (v1.0.4)  
 **Reference App:** `/home/maikel/Desktop/kiri-apps/DDGS` (app_shell.py, settings_screen.py, components/settings/*)  
 **Sibling Audit Docs:** audit-02-router.md, audit-04-colab.md, audit-05-notebook-files-storage.md, dep-01-flet-core.md, dep-03-colab-libs.md
 
@@ -114,7 +114,7 @@ ft.use_effect(_sync_fab, [...], cleanup=_cleanup_fab)
 
 **Fix:** Remove both `page.update()` calls. The FAB assignment to `page.views[0].floating_action_button` is a control tree mutation that will be picked up by the component renderer on the next scheduled update (triggered by the dependency changes: `cells_version`, `active_tab`, `state.terminal_settings_rev`).
 
-**DDGS Reference:** `DDGS/src/app_shell.py:150-158` — `_sync_fab` assigns `page.views[0].floating_action_button` and calls `page.update()`, but this is a **deliberate escape hatch** for page chrome that DDGS documents. However, DDGS does this from a **plain function** called by `ft.use_effect` with a cleanup, not from inside the effect callback itself. The CollabShell pattern is more dangerous because it's inside the render body.
+**DDGS Reference:** `DDGS/src/app_shell.py:150-158` — `_sync_fab` assigns `page.views[0].floating_action_button` and calls `page.update()`, but this is a **deliberate escape hatch** for page chrome that DDGS documents. However, DDGS does this from a **plain function** called by `ft.use_effect` with a cleanup, not from inside the effect callback itself. The ColabShell pattern is more dangerous because it's inside the render body.
 
 ---
 
@@ -489,7 +489,7 @@ _premium_verdict, _set_premium_verdict = ft.use_state(bool(state.is_premium))
 
 ### Theme/styles/tokens consistency
 **Inconsistencies with DDGS reference:**
-| Token | CollabShell | DDGS |
+| Token | ColabShell | DDGS |
 |-------|-------------|------|
 | `FONT_XS` | 9 | 11 |
 | `FONT_SM` | 10 | 12 |
@@ -507,11 +507,11 @@ _premium_verdict, _set_premium_verdict = ft.use_state(bool(state.is_premium))
 | `ICON_SM` | 16 | 16 |
 | `ICON_MD` | 20 | 20 |
 
-DDGS has `ANIMATION_FAST/NORMAL/SLOW` tokens; CollabShell does not.
-CollabShell has `OPACITY_*` tokens; DDGS does not.
-CollabShell has `INPUT_WIDTH_*`, `DIALOG_*`, `SPINNER_*`, `HERO_ICON_SIZE`; DDGS does not.
+DDGS has `ANIMATION_FAST/NORMAL/SLOW` tokens; ColabShell does not.
+ColabShell has `OPACITY_*` tokens; DDGS does not.
+ColabShell has `INPUT_WIDTH_*`, `DIALOG_*`, `SPINNER_*`, `HERO_ICON_SIZE`; DDGS does not.
 
-**Verdict:** CollabShell tokens are more comprehensive but less consistent with DDGS spacing/typography scale. The smaller base units (SPACE_SM=6 vs 8, SPACE_MD=10 vs 16) make CollabShell more compact.
+**Verdict:** ColabShell tokens are more comprehensive but less consistent with DDGS spacing/typography scale. The smaller base units (SPACE_SM=6 vs 8, SPACE_MD=10 vs 16) make ColabShell more compact.
 
 ### Notifications discrepancy
 **Answered in Finding #5.** The claim "Notifications system removed entirely" in version.json is **false**. The `flet_notifications` package (0.1.4) is installed but unused. The app uses its own `show_notification()` via SnackBar overlay (`src/core/notifications.py`). The release notes should be corrected.

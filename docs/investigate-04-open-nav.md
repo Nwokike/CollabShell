@@ -1,6 +1,6 @@
 # Investigate-04 — "Open Notebook" / "Open Terminal" navigation from AI step rows
 
-READ-ONLY investigation of CollabShell @ 0dfa74e (v2.2.0, build 15). Issue: pressing
+READ-ONLY investigation of ColabShell @ 0dfa74e (v2.2.0, build 15). Issue: pressing
 "Open Notebook" (or "Open Terminal") on an AI step row takes the user to the NOTEBOOKS
 part of the HOME page (the session list), not the session's notebook screen, and shows no
 output. Every AI code run (`_exec`) shows "Open Notebook", never "Open Terminal".

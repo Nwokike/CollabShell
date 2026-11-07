@@ -1,4 +1,4 @@
-# CollabShell /docs — Index & Baseline
+# ColabShell /docs — Index & Baseline
 
 **Baseline:** tag `v2.1.2` (50fe98b) → HEAD `76a9d4b` (squashed commit of all changes since v2.1.2, **147 files, +31,759 / -1,392 lines**).
 
@@ -79,6 +79,6 @@
 ## Verification
 
 ```bash
-ls -1 /home/maikel/Desktop/kiri-apps/CollabShell/docs/
+ls -1 /home/maikel/Desktop/kiri-apps/ColabShell/docs/
 # Should show 20 files (18 source + FINDINGS.md + this README.md)
 ```

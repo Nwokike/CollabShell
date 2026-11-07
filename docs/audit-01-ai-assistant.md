@@ -3,7 +3,7 @@
 **Baseline:** `v2.1.2` (tag) → `HEAD` (76a9d4b, squashed commit, 147 files, +31759/-1392)
 **Scope:** All AI assistant code — kani integration, model catalog, conversation history, credit accounting, streaming, thinking depth, assistant UI, in-cell AI, tools, rendering.
 
-**Summary:** The AI assistant feature was **completely new** in this commit — zero AI files existed at v2.1.2. The implementation ports DDGS's agent architecture (kani backend, model catalog, conversation service, reasoning capture) and adapts it for CollabShell's Colab session operations. The port is largely faithful but introduces several bugs and deviations from the reference apps.
+**Summary:** The AI assistant feature was **completely new** in this commit — zero AI files existed at v2.1.2. The implementation ports DDGS's agent architecture (kani backend, model catalog, conversation service, reasoning capture) and adapts it for ColabShell's Colab session operations. The port is largely faithful but introduces several bugs and deviations from the reference apps.
 
 ---
 
@@ -21,12 +21,12 @@
 | 10 | **medium** | `src/services/ai_service.py:190-196` | Pre-turn catalog refresh calls `model_catalog.refresh_catalog(base_url)` but ignores failure. If refresh fails, `candidate_models()` may be empty (stale catalog) and `turn_candidates()` returns empty list → `run_turn` raises `AIUnavailable` at line 444. The refresh should be mandatory or the turn should use stale catalog with a warning. |
 | 11 | **medium** | `src/services/cell_ai.py:105-107` | `fix` action prompt: "Reply with ONLY a Python code block containing the fixed cell — no explanation before or after it." But `extract_code()` at line 143-166 falls back to raw text if no fence found. A model that hedges with explanation produces a cell with that explanation as code. Should validate extracted code is valid Python or reject. |
 | 12 | **medium** | `src/components/ai_step_output.py:46` | Condition `tool_name == "_exec" and state in ("running", "done") or tool_name == "read_terminal" ...` — operator precedence makes this `(tool_name == "_exec" and state in (...)) or (tool_name == "read_terminal" ...)`. For `read_terminal`, state is ignored — "Open Terminal" button shows even on error. Should be `tool_name in ("_exec", "read_terminal") and state in (...)`. |
-| 13 | **medium** | `src/services/kani_backend.py:329-334` | `_build_engine` hardcodes `api_type="chat_completions"`. lm-router's `catalog.py:57-67` maps `endpoint_type` → `api_type` (chat_completions vs responses). The router serves both; CollabShell ignores `endpoint_type` from catalog and assumes chat completions. A `responses` model will return empty/unparsable replies (per lm-router comment: "kani 1.10's Responses path raises AttributeError"). |
+| 13 | **medium** | `src/services/kani_backend.py:329-334` | `_build_engine` hardcodes `api_type="chat_completions"`. lm-router's `catalog.py:57-67` maps `endpoint_type` → `api_type` (chat_completions vs responses). The router serves both; ColabShell ignores `endpoint_type` from catalog and assumes chat completions. A `responses` model will return empty/unparsable replies (per lm-router comment: "kani 1.10's Responses path raises AttributeError"). |
 | 14 | **low** | `src/services/reasoning.py:43` | `_REASONING_KEYS = ("reasoning_content", "reasoning", "reasoning_details")` — misses `reasoning_summary` which OpenAI Responses API uses. lm-router uses same list; if upstream adds new field, thinking block goes dark silently. |
 | 15 | **low** | `src/services/ai_tools.py:795-798` | `tool_specs` derives JSON schema from signature annotations. For `write_cells` parameter `cells: list[dict]`, `_param_schema` returns `{"type": "array", "items": {"type": "string"}}` because `typing.get_args(list[dict])` → `(dict,)` and `_param_schema(dict)` → `{"type": "object"}`, but the inner `dict` has no properties defined. The model receives `items: {type: "object"}` with no properties — valid but unhelpful. |
 | 16 | **low** | `src/screens/assistant_view.py:1035-1040` | `TEXT_FLUSH_SEC = 0.2`, `THOUGHT_FLUSH_SEC = 0.5` — separate throttles. But `_emit` at line 1035-1047 checks `thought` event twice (lines 1041-1047 and 1097-1105 duplicate logic). Second block at 1097 is dead code (same event, same condition). |
 | 17 | **low** | `src/services/ai_credits.py:235-240` | `_bump_revision` increments `state.credits_revision` to nudge credit pill. But `ChatSession._refresh_credits` at line 1483 runs `refresh_balance` which reads from `CreditService` directly — the revision bump is unused. The pill repaints via `_set_credits` called from `_refresh_credits` result. |
-| 18 | **info** | `src/services/kani_backend.py:658-681` | `_thinking_depth()` reads `state.ai_thinking` (default "auto"), returns `None` for "auto". lm-router uses `state.reasoning_effort` (line 514 in chat_agent.py). Different setting names — not a bug but inconsistent. CollabShell should standardize on one. |
+| 18 | **info** | `src/services/kani_backend.py:658-681` | `_thinking_depth()` reads `state.ai_thinking` (default "auto"), returns `None` for "auto". lm-router uses `state.reasoning_effort` (line 514 in chat_agent.py). Different setting names — not a bug but inconsistent. ColabShell should standardize on one. |
 | 19 | **info** | `src/components/model_picker.py:91-169` | `show_model_picker` dialog does its own catalog refresh and provider config, duplicating `model_pill.py` logic. The picker should use `model_catalog.refresh_catalog` and `pill_state` for consistency. |
 | 20 | **info** | `src/services/ai_tools.py:55-69` | `_cell_has_plot` checks for image mime types in output `data`. But notebook outputs can have `data: {"image/png": "base64..."}` or `data: {"image/png": {"b64": "..."}}` — the check `m in data` works for both, but `_plot_mimes` includes `image/gif` which Colab rarely emits. Harmless. |
 
@@ -131,7 +131,7 @@ api_type="chat_completions",
 
 **Problem:** `reasoning_effort` is an OpenAI Responses API parameter (for `o1`/`o3` models). kani's `OpenAIEngine` only reads it when `api_type="responses"`. With `chat_completions`, the parameter is passed to the API but ignored by the gateway/router. The user's thinking depth setting has no effect.
 
-**Evidence:** lm-router `catalog.py:57-67` maps `endpoint_type` → `api_type`. Models with `endpoint_type="responses"` get `api_type="responses"`. CollabShell hardcodes `chat_completions` (line 347) and ignores `endpoint_type` from catalog.
+**Evidence:** lm-router `catalog.py:57-67` maps `endpoint_type` → `api_type`. Models with `endpoint_type="responses"` get `api_type="responses"`. ColabShell hardcodes `chat_completions` (line 347) and ignores `endpoint_type` from catalog.
 
 **Fix:** In `_build_engine`, read the model's catalog entry and use `api_type_for(entry)` from lm-router's `catalog.py` (or port that logic). Only send `reasoning_effort` when `api_type == "responses"`.
 
@@ -327,7 +327,7 @@ async def _load():
 **Location:** `src/services/kani_backend.py:664-681` vs DDGS/lm-router
 
 ```python
-# CollabShell
+# ColabShell
 depth = str(getattr(state, "ai_thinking", "auto") or "auto").strip().lower()
 
 # DDGS chat_agent.py line 514
@@ -336,7 +336,7 @@ depth = str(getattr(state, "reasoning_effort", "auto") or "auto")
 # lm-router state has reasoning_effort
 ```
 
-**Problem:** CollabShell uses `ai_thinking`, reference apps use `reasoning_effort`. Not a bug but inconsistent. The setting key in `constants.py` is `STORAGE_AI_THINKING = "colab_ai_thinking"`.
+**Problem:** ColabShell uses `ai_thinking`, reference apps use `reasoning_effort`. Not a bug but inconsistent. The setting key in `constants.py` is `STORAGE_AI_THINKING = "colab_ai_thinking"`.
 
 ---
 
@@ -349,14 +349,14 @@ The dialog does its own catalog refresh, provider config, and rendering. The pil
 
 ## Cross-Reference with Reference Apps
 
-| Feature | CollabShell | DDGS | lm-router | Status |
+| Feature | ColabShell | DDGS | lm-router | Status |
 |---------|-------------|------|-----------|--------|
 | kani backend | Ported from DDGS | Source | Similar | ✅ Faithful port |
 | Model catalog | Ported from DDGS | Source | Enhanced (endpoint→api_type) | ⚠️ Missing endpoint→api_type |
 | Reasoning capture | Ported from DDGS | Source | Source | ✅ Faithful port |
 | Credit metering | Ported from DDGS | Source | N/A (no credits) | ✅ Faithful port |
 | Conversation history | Ported from DDGS | Source | N/A | ✅ Faithful port |
-| In-cell AI | New (CollabShell-specific) | N/A | N/A | ✅ New feature |
+| In-cell AI | New (ColabShell-specific) | N/A | N/A | ✅ New feature |
 | Model picker UI | Dropdown (lm-router style) | Modal dialog | Dropdown | ✅ Better UX |
 | `auto` model handling | Buggy (see #3) | Not applicable | Explicit in catalog | ❌ Bug |
 | Thinking depth | `ai_thinking` setting | `reasoning_effort` | `reasoning_effort` | ⚠️ Inconsistent |

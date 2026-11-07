@@ -1,7 +1,7 @@
 # Audit: AI Libraries (kani, openai, httpx, tiktoken) — since v2.1.2
 
 **Baseline:** tag `v2.1.2` (50fe98b) → HEAD `76a9d4b` (squashed 61 commits)  
-**Source of truth:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/`  
+**Source of truth:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/`  
 **Scope:** `kani 1.10.0`, `openai 2.54.0`, `httpx 0.28.1`, `tiktoken 0.14.0`, plus `pydantic 2.14.1`, `anyio 4.15.1`, `rich 15.0.0`  
 **App files audited:** `src/services/kani_backend.py`, `src/services/ai_service.py`, `src/services/ai_tools.py`, `src/services/reasoning.py`, `src/services/ai_quick.py`, `src/services/cell_ai.py`, `src/services/model_catalog.py`, `src/services/conversation_service.py`, `src/services/ai_credits.py`
 
@@ -232,7 +232,7 @@ async for stream in ai.full_round_stream(query):
 
 | # | Severity | App Location | Library Source | Problem | Better Way |
 |---|----------|--------------|----------------|---------|------------|
-| 1 | critical | `kani_backend.py:484-493` | `kani/kani.py:67-76` | `CollabShellKani` passes `retry_attempts=1` but `Kani.__init__` default is 1. The comment says "one attempt only" but this is already the default. No bug, but misleading comment. | Remove comment or clarify: default is 1, setting explicitly is fine. |
+| 1 | critical | `kani_backend.py:484-493` | `kani/kani.py:67-76` | `ColabShellKani` passes `retry_attempts=1` but `Kani.__init__` default is 1. The comment says "one attempt only" but this is already the default. No bug, but misleading comment. | Remove comment or clarify: default is 1, setting explicitly is fine. |
 | 2 | high | `kani_backend.py:504-518` | `kani/kani.py:289-312` | `full_round_stream` called with `max_tokens=max_tokens` but kani's `full_round_stream` does NOT accept `max_tokens` — it's passed as `**kwargs` to engine. Works only because `OpenAIEngine.predict/stream` accept `max_tokens` in hyperparams. | Document that `max_tokens` is engine-specific hyperparam, not kani API. |
 | 3 | high | `kani_backend.py:514-517` | `kani/engines/openai/engine.py:51-59` | `reasoning_effort` passed as kwarg but only works for Responses API models. For Chat Completions API it's ignored silently. No validation that model supports it. | Check `engine.openai_api_type == "responses"` before passing, or let engine ignore unknown params. |
 | 4 | high | `kani_backend.py:547` | `kani/kani.py:115-140` | `kani.functions = {}` to strip tools mid-stream. Direct dict mutation bypasses `get_enabled_functions()` and function registration logic. | Use `kani.functions.clear()` or rebuild Kani without functions. Better: pass `include_functions=False` in kwargs (but that's per-call, not persistent). |
@@ -240,7 +240,7 @@ async for stream in ai.full_round_stream(query):
 | 6 | high | `kani_backend.py:589` | `kani/streaming.py:146-149` | `await manager.message()` after manual iteration. If stream was abandoned mid-iteration (`break`), `_finished` event never set → `message()` hangs forever. The code detects this with `stopped_mid_stream` flag and breaks before `message()` — correct but fragile. | Use `async for token in manager:` pattern; `manager.message()` only after loop completes naturally. |
 | 7 | medium | `kani_backend.py:446` | `kani/kani.py:109` | `history_msgs = list(base_history)` copies history for each candidate. But `Kani.__init__` stores reference: `self.chat_history = chat_history or []`. If caller mutates `base_history` later, all candidates see changes. | Copy explicitly: `chat_history=list(base_history)` (already done). OK. |
 | 8 | medium | `kani_backend.py:609-611` | `kani/kani.py:109` | `history_msgs = list(kani.chat_history)` carries forward tool results to next candidate. Correct pattern. | No change needed. |
-| 9 | medium | `kani_backend.py:484-493` | `kani/kani.py:67-76` | `CollabShellKani` created per-candidate with same `system_prompt` and `chat_history`. Each gets own `lock` — correct isolation. | No change needed. |
+| 9 | medium | `kani_backend.py:484-493` | `kani/kani.py:67-76` | `ColabShellKani` created per-candidate with same `system_prompt` and `chat_history`. Each gets own `lock` — correct isolation. | No change needed. |
 | 10 | medium | `ai_tools.py:772-805` | `kani/ai_function.py:79-124` | `tool_specs` derives JSON schema from function signatures using `inspect.signature(fn, eval_str=True)` and custom `_param_schema`. This **duplicates** kani's `AIFunction.create_json_schema()` which uses `pydantic.validate_call` + `typing.get_type_hints`. Two schema generators can drift. | Use `@ai_function` decorator on tool functions and let kani generate schemas. Or pass `json_schema=spec.parameters` to `AIFunction` (current `build_functions` does this at line 229) but derive schema FROM kani's generator, not hand-rolled. |
 | 11 | medium | `ai_tools.py:754-770` | `kani/ai_function.py:114-124` | `_param_schema` handles `Annotated` + `AIParam` but kani's `get_aiparam` does the same (`ai_function.py:196-204`). Duplicate logic. | Use kani's `AIFunction.create_json_schema()` as single source of truth. |
 | 12 | low | `kani_backend.py:90-115` | `kani/engines/openai/engine.py:120-133` | `_CountingTokenizer` replaces tiktoken with word-split heuristic. Under-counts code (BPE splits below word boundaries). kani falls back to `o200k_base` if model tokenizer missing (`engine.py:128-132`). | Use real tiktoken; if cold-cache download stalls, pre-warm at startup: `tiktoken.encoding_for_model(model)` in background. |
@@ -300,7 +300,7 @@ The following kani/public API options are **not exposed** to users or configurab
 |--------------|----------|------------|
 | `Kani.desired_response_tokens` | `kani/kani.py:72` | Hardcoded to engine default (min(context//10, 8192)). Not tunable. |
 | `Kani.always_included_messages` | `kani/kani.py:71` | Not used. Could inject few-shot examples or persistent context. |
-| `Kani.retry_attempts` | `kani/kani.py:75` | Fixed at 1 in `CollabShellKani` init. Not user-configurable. |
+| `Kani.retry_attempts` | `kani/kani.py:75` | Fixed at 1 in `ColabShellKani` init. Not user-configurable. |
 | `AIFunction.auto_retry` | `kani/ai_function.py:35` | Default `True`. Not exposed per-tool. |
 | `AIFunction.auto_truncate` | `kani/ai_function.py:39` | Set globally via `TOOL_OUTPUT_CAP=12000` in `build_functions`. Not per-tool. |
 | `AIFunction.enabled` | `kani/ai_function.py:46` | Not used. Could dynamically disable tools. |

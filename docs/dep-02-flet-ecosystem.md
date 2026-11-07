@@ -1,6 +1,6 @@
-# Flet Satellite Packages Audit — CollabShell
+# Flet Satellite Packages Audit — ColabShell
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (HEAD 76a9d4b)  
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (HEAD 76a9d4b)  
 **Venv:** `.venv/lib/python3.14/site-packages/`  
 **Packages:** `flet_ads` (1.0.4), `flet_notifications` (0.1.4), `flet_desktop` (1.0.4), `flet_terminal` (0.3.9), `flet_platform_assets` (1.0.4), `flet_cli` (1.0.4)
 
@@ -256,7 +256,7 @@
 
 | Location | Usage |
 |----------|-------|
-| `.github/workflows/build-all.yml:106` | `uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v --exclude pyarrow --skip-flutter-doctor` |
+| `.github/workflows/build-all.yml:106` | `uv run flet build apk --yes --project collabshell --product "Colab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v --exclude pyarrow --skip-flutter-doctor` |
 | `.github/workflows/build-all.yml:152` | `uv run flet build aab ...` (with `CHANNEL = "play"` marker) |
 | `.github/workflows/build-all.yml:173` | `uv run flet build windows ...` |
 | `.github/workflows/build-all.yml:242` | `uv run flet build linux ...` |

@@ -41,7 +41,7 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "RELEASE_NAME=Collab Shell ${{ github.ref_name }} (pre-release, pending approval)" >> $GITHUB_OUTPUT
+            echo "RELEASE_NAME=Colab Shell ${{ github.ref_name }} (pre-release, pending approval)" >> $GITHUB_OUTPUT
             # A tag build is a PRE-RELEASE and never promotes itself to Latest.
             # Promoting is the owner's call, made by hand in the Releases UI
             # once the APK is tested and the AAB is on Play. Marking Latest here
@@ -116,7 +116,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build apk --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v --exclude pyarrow --skip-flutter-doctor
+        run: uv run flet build apk --yes --project collabshell --product "Colab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} --split-per-abi -v --exclude pyarrow --skip-flutter-doctor
       - name: Verify 16 KB page alignment (Google Play requirement)
         run: python scripts/check_elf_alignment.py build/apk/*.apk
       - name: Upload directly to GitHub Release
@@ -162,7 +162,7 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: uv run flet build aab --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v --exclude pyarrow --skip-flutter-doctor
+        run: uv run flet build aab --yes --project collabshell --product "Colab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v --exclude pyarrow --skip-flutter-doctor
       - name: Verify 16 KB page alignment (Google Play requirement)
         run: python scripts/check_elf_alignment.py build/aab/*.aab
       - name: Upload directly to GitHub Release
@@ -183,7 +183,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Build Windows Portable
-        run: uv run flet build windows --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build windows --yes --project collabshell --product "Colab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
 
       - name: Generate Icon for Installer
         run: |
@@ -195,17 +195,17 @@ jobs:
           $IssContent = @"
           [Setup]
           AppId={{A38F4129-8472-4D91-8C31-18294B183621}}
-          AppName=Collab Shell
+          AppName=Colab Shell
           AppVersion=${{ env.BUILD_VERSION }}
           AppPublisher=Kiri
           AppPublisherURL=https://kiri.ng
           AppSupportURL=https://kiri.ng/support
           AppUpdatesURL=https://kiri.ng/updates
           AppCopyright=Copyright (C) 2026 Kiri
-          DefaultDirName={autopf}\Collab Shell
-          DefaultGroupName=Collab Shell
+          DefaultDirName={autopf}\Colab Shell
+          DefaultGroupName=Colab Shell
           OutputDir=.\build\installer
-          OutputBaseFilename=CollabShell_Setup
+          OutputBaseFilename=ColabShell_Setup
           Compression=lzma2
           SolidCompression=yes
           WizardStyle=modern
@@ -215,14 +215,14 @@ jobs:
           SetupIconFile=.\src\assets\icon.ico
           UninstallDisplayIcon={app}\collabshell.exe
           CloseApplications=yes
-          AppMutex=CollabShell_Mutex
+          AppMutex=ColabShell_Mutex
 
           [Files]
           Source: "build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          Name: "{group}\Collab Shell"; Filename: "{app}\collabshell.exe"
-          Name: "{autodesktop}\Collab Shell"; Filename: "{app}\collabshell.exe"; Tasks: desktopicon
+          Name: "{group}\Colab Shell"; Filename: "{app}\collabshell.exe"
+          Name: "{autodesktop}\Colab Shell"; Filename: "{app}\collabshell.exe"; Tasks: desktopicon
 
           [Tasks]
           Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
@@ -235,7 +235,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.TAG_NAME }}
-          files: build/installer/CollabShell_Setup.exe
+          files: build/installer/ColabShell_Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -252,13 +252,13 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev rpm ruby ruby-dev
           sudo gem install --no-document fpm
       - name: Build Linux Bundle
-        run: uv run flet build linux --yes --project collabshell --product "Collab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
+        run: uv run flet build linux --yes --project collabshell --product "Colab Shell" --org ng.kiri --build-version ${{ env.BUILD_VERSION }} --build-number ${{ env.BUILD_NUMBER }} -v
       - name: Create Linux Packages (.deb, .rpm, .tar.gz)
         run: |
           mkdir -p build/dist
 
           # 1. Universal Portable .tar.gz
-          tar -czf build/dist/CollabShell_linux_x86_64.tar.gz -C build/linux .
+          tar -czf build/dist/ColabShell_linux_x86_64.tar.gz -C build/linux .
 
           # 2. Stage filesystem tree for rich .deb and .rpm packages
           mkdir -p pkg_root/usr/lib/collabshell pkg_root/usr/bin pkg_root/usr/share/applications pkg_root/usr/share/icons/hicolor/256x256/apps pkg_root/usr/share/pixmaps pkg_root/usr/share/metainfo
@@ -274,7 +274,7 @@ jobs:
           cat <<EOF > pkg_root/usr/share/applications/collabshell.desktop
           [Desktop Entry]
           Version=1.0
-          Name=Collab Shell
+          Name=Colab Shell
           GenericName=Colab & Terminal Client
           Comment=Run cloud notebooks, interactive terminals & manage files natively
           Exec=/usr/bin/collabshell
@@ -294,10 +294,10 @@ jobs:
             <id>ng.kiri.collabshell</id>
             <metadata_license>MIT</metadata_license>
             <project_license>MIT</project_license>
-            <name>Collab Shell</name>
+            <name>Colab Shell</name>
             <summary>Run cloud notebooks, interactive terminals &amp; manage files natively</summary>
             <description>
-              <p>Collab Shell connects directly to Google Colab runtimes, providing:</p>
+              <p>Colab Shell connects directly to Google Colab runtimes, providing:</p>
               <ul>
                 <li>Interactive GPU-accelerated PTY web terminals via Colab WebSockets</li>
                 <li>Full Jupyter notebook cell execution and rich Markdown editing</li>
@@ -318,7 +318,7 @@ jobs:
               --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "utils" \
-              -p build/dist/CollabShell_amd64.deb \
+              -p build/dist/ColabShell_amd64.deb \
               -C pkg_root .
 
           # Build rich .rpm using fpm
@@ -328,7 +328,7 @@ jobs:
               --maintainer "Kiri <support@kiri.ng>" \
               --url "https://kiri.ng" \
               --category "Utility" \
-              -p build/dist/CollabShell_x86_64.rpm \
+              -p build/dist/ColabShell_x86_64.rpm \
               -C pkg_root .
 
       - name: Upload directly to GitHub Release

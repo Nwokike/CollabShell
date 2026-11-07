@@ -1,6 +1,6 @@
 # Audit 08 — AI in Session (Terminal + Notebook)
 
-**Repo:** /home/maikel/Desktop/kiri-apps/CollabShell  
+**Repo:** /home/maikel/Desktop/kiri-apps/ColabShell  
 **Baseline:** HEAD (76a9d4b)  
 **Scope:** AI implementation inside the TERMINAL and inside the NOTEBOOK  
 **Mode:** Read-only source inspection; no files modified.
@@ -56,13 +56,13 @@
 
 ## Cross-Check: lm-router chat tools
 
-`/home/maikel/Desktop/kiri-apps/lm-router/src/services/router_tools.py` exposes three read-only router diagnostic tools: `gateway_status`, `list_models`, `probe_model`. These follow the same "docstring is the model-visible instruction" pattern as `ai_tools.py` (docstring IS the spec, JSON schema derived from signature via `AIParam`). They are router/domain tools (gateway health, catalog, single-model probe) — different domain from CollabShell's session tools (`_exec`, `read_notebook`, `read_terminal`, etc.), no functional overlap, no shared bugs. lm-router tools use `auto_retry=False` and explicit `auto_truncate`; CollabShell's `ai_tools.tool_specs` derives truncation from `TOOL_OUTPUT_CAP` (12000) via `kani_backend.build_functions` — equivalent contract.
+`/home/maikel/Desktop/kiri-apps/lm-router/src/services/router_tools.py` exposes three read-only router diagnostic tools: `gateway_status`, `list_models`, `probe_model`. These follow the same "docstring is the model-visible instruction" pattern as `ai_tools.py` (docstring IS the spec, JSON schema derived from signature via `AIParam`). They are router/domain tools (gateway health, catalog, single-model probe) — different domain from ColabShell's session tools (`_exec`, `read_notebook`, `read_terminal`, etc.), no functional overlap, no shared bugs. lm-router tools use `auto_retry=False` and explicit `auto_truncate`; ColabShell's `ai_tools.tool_specs` derives truncation from `TOOL_OUTPUT_CAP` (12000) via `kani_backend.build_functions` — equivalent contract.
 
 ---
 
 ## Cross-Check: DDGS ai_overview / ai_summary
 
-From `docs/ref-01-ddgs-patterns.md` §5.4-5.5: DDGS has passive AI cards — `ai_overview` (collapsed markdown + "Read full report", honest error states for credits exhausted / midstream loss / unavailable) and `ai_summary` (streams tokens via `on_token`, throttled to 0.2s, terminal actions only — "Ask Assistant about this page" or "Get credits", no begin button). CollabShell has **no equivalent passive AI surface** in either terminal or notebook. The terminal explain is an active dialog (button → answer in `AlertDialog`), and in-cell AI inserts editable cells. Neither offers a passive, collapsed-by-default overview/summary card. This is a missing feature, not a bug — CollabShell's AI is explicitly on-demand and tool-free per `cell_ai.py` docstring ("deliberately tool-free: the whole notebook is passed in the prompt and the model answers in one step").
+From `docs/ref-01-ddgs-patterns.md` §5.4-5.5: DDGS has passive AI cards — `ai_overview` (collapsed markdown + "Read full report", honest error states for credits exhausted / midstream loss / unavailable) and `ai_summary` (streams tokens via `on_token`, throttled to 0.2s, terminal actions only — "Ask Assistant about this page" or "Get credits", no begin button). ColabShell has **no equivalent passive AI surface** in either terminal or notebook. The terminal explain is an active dialog (button → answer in `AlertDialog`), and in-cell AI inserts editable cells. Neither offers a passive, collapsed-by-default overview/summary card. This is a missing feature, not a bug — ColabShell's AI is explicitly on-demand and tool-free per `cell_ai.py` docstring ("deliberately tool-free: the whole notebook is passed in the prompt and the model answers in one step").
 
 ---
 

@@ -243,7 +243,7 @@ return None  # falls through to default_color
 
 **Changed since 2.1.2:** Yes — version.json added to `.gitignore` (was tracked in v2.1.2)
 
-**Problem:** `UpdateService.check_for_update()` fetches `UPDATE_CONFIG_URL` (`https://raw.githubusercontent.com/Nwokike/CollabShell/main/version.json`). No local fallback. If GitHub is unreachable, update check silently returns `None` (by design). But `version.json` is now `.gitignore`d — CI must publish it to the repo *before* builds ship, otherwise `test_version_sync.py::test_feed_never_ahead_of_app` passes vacuously (file doesn't exist locally) but the live feed may be stale.
+**Problem:** `UpdateService.check_for_update()` fetches `UPDATE_CONFIG_URL` (`https://raw.githubusercontent.com/Nwokike/ColabShell/main/version.json`). No local fallback. If GitHub is unreachable, update check silently returns `None` (by design). But `version.json` is now `.gitignore`d — CI must publish it to the repo *before* builds ship, otherwise `test_version_sync.py::test_feed_never_ahead_of_app` passes vacuously (file doesn't exist locally) but the live feed may be stale.
 
 **Evidence:** `.gitignore` line: `version.json`. `test_version_sync.py` lines 44-55: "If version.json is untracked or held locally, the test passes."
 

@@ -1,7 +1,7 @@
 # Research: Kernel/Session Liveness in Jupyter Stack & Colab Integration
 
 **Date:** 2026-11-02  
-**Scope:** jupyter_client, jupyter_kernel_client, jupyter_core, Google Colab behavior, CollabShell error handling
+**Scope:** jupyter_client, jupyter_kernel_client, jupyter_core, Google Colab behavior, ColabShell error handling
 
 ---
 
@@ -129,7 +129,7 @@
 
 ---
 
-### 3(c) Errors in CollabShell's colab/execution.py / terminal_client.py — Mapping & Recovery
+### 3(c) Errors in ColabShell's colab/execution.py / terminal_client.py — Mapping & Recovery
 
 #### execution.py Error Handling
 
@@ -148,7 +148,7 @@
 | Lines 310-320 (`_reconnect_attempts`) | HTTP status 400-499 on reconnect | Stops retrying ("permanent error — terminal gone") | **404/401 may be token expiry** — should refresh credentials via `_refresh_cached_credentials()` before giving up. |
 | Lines 97-144 (`_refresh_cached_credentials`) | Re-reads session url/token from store | Called before each reconnect attempt | **Good** — picks up refreshed token from `session_ops.refresh_session_token()`. |
 
-#### Recommended Error → Action Mapping for CollabShell
+#### Recommended Error → Action Mapping for ColabShell
 
 | Error Signature | Meaning | Recovery Action |
 |-----------------|---------|-----------------|
@@ -161,7 +161,7 @@
 
 ---
 
-## 4. Recommendations for CollabShell
+## 4. Recommendations for ColabShell
 
 ### 4.1 Keep-Alive Strategy
 
@@ -232,7 +232,7 @@ For AI assistant to access even "idle" sessions:
    - Timer: every 50 min, refresh runtime-proxy token
 5. **Graceful degradation**: If reconnect fails, show "Runtime disconnected — click to reconnect" not "Session lost"
 
-### 4.4 Specific Code Changes for CollabShell
+### 4.4 Specific Code Changes for ColabShell
 
 | File | Change |
 |------|--------|
@@ -251,4 +251,4 @@ For AI assistant to access even "idle" sessions:
 4. datalayer/jupyter-kernel-client PR #41
 5. googlecolab/colabtools #6101
 6. aspershupadhyay/voicebox-gpu PR #44
-7. CollabShell: `src/services/colab/execution.py`, `terminal_client.py`, `session_ops.py`
+7. ColabShell: `src/services/colab/execution.py`, `terminal_client.py`, `session_ops.py`

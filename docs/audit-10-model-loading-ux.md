@@ -2,7 +2,7 @@
 
 READ-ONLY audit. No source was changed. One report file only.
 
-## 1. Current CollabShell trace + root cause
+## 1. Current ColabShell trace + root cause
 
 ### 1.1 What the user sees
 
@@ -10,7 +10,7 @@ Opening the assistant FAB shows the header pill / model list stuck on
 `"Loading models…"` / `"Starting gateway…"` with a spinner, and the model
 list is empty/null until the user presses a manual Refresh. LM Router, by
 contrast, goes `"starting gateway"` → selected model appears automatically
-with no user action. CollabShell does not auto-refresh like the Flet
+with no user action. ColabShell does not auto-refresh like the Flet
 observable/reference pattern.
 
 ### 1.2 State that is written (and what reads it)
@@ -175,12 +175,12 @@ File: `/home/maikel/Desktop/kiri-apps/lm-router/src/components/chat_controls.py`
   `state.model` (106) **directly in the component body**.
 - `chat_controls.py:108` — `discovering = state.gateway_running and not
   models` (a data condition, not a lifecycle string — same rule as
-  CollabShell's `model_pill.py:179` comment).
+  ColabShell's `model_pill.py:179` comment).
 - `chat_controls.py:111-118` — label: `"Starting gateway…"` while
   discovering, `"Gateway stopped"` when not running, model name when
   `state.models` present.
 - `chat_controls.py:227-231` — `ft.ProgressRing` in the pill slot while
-  discovering (same spinner pattern CollabShell copies at
+  discovering (same spinner pattern ColabShell copies at
   `model_pill.py:410-415`).
 
 Because `ModelPicker` is a `@ft.component` subscribed to `AppState` (via
@@ -192,7 +192,7 @@ transitions `"Starting gateway…"` → selected model with **no manual
 refresh**, because the catalog's arrival *is* a state write that the
 component reads.
 
-Contrast with CollabShell: `build_model_pill` is not a component, reads
+Contrast with ColabShell: `build_model_pill` is not a component, reads
 no observable catalog revision, and `refresh_model_chip` is not invoked on
 catalog completion — so the equivalent automatic transition never happens.
 
@@ -203,7 +203,7 @@ File: `/home/maikel/Desktop/kiri-apps/DDGS/src/components/model_picker.py`
 - `build_model_pill` (line 146) is a plain function (not `@ft.component`);
   it calls `model_picker_state()` (45) which reads
   `state.ai_router_status` (67), `ai_service.snapshot_models()` (59-64),
-  `state.ai_model` (66). Built once, like CollabShell's pill.
+  `state.ai_model` (66). Built once, like ColabShell's pill.
 - `discovering` (71) = `status in ("starting", "ready") and not models and
   not fetched`; once `fetched` is true, an empty catalog is treated as a
   real answer (`label = "Offline"`, 87) rather than a wait — but the pill
@@ -220,7 +220,7 @@ File: `/home/maikel/Desktop/kiri-apps/DDGS/src/app_controller.py`
   invisible to the pill.
 - `_router_watchdog` (1157-1196) writes `state.ai_router_status`/`port`
   and calls `session.refresh_model_chip()` **only on a status change**
-  (1181-1186) — same shape as CollabShell's watchdog.
+  (1181-1186) — same shape as ColabShell's watchdog.
 
 ### Verdict: DDGS has the same stuck-loading bug
 
@@ -243,7 +243,7 @@ transition, because catalog-refresh completion does not repaint the pill.
    deriving from fetched state (it already does); ensure the pill is rebuilt
    after step 1's nudge.
 
-## 4. CollabShell fix design
+## 4. ColabShell fix design
 
 Goal: pill + picker + assistant model list fully reactive to
 (a) router status changes and (b) catalog refresh completion; auto-refresh
@@ -291,7 +291,7 @@ Existing observable fields already written correctly:
 
 ### 4.3 Render path (reactive vs imperative)
 
-CollabShell's assistant is an **imperative** `ft.View` (`ChatSession`),
+ColabShell's assistant is an **imperative** `ft.View` (`ChatSession`),
 not part of the `page.render()` declarative tree, so a pure
 `@ft.component` pill inside it would not auto-repaint. Two coordinated
 changes are therefore needed:

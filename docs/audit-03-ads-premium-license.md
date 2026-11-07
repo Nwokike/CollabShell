@@ -29,7 +29,7 @@
 | 16 | **info** | `src/services/credit_service.py`, `src/services/ai_credits.py` | Credit ledger math matches DDGS: 3-phase settlement (reserve/commit/rollback), soft metering, floor rule, idempotent commit, 240s auto-rollback |
 | 17 | **info** | `src/services/usage_cache.py` | Cache logic correct: 24h TTL, read-through with fallback, writes only on fresh non-cached response |
 | 18 | **info** | `src/components/credit_pill.py`, `src/components/usage_chip.py` | Reactive components match DDGS pattern (context + use_state + use_effect) |
-| 19 | **info** | Dead code | No dead code from "Notifications removed" / "Pro placeholder removed" — these commits not in CollabShell history |
+| 19 | **info** | Dead code | No dead code from "Notifications removed" / "Pro placeholder removed" — these commits not in ColabShell history |
 
 ---
 
@@ -60,7 +60,7 @@ if state.is_premium or not _HAS_ADS or not self._is_mobile():
     return False  # <-- NO on_close call
 ```
 
-**Evidence (wallet_dialog.py calls this):** `/home/maikel/Desktop/kiri-apps/CollabShell/src/components/wallet_dialog.py:153-174`  
+**Evidence (wallet_dialog.py calls this):** `/home/maikel/Desktop/kiri-apps/ColabShell/src/components/wallet_dialog.py:153-174`  
 ```python
 def _on_reward(_ok=True):
     granted["ok"] = bool(_ok)
@@ -81,7 +81,7 @@ if granted["ok"]:
 ```python
 # src/services/license_service.py:73-81
 def status_refusal(code: int) -> bool:
-    return code in (402, 403, 404)  # 400 INCLUDED in CollabShell, NOT in DDGS
+    return code in (402, 403, 404)  # 400 INCLUDED in ColabShell, NOT in DDGS
 ```
 DDGS explicitly excludes 400: *"400 is deliberately excluded: a malformed request is an app bug and must never revoke a real license"* (`/home/maikel/Desktop/kiri-apps/DDGS/src/services/license_service.py:73-82`). A 400 means the *app* sent bad JSON — retrying with the same payload will keep failing, but the user's purchase is valid. Including 400 means a transient serialization bug permanently revokes Premium until manual restore.
 
@@ -198,7 +198,7 @@ finally:
 ```
 The `finally` block stamps the clock **only after** `_recompute_premium`. But if `license.restore` raises `LicenseUnavailable` with `is_refusal=True`, the `_revoke` inside `license._query` (line 380 in license_service.py) calls `_notify_change` which calls `on_change` → `_recompute_premium` → `_commit` → `_notify_listeners`. This works. However, if a **transient** failure occurs (network error), the first `try` block catches it, logs, and retries once. If the retry also fails, the exception propagates — but the `finally` block still runs and stamps the clock. **Wait, this is actually correct.**
 
-Let me re-read... The DDGS version stamps in `finally` **after** the whole operation including the retry. CollabShell does the same. But DDGS also has:
+Let me re-read... The DDGS version stamps in `finally` **after** the whole operation including the retry. ColabShell does the same. But DDGS also has:
 ```python
 # DDGS premium_service.py:264-282
 finally:
@@ -206,7 +206,7 @@ finally:
     # already cleared the licence, and state.is_premium must follow.
     self._recompute_premium()
 ```
-The difference: DDGS calls `_recompute_premium` in `finally` **unconditionally**, while CollabShell's `reconcile` calls it in `finally` but the `license.restore` path already calls `_recompute_premium` via `on_change`. This is fine.
+The difference: DDGS calls `_recompute_premium` in `finally` **unconditionally**, while ColabShell's `reconcile` calls it in `finally` but the `license.restore` path already calls `_recompute_premium` via `on_change`. This is fine.
 
 **Actually, the real issue:** `reconcile_if_due` (lines 136-142) debounces based on `_last_reconcile_at`. If `reconcile` fails with an exception (not caught), the clock is still stamped (in `finally`), so the debounce works. But if `reconcile` returns early due to `CHANNEL == "play"` (line 111-112), it returns **without stamping**. This means on Play channel, `reconcile_if_due` will keep retrying every call. Minor.
 
@@ -236,7 +236,7 @@ Wait, let me check DDGS:
 ad_service = getattr(state, "ad_service", None)
 ads_available = bool(ad_service) and ad_service._is_mobile()
 ```
-DDGS just calls it. CollabShell's version is more defensive but equivalent. **This may not be a bug** — the comment describes the old bug, the code fixes it.
+DDGS just calls it. ColabShell's version is more defensive but equivalent. **This may not be a bug** — the comment describes the old bug, the code fixes it.
 
 **Actually, wait:** The comment says "It is a method, not a property: a truthy bound method here made desktop offer an ad top-up it cannot show." This implies the **old code** did `bool(probe)` without calling it. The current code calls it. So this is **fixed**, not a bug. I'll mark as info.
 
@@ -437,7 +437,7 @@ All match DDGS exactly.
 ---
 
 ### 19. INFO: No dead code from "Notifications removed" / "Pro placeholder removed"
-**Checked:** Git history for these commit messages — not present in CollabShell. The squashed commit (76a9d4b) contains 61 commits since v2.1.2; none match these descriptions. No dead code found in scoped files.
+**Checked:** Git history for these commit messages — not present in ColabShell. The squashed commit (76a9d4b) contains 61 commits since v2.1.2; none match these descriptions. No dead code found in scoped files.
 
 ---
 

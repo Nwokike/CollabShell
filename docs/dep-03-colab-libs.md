@@ -1,6 +1,6 @@
 # Colab Client Libraries — API Reference & Gap Analysis
 
-> **Generated from installed package source** at `.venv/lib/python3.14/site-packages/colab_cli/` (google-colab-cli 0.7.4) and mapped against CollabShell's `src/services/colab/`.
+> **Generated from installed package source** at `.venv/lib/python3.14/site-packages/colab_cli/` (google-colab-cli 0.7.4) and mapped against ColabShell's `src/services/colab/`.
 
 ---
 

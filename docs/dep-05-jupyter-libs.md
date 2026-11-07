@@ -1,7 +1,7 @@
 # Audit: Jupyter Stack Libraries (nbformat, jupyter_client, jupyter_kernel_client, watchdog, pyzmq, traitlets)
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (branch `main`, HEAD `76a9d4b`)  
-**Source of truth:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/`  
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (branch `main`, HEAD `76a9d4b`)  
+**Source of truth:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/`  
 **Scope:** nbformat 5.11.1, jupyter_client 8.10.0, jupyter_kernel_client 0.9.0, jupyter_mimetypes 0.2.0, pyzmq 27.2.0, traitlets 5.16.1, watchdog 6.0.0  
 **App files audited:** `src/services/ipynb_converter.py`, `src/components/notebook_cell/actions.py`, `src/components/notebook_cell/output.py`, `src/screens/session/notebook_view.py`, `src/services/colab/execution.py`, any watchdog usage
 

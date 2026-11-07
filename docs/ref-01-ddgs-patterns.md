@@ -1,6 +1,6 @@
-# DDGS Reference Patterns — What CollabShell Was Supposed to Learn
+# DDGS Reference Patterns — What ColabShell Was Supposed to Learn
 
-Extracted from `/home/maikel/Desktop/kiri-apps/DDGS/src/` (gold standard). Cross-referenced with CollabShell HEAD (76a9d4b) and audit findings in `docs/audit-03-ads-premium-license.md`.
+Extracted from `/home/maikel/Desktop/kiri-apps/DDGS/src/` (gold standard). Cross-referenced with ColabShell HEAD (76a9d4b) and audit findings in `docs/audit-03-ads-premium-license.md`.
 
 ---
 
@@ -33,9 +33,9 @@ def interstitial_id(self) -> str:
 
 **WHY**: Single source of truth per platform; `USE_TEST_IDS` flip is the only thing that changes between test/prod. No iOS IDs (DDGS is Android-first; iOS would be added per-platform).
 
-**CollabShell gap** (`src/services/ad_service.py:35-71`):
+**ColabShell gap** (`src/services/ad_service.py:35-71`):
 - Has `NATIVE_ID_ANDROID_PROD` and `NATIVE_ID_ANDROID_TEST` that DDGS doesn't — dead code for a native ad format DDGS removed
-- `banner_id` / `interstitial_id` properties exist but CollabShell's `get_banner_ad` uses `tokens.BANNER_WIDTH/HEIGHT` (see §1.5)
+- `banner_id` / `interstitial_id` properties exist but ColabShell's `get_banner_ad` uses `tokens.BANNER_WIDTH/HEIGHT` (see §1.5)
 - **Audit-03 #5**: `get_banner_ad` imports `core.tokens` at runtime inside the `try` block — on desktop/web, `fta.BannerAd` constructor raises `FletUnsupportedPlatformException` **before** the import executes, making the pattern fragile
 
 **Adopt this first**: Move banner dimensions to constants (320x50 like DDGS) and remove native ad IDs.
@@ -58,7 +58,7 @@ state.last_interstitial_ts = now  # Stamped ONLY when ad actually shows
 
 **WHY**: The cooldown is enforced at the **show** moment, not at the queue/load moment. `_show_loaded` (line 219) stamps the timestamp only when `interstitial.show()` succeeds — a failed show leaves the gap unspent so the next trigger can try again.
 
-**CollabShell gap** (`src/services/ad_service.py:241-292`):
+**ColabShell gap** (`src/services/ad_service.py:241-292`):
 - Logic is similar but `show_interstitial` returns `True` when `_pending_interstitial` is set (line 280-282) — caller may think an ad was shown when it's only queued
 - **Audit-03 #12**: Return value semantics confusing — `True` means "ad shown OR queued", not "ad shown"
 
@@ -85,7 +85,7 @@ self._pending_interstitial = True
 
 **WHY**: `_pending_interstitial` flag prevents multiple rapid calls from creating multiple interstitial loads. The first trigger sets the flag; subsequent triggers return `True` immediately (ad is "queued"). When the ad loads, `_handle_loaded` clears the flag and shows it.
 
-**CollabShell gap**: Same pattern exists (`src/services/ad_service.py:260-290`) — this one is **correctly ported**.
+**ColabShell gap**: Same pattern exists (`src/services/ad_service.py:260-290`) — this one is **correctly ported**.
 
 ---
 
@@ -109,7 +109,7 @@ if state.is_premium or not _HAS_ADS or not self._is_mobile():
 
 **WHY**: Premium users never see ads, never trigger ad loads, and **never get rewarded credits via `on_close` callback**. The `on_close` is only called when an ad actually closes (line 211-218 for interstitial, line 293-300 for rewarded).
 
-**CollabShell gap — CRITICAL** (`src/services/ad_service.py:305-312`, **Audit-03 #1**):
+**ColabShell gap — CRITICAL** (`src/services/ad_service.py:305-312`, **Audit-03 #1**):
 ```python
 if state.is_premium or not _HAS_ADS or not self._is_mobile():
     logger.info("No rewarded ad available - granting nothing")
@@ -121,9 +121,9 @@ if state.is_premium or not _HAS_ADS or not self._is_mobile():
     return False
 ```
 
-CollabShell **calls `on_close` (which grants credits) for premium users, when flet_ads is missing, and on mobile web**. The comment even acknowledges the bug: *"It used to call on_close anyway… so credits were handed out for an impression nobody saw: two every 30 seconds against a 200/day cap"*. But the code **still does it**.
+ColabShell **calls `on_close` (which grants credits) for premium users, when flet_ads is missing, and on mobile web**. The comment even acknowledges the bug: *"It used to call on_close anyway… so credits were handed out for an impression nobody saw: two every 30 seconds against a 200/day cap"*. But the code **still does it**.
 
-**CollabShell wallet_dialog.py** (`src/components/wallet_dialog.py:153-174`):
+**ColabShell wallet_dialog.py** (`src/components/wallet_dialog.py:153-174`):
 ```python
 granted = {"ok": False}
 def _on_reward(_ok=True):
@@ -151,7 +151,7 @@ ad = fta.BannerAd(
 )
 ```
 
-**CollabShell gap** (`src/services/ad_service.py:143-150`, **Audit-03 #5**):
+**ColabShell gap** (`src/services/ad_service.py:143-150`, **Audit-03 #5**):
 ```python
 from core import tokens  # Runtime import INSIDE try block
 ad = fta.BannerAd(
@@ -177,7 +177,7 @@ On desktop/web, `fta.BannerAd` constructor raises `FletUnsupportedPlatformExcept
 - `on_error` → logs error, does NOT call `on_close`
 - Returns `True` when ad is triggered, `False` when unavailable (premium, no flet_ads, desktop)
 
-**CollabShell gap**: Same structure but **calls `on_close` on error path too** (line 346-350):
+**ColabShell gap**: Same structure but **calls `on_close` on error path too** (line 346-350):
 ```python
 except (...):
     logger.exception("Failed to trigger rewarded interstitial")
@@ -210,7 +210,7 @@ async def gather_consent(self):
 
 **WHY**: Consent only requested on mobile, non-premium. ConsentManager kept in `page.services` to prevent GC unregistration (Sherlock pattern). `_can_request_ads` gates all ad methods.
 
-**CollabShell**: Nearly identical (`src/services/ad_service.py:98-116`) — correctly ported.
+**ColabShell**: Nearly identical (`src/services/ad_service.py:98-116`) — correctly ported.
 
 ---
 
@@ -231,7 +231,7 @@ Row 4: RESTORE PURCHASES — always present when license_ok
 
 **WHY**: KTV Player's proven shape. A settings card that lists every field it will ever need is a form, not a menu. Typing happens in dialogs that only exist once you ask.
 
-**CollabShell gap** (`src/screens/settings/premium_section.py:181-339`):
+**ColabShell gap** (`src/screens/settings/premium_section.py:181-339`):
 - Same four-row structure — **correctly ported**
 - **BUT**: `_STATUS_COPY` missing `"active"` entry (**Audit-03 #3**):
 ```python
@@ -243,7 +243,7 @@ _STATUS_COPY = {
     "revoked": ("Premium refunded", "A refund turned Premium off"),
 }
 
-# CollabShell (lines 46-50):
+# ColabShell (lines 46-50):
 _STATUS_COPY = {
     "grace": ("Payment overdue", "Finish your payment to keep Premium"),
     "expired": ("Premium expired", "Renew to switch Premium back on"),
@@ -285,7 +285,7 @@ async def _load() -> None:
 
 **WHY**: Prices change; Worker is source of truth. `_prices_attempted` reset on failure allows retry on next render.
 
-**CollabShell gap** (`src/screens/settings/premium_section.py:52-58, 315-340`, **Audit-03 #11**):
+**ColabShell gap** (`src/screens/settings/premium_section.py:52-58, 315-340`, **Audit-03 #11**):
 ```python
 _PRICES_ATTEMPTED = False  # Module-level global
 
@@ -328,7 +328,7 @@ async def reconcile(self) -> None:
 
 **WHY**: `/restore` issues a new signed token; `/status` does not. A renewal extends `exp` on the server but the client's cached token would expire — only `/restore` re-arms it.
 
-**CollabShell** (`src/services/premium_service.py:105-134`): Same logic — **correctly ported**.
+**ColabShell** (`src/services/premium_service.py:105-134`): Same logic — **correctly ported**.
 
 ---
 
@@ -355,7 +355,7 @@ def _rate_url(page) -> str:
 
 **WHY**: Play safe-link policy — a store build never points at another store (GitHub). Direct build offers GitHub only (Play edition is different feature set).
 
-**CollabShell**: Has similar logic in `update_dialog.py` and `sections_about.py` — need to verify against DDGS.
+**ColabShell**: Has similar logic in `update_dialog.py` and `sections_about.py` — need to verify against DDGS.
 
 ---
 
@@ -375,7 +375,7 @@ if order.checkout_url:
         return
 ```
 
-**CollabShell** (`src/screens/settings/premium_section.py:463-484`): Same pattern — **correctly ported**.
+**ColabShell** (`src/screens/settings/premium_section.py:463-484`): Same pattern — **correctly ported**.
 
 ---
 
@@ -409,7 +409,7 @@ def build_credit_pill(page: ft.Page, credits: int) -> ft.Container:
     )
 ```
 
-**CollabShell** (`src/components/credit_pill.py`): Similar reactive component — **correctly ported** per Audit-03 #18.
+**ColabShell** (`src/components/credit_pill.py`): Similar reactive component — **correctly ported** per Audit-03 #18.
 
 ---
 
@@ -434,7 +434,7 @@ else:
 
 **WHY**: Desktop/web have no ads to watch — offering "watch ad" there is a dead affordance. Desktop users are pointed at Premium instead.
 
-**CollabShell gap** (`src/components/wallet_dialog.py:176-234`):
+**ColabShell gap** (`src/components/wallet_dialog.py:176-234`):
 ```python
 def _ads_available() -> bool:
     if ad_service is None or is_premium:
@@ -473,7 +473,7 @@ async def _on_watch(e):
 
 **WHY**: Cooldown only applied when ad actually shows. If `show_rewarded_interstitial` returns `False` (no ad available), cooldown is **cleared** so user can retry immediately.
 
-**CollabShell** (`src/components/wallet_dialog.py:134-174`): Same logic — **correctly ported**.
+**ColabShell** (`src/components/wallet_dialog.py:134-174`): Same logic — **correctly ported**.
 
 ---
 
@@ -512,7 +512,7 @@ async def commit_amount(self, tx_id: str, amount: int | None = None) -> int:
 - `reserve_more` extends hold without resetting rollback clock
 - Auto-rollback after 240s, but **defers if turn still active** (up to 3 deferrals)
 
-**CollabShell** (`src/services/credit_service.py:97-168`, **Audit-03 #16**): Math matches DDGS exactly — **correctly ported**.
+**ColabShell** (`src/services/credit_service.py:97-168`, **Audit-03 #16**): Math matches DDGS exactly — **correctly ported**.
 
 ---
 
@@ -545,7 +545,7 @@ async def _check_daily_reset(self) -> None:
 
 **WHY**: Runs on every balance read (not just at launch) so an app left open across midnight refills. Reservations preserved across reset to avoid free turns.
 
-**CollabShell** (`src/services/credit_service.py:73-85`): Same flat reset — **correctly ported**.
+**ColabShell** (`src/services/credit_service.py:73-85`): Same flat reset — **correctly ported**.
 
 ---
 
@@ -581,7 +581,7 @@ async def _checkout_watch_loop(self, recovery_id: str) -> None:
 - **404 NOT abortive** — webhook lag, record may not exist yet
 - Backoff + jitter prevents hammering
 
-**CollabShell** (`src/services/premium_service.py:189-239`, **Audit-03 #15**): Behavior matches DDGS — **correctly ported** (tests pass).
+**ColabShell** (`src/services/premium_service.py:189-239`, **Audit-03 #15**): Behavior matches DDGS — **correctly ported** (tests pass).
 
 ---
 
@@ -594,7 +594,7 @@ async def _checkout_watch_loop(self, recovery_id: str) -> None:
 - Sections composed in `SettingsScreen` by calling builders
 - Observable state drives repaints — no control mutation
 
-**CollabShell** (`src/screens/settings/__init__.py`): Same pattern — **correctly ported**.
+**ColabShell** (`src/screens/settings/__init__.py`): Same pattern — **correctly ported**.
 
 ---
 
@@ -610,7 +610,7 @@ async def _checkout_watch_loop(self, recovery_id: str) -> None:
 
 **Key pattern**: `credit_word(COST_STEP)` ensures copy never drifts from actual cost.
 
-**CollabShell**: Has similar AI settings — verify cost table uses `credit_word`.
+**ColabShell**: Has similar AI settings — verify cost table uses `credit_word`.
 
 ---
 
@@ -745,7 +745,7 @@ def _build_version_chip(page: ft.Page | None) -> ft.Control:
 
 **WHY**: Version chip is the update entry point — always clickable. Morphs visually when update available.
 
-**CollabShell**: Has similar `version_dialog.py` and header — verify chip morphs.
+**ColabShell**: Has similar `version_dialog.py` and header — verify chip morphs.
 
 ---
 
@@ -874,19 +874,19 @@ Reasons: `missing_token`, `malformed_token`, `bad_signature`, `bad_issuer`, `wro
 - `reconcile()` uses `/restore` (token-issuing) not `/status` — re-arms token on renewal
 - `status_refusal(code)` = 402, 403, 404 — **400 deliberately excluded** (malformed request = app bug, never revokes real license)
 
-**CollabShell gap — CRITICAL** (`src/services/license_service.py:73-81`, **Audit-03 #2**):
+**ColabShell gap — CRITICAL** (`src/services/license_service.py:73-81`, **Audit-03 #2**):
 ```python
-# CollabShell INCLUDES 400:
+# ColabShell INCLUDES 400:
 def status_refusal(code: int) -> bool:
-    return code in (402, 403, 404)  # 400 INCLUDED in CollabShell, NOT in DDGS
+    return code in (402, 403, 404)  # 400 INCLUDED in ColabShell, NOT in DDGS
 ```
 DDGS explicitly excludes 400: *"a malformed request is an app bug and must never revoke a real license"*. Including 400 means a transient serialization bug permanently revokes Premium until manual restore.
 
 ---
 
-### 6.5 License Token — Enhanced Verification in CollabShell (Compatibility Risk)
+### 6.5 License Token — Enhanced Verification in ColabShell (Compatibility Risk)
 
-**CollabShell** (`src/services/license_token.py:39-51, 190-217, 241-317`, **Audit-03 #6, #14**):
+**ColabShell** (`src/services/license_token.py:39-51, 190-217, 241-317`, **Audit-03 #6, #14**):
 Adds validations NOT in DDGS:
 - Strict SPKI validation: exact 91 bytes, correct prefix (vs DDGS suffix-only scan)
 - Payload size limits: 8KB payload, 200B signature (DoS prevention)
@@ -933,7 +933,7 @@ def _commit(self) -> None:
 - Listeners notify Settings screen to repaint (card is built from observable state)
 - Play channel and Kiri License are independent — ORed together
 
-**CollabShell** (`src/services/premium_service.py:59-64`): Same pattern — **correctly ported**.
+**ColabShell** (`src/services/premium_service.py:59-64`): Same pattern — **correctly ported**.
 
 ---
 
@@ -946,7 +946,7 @@ def start_checkout_watch(self, recovery_id: str) -> None:
     # or rebuilding the tab cannot orphan it (KTV Player).
 ```
 
-**CollabShell** (`src/services/premium_service.py:172-181`): Same — **correctly ported**.
+**ColabShell** (`src/services/premium_service.py:172-181`): Same — **correctly ported**.
 
 ---
 
@@ -968,7 +968,7 @@ def unlock_message(page) -> str:
 
 **WHY**: Desktop/web have no ads — saying "ads removed" there would be a lie. Unknown platform assumes ads (most installs are phone APKs).
 
-**CollabShell gap — HIGH** (`src/services/premium_service.py:241-255`, **Audit-03 #4**):
+**ColabShell gap — HIGH** (`src/services/premium_service.py:241-255`, **Audit-03 #4**):
 ```python
 def _notify_premium_unlocked(self) -> None:
     # ...
@@ -986,9 +986,9 @@ def _notify_premium_unlocked(self) -> None:
 
 ---
 
-## CollabShell Gaps — Prioritized "Adopt This First" List
+## ColabShell Gaps — Prioritized "Adopt This First" List
 
-| Priority | Pattern Area | DDGS Reference | CollabShell Gap | Audit-03 Ref |
+| Priority | Pattern Area | DDGS Reference | ColabShell Gap | Audit-03 Ref |
 |----------|--------------|----------------|-----------------|--------------|
 | **1** | Rewarded ad grants credits without showing ad | `ad_service.py:305-312` (returns `False`, no `on_close`) | Calls `on_close` for premium/desktop/no-ads → grants free credits | **#1 Critical** |
 | **2** | `status_refusal` excludes HTTP 400 | `license_service.py:73-82` | Includes 400 → client bug revokes valid license | **#2 Critical** |
@@ -1026,16 +1026,16 @@ def _notify_premium_unlocked(self) -> None:
 - `/home/maikel/Desktop/kiri-apps/DDGS/src/components/model_picker.py`
 - `/home/maikel/Desktop/kiri-apps/DDGS/src/core/constants.py`
 
-**CollabShell Source** (audited):
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/ad_service.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/premium_service.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/credit_service.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/license_service.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/license_token.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/components/wallet_dialog.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/components/credit_pill.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/src/screens/settings/premium_section.py`
-- `/home/maikel/Desktop/kiri-apps/CollabShell/docs/audit-03-ads-premium-license.md`
+**ColabShell Source** (audited):
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/ad_service.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/premium_service.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/credit_service.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/license_service.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/license_token.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/components/wallet_dialog.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/components/credit_pill.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/src/screens/settings/premium_section.py`
+- `/home/maikel/Desktop/kiri-apps/ColabShell/docs/audit-03-ads-premium-license.md`
 
 ---
 

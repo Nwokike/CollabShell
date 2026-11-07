@@ -1,7 +1,7 @@
 # Flet 1.1.0-dev Line Research — flet-notifications 1.1.0-dev.4
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (branch `main`)  
-**Target file:** `/home/maikel/Desktop/kiri-apps/CollabShell/docs/research-05-flet-1.1.0-line.md`  
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (branch `main`)  
+**Target file:** `/home/maikel/Desktop/kiri-apps/ColabShell/docs/research-05-flet-1.1.0-line.md`  
 **Research date:** 2026-11-03  
 **Source data:** PyPI JSON (`https://pypi.org/pypi/<pkg>/json`), PyPI file URLs, GitHub releases API (`api.github.com/repos/flet-dev/flet/releases`), downloaded wheels/sdists extracted to `/tmp/fn-dev4/` and `/tmp/flet-dev4/`.
 
@@ -309,9 +309,9 @@ Exported in `flet/__init__.py:632` (`from flet.controls.services.wakelock import
 
 **Delta vs 1.0.5: none.** `Wakelock.enable()/disable()/is_enabled()` unchanged. `Wakelock` is a `Service` (auto-registers with `page._services`), invokes Dart via `_invoke_method("enable"|"disable"|"is_enabled")`, backed by Flutter `wakelock_plus` (screen-only wake lock, `FLAG_KEEP_SCREEN_ON` on Android — does NOT prevent background kill). No changes in the `Service` base class between 1.0.5 and 1.1.0.dev4 either.
 
-**Implication for CollabShell:** CollabShell already uses `ft.Wakelock` + `android.permission.WAKE_LOCK` (`pyproject.toml:68`). Moving to flet 1.1.0.dev4 requires **no wakelock code changes**.
+**Implication for ColabShell:** ColabShell already uses `ft.Wakelock` + `android.permission.WAKE_LOCK` (`pyproject.toml:68`). Moving to flet 1.1.0.dev4 requires **no wakelock code changes**.
 
-### 4.2 Other flet core 1.1.0.dev deltas relevant to CollabShell
+### 4.2 Other flet core 1.1.0.dev deltas relevant to ColabShell
 
 From the `v1.1.0.dev4` GitHub release body (`/tmp/flet-research/release_dev4.json`):
 - `flet build` honors empty platform values; fixed after Flutter version change; Android queries / scheme-only deep links / activity intent filters; macOS/Windows copyright text; Linux desktop client flavor + cache + extension warnings.
@@ -319,18 +319,18 @@ From the `v1.1.0.dev4` GitHub release body (`/tmp/flet-research/release_dev4.jso
 - `ProgressBar`/`ProgressRing` `semantics_value` as string; `TextField.text_input_action`; `RefreshIndicator` control; gzip-compressed web client files.
 - Flutter bumped to 3.47.8 (dev3).
 
-No breaking change to `page.update()` rules or the `Service`/`Wakelock` API surface was found in the release bodies; CollabShell's existing `page.update()`-inside-`use_effect` critical findings (`dep-01-flet-core.md` #1-#3) remain applicable to 1.1.0.dev4.
+No breaking change to `page.update()` rules or the `Service`/`Wakelock` API surface was found in the release bodies; ColabShell's existing `page.update()`-inside-`use_effect` critical findings (`dep-01-flet-core.md` #1-#3) remain applicable to 1.1.0.dev4.
 
 ---
 
-## 5. Breaking Changes & Migration Notes for CollabShell
+## 5. Breaking Changes & Migration Notes for ColabShell
 
 ### 5.1 Strict version pin — the key breaking constraint
 
-`flet-notifications 1.1.0.dev4` declares `Requires-Dist: flet==1.1.0.dev4` (METADATA:14), a **strict equality pin**. CollabShell currently pins `flet==1.0.5` (`pyproject.toml:8`).
+`flet-notifications 1.1.0.dev4` declares `Requires-Dist: flet==1.1.0.dev4` (METADATA:14), a **strict equality pin**. ColabShell currently pins `flet==1.0.5` (`pyproject.toml:8`).
 
 **Mixing flet 1.0.5 with flet-notifications 1.1.0-dev.4 will NOT work:**
-- Dependency resolution: `flet-notifications==1.1.0.dev4` requires `flet==1.1.0.dev4` exactly. `uv`/`pip` will conflict with CollabShell's `flet==1.0.5` and refuse to install both (or will downgrade/upgrade flet, breaking the pinned `flet-ads==1.0.5`, `flet-cli==1.0.5`, `flet-desktop==1.0.5`).
+- Dependency resolution: `flet-notifications==1.1.0.dev4` requires `flet==1.1.0.dev4` exactly. `uv`/`pip` will conflict with ColabShell's `flet==1.0.5` and refuse to install both (or will downgrade/upgrade flet, breaking the pinned `flet-ads==1.0.5`, `flet-cli==1.0.5`, `flet-desktop==1.0.5`).
 - At runtime: `flet_notifications/__init__.py` imports `import flet as ft` and uses `@ft.control`, `@ft.value`, `ft.Service`, `ft.EventHandler`, `ft.PagePlatform`, `ft.Duration`, `ft.ColorValue`, `ft.DurationValue`. If flet 1.0.5 lacks any symbol/behavior added in 1.1.0.dev4, imports or method calls will fail.
 - `flet-ads`, `flet-cli`, `flet-desktop` are co-released at `1.1.0.dev4` and also require matching flet core — they must be bumped together.
 
@@ -347,11 +347,11 @@ flet-notifications==1.1.0.dev4
 
 ### 5.2 Wakelock — no migration needed
 
-`Wakelock` is identical between 1.0.5 and 1.1.0.dev4. CollabShell's existing usage (`ft.Wakelock`, `page.services.append`, `enable()/disable()/is_enabled()`, `android.permission.WAKE_LOCK`) carries over unchanged.
+`Wakelock` is identical between 1.0.5 and 1.1.0.dev4. ColabShell's existing usage (`ft.Wakelock`, `page.services.append`, `enable()/disable()/is_enabled()`, `android.permission.WAKE_LOCK`) carries over unchanged.
 
 ### 5.3 Notifications is additive — no existing code breaks, but new wiring is required
 
-Adding `flet-notifications` is purely additive to CollabShell's current code (no existing API removed). However it requires new consumer-side configuration:
+Adding `flet-notifications` is purely additive to ColabShell's current code (no existing API removed). However it requires new consumer-side configuration:
 - Add `flet-notifications==1.1.0.dev4` to `pyproject.toml` dependencies.
 - Bump flet core + ecosystem to `1.1.0.dev4` (see 5.1).
 - For Android foreground service (`start_foreground_service`): add `[tool.flet.android.service."com.dexterous.flutterlocalnotifications.ForegroundService"]` + `FOREGROUND_SERVICE` + per-type permission entries in `pyproject.toml` (section 3.3).
@@ -373,7 +373,7 @@ Adding `flet-notifications` is purely additive to CollabShell's current code (no
 
 ## 6. Recommended `uv add` commands
 
-Run in `/home/maikel/Desktop/kiri-apps/CollabShell`:
+Run in `/home/maikel/Desktop/kiri-apps/ColabShell`:
 
 ```bash
 # Bump flet core + ecosystem to the matching 1.1.0.dev4 line (must be together)
@@ -400,7 +400,7 @@ uv pip freeze | grep -E "flet|notifications"
 # flet-terminal==0.4.2
 ```
 
-Then add Android foreground-service + notification wiring to `pyproject.toml` `[tool.flet.android.*]` tables (section 3.3) if CollabShell will use `start_foreground_service` or exact-alarm scheduling.
+Then add Android foreground-service + notification wiring to `pyproject.toml` `[tool.flet.android.*]` tables (section 3.3) if ColabShell will use `start_foreground_service` or exact-alarm scheduling.
 
 ---
 
@@ -410,4 +410,4 @@ Then add Android foreground-service + notification wiring to `pyproject.toml` `[
 - Downloaded & extracted: `/tmp/flet-dev4/extracted/flet/` (flet 1.1.0.dev4 core) and `/tmp/flet-105/extracted/flet/` (flet 1.0.5 core).
 - `diff` of `wakelock.py` between 1.0.5 and 1.1.0.dev4: **IDENTICAL**.
 - `flet-notifications 1.1.0.dev4` METADATA: `Requires-Dist: flet==1.1.0.dev4`, `Requires-Dist: tzdata`, `Requires-Python: >=3.10`.
-- Output file: `/home/maikel/Desktop/kiri-apps/CollabShell/docs/research-05-flet-1.1.0-line.md`
+- Output file: `/home/maikel/Desktop/kiri-apps/ColabShell/docs/research-05-flet-1.1.0-line.md`

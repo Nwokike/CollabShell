@@ -305,7 +305,7 @@ The `jupyter_kernel_client` does **not** enforce idle timeouts; it only detects 
 | **Heartbeat channel** | `KernelWebSocketClient` opens hb channel by default | ⚠️ Stub implementation — `is_beating()` always `True` |
 | **Do nothing (idle)** | Backend idle-prunes after ~7-8 min | ❌ Will lose session |
 
-**For CollabShell:** Keep a persistent WebSocket (e.g., the REPL's shell channel) open, or execute a no-op (`pass` or `print()`) every 4-5 minutes.
+**For ColabShell:** Keep a persistent WebSocket (e.g., the REPL's shell channel) open, or execute a no-op (`pass` or `print()`) every 4-5 minutes.
 
 ### (d) Why would the AI assistant say it has no access to an idle session — where in colab_cli is access gated on session state?
 
@@ -325,7 +325,7 @@ The flow:
 
 ---
 
-## 7. Recommendations for CollabShell (Keep-Alive Design)
+## 7. Recommendations for ColabShell (Keep-Alive Design)
 
 ### What to Ping
 | Target | Endpoint | Frequency | Why |
@@ -334,11 +334,11 @@ The flow:
 | **Explicit no-op execution** | `runtime.execute_code("pass")` | Every 4-5 min | Resets backend idle timer definitively; works even if WebSocket ping is insufficient |
 | **TTY/SSH WebSocket** | `/colab/tty` or `/colab/ssh` | Continuous | If using console/SSH mode, this alone keeps VM alive |
 
-### Recommended Keep-Alive Strategy for CollabShell
+### Recommended Keep-Alive Strategy for ColabShell
 
 ```python
-# In CollabShell's session manager:
-class CollabShellSession:
+# In ColabShell's session manager:
+class ColabShellSession:
     def __init__(self, runtime: ColabRuntime):
         self.runtime = runtime
         self._keepalive_task = None
@@ -419,5 +419,5 @@ async def handle_session_lost(self):
 - **0.7.4 → 0.7.5**: No functional changes
 - **Idle management**: Fully backend-driven since PR #144 (Sept 2025); client only does token refresh
 - **Session loss causes**: Token expiry (1h), backend idle timeout (~7-8 min), assignment expiry (412)
-- **Keep-alive for CollabShell**: Execute `pass` every 4-5 min via `runtime.execute_code()`; supplement with WebSocket ping
+- **Keep-alive for ColabShell**: Execute `pass` every 4-5 min via `runtime.execute_code()`; supplement with WebSocket ping
 - **Access gate**: `State.get_session()` + `is_terminal_error()` in execution commands

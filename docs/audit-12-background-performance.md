@@ -1,7 +1,7 @@
 # Audit 12: Background Tasks & Performance Audit (Delta since v2.1.2)
 
 Audit date: 2026-11-06  
-Scope: All background services, loops, keep-alive routines, and schedulers running in CollabShell since v2.1.2.
+Scope: All background services, loops, keep-alive routines, and schedulers running in ColabShell since v2.1.2.
 
 ---
 

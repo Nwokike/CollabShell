@@ -170,7 +170,7 @@ def test_the_installed_version_satisfies_each_pin():
 **Problem:** File contains local Windows paths:
 ```
 uv run flet run 2>&1 | tee settings-debug.log
-Assets path configured: C:\Users\nwoki\.zcode\workspace\default\CollabShell\src\assets
+Assets path configured: C:\Users\nwoki\.zcode\workspace\default\ColabShell\src\assets
 ```
 
 **Evidence:** No secrets, tokens, or credentials — just a local username and workspace path.

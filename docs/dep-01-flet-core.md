@@ -1,7 +1,7 @@
-# Flet 1.0.4 Usage Audit — CollabShell
+# Flet 1.0.4 Usage Audit — ColabShell
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (branch `main`, HEAD `76a9d4b`)  
-**Flet Source:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/flet/` (v1.0.4)  
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (branch `main`, HEAD `76a9d4b`)  
+**Flet Source:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/flet/` (v1.0.4)  
 **Date:** 2026-11-02
 
 ---

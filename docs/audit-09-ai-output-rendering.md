@@ -1,6 +1,6 @@
 # Audit 09 — AI Step Output Rendering (read-only)
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (branch `main`, HEAD `76a9d4b`)
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (branch `main`, HEAD `76a9d4b`)
 **Task:** Read-only audit of why an AI tool step (e.g. `_exec`, `read_terminal`) renders an
 EMPTY output area with only a copy button, instead of the same rich output rendering as the
 notebook screen. Proposed redesign: step row actions = [copy] + [open in terminal | open in

@@ -221,7 +221,7 @@
 ## Attach-at-Boot Race (Commit b710839)
 
 **Code:** `router_watchdog.py:131-160` runs `ensure_router()` once at boot before loop. `router.py:244-331` uses `_router_lock` for port access. `router_engine.py:295-297` calls `engine.acquire_server()` which binds port.  
-**Race window:** Two processes starting simultaneously could both pass `is_kiri_running()` check (run.py:2366-2383) and both try to bind. `acquire_server` handles this: `is_kiri_running` checks for "Local Console" marker; if both are CollabShell, second sees first's console → returns `(None, port)` → attaches. If foreign server, `port_open` detects → tries next port.  
+**Race window:** Two processes starting simultaneously could both pass `is_kiri_running()` check (run.py:2366-2383) and both try to bind. `acquire_server` handles this: `is_kiri_running` checks for "Local Console" marker; if both are ColabShell, second sees first's console → returns `(None, port)` → attaches. If foreign server, `port_open` detects → tries next port.  
 **Verdict:** Race-free for same-app; foreign server handled by port scan.
 
 ---
@@ -229,7 +229,7 @@
 ## Tool Schema from Router (Commit a6881c4)
 
 **Claim:** "tool schema derived from the router"  
-**Reality:** Tools are defined in `src/services/ai_tools.py` (local schemas). `kani_backend.py:116-186` wraps them for step emission. The router's `/v1/models` returns `endpoint_type` but **no tool schemas**. The kiri-router injects its own placeholder tools (`PLACEHOLDER_TOOLS_ANTHROPIC`, `injectTools` in `convert.js`) for free-tier gating. CollabShell tools are client-side only (Colab exec, file ops, terminal).  
+**Reality:** Tools are defined in `src/services/ai_tools.py` (local schemas). `kani_backend.py:116-186` wraps them for step emission. The router's `/v1/models` returns `endpoint_type` but **no tool schemas**. The kiri-router injects its own placeholder tools (`PLACEHOLDER_TOOLS_ANTHROPIC`, `injectTools` in `convert.js`) for free-tier gating. ColabShell tools are client-side only (Colab exec, file ops, terminal).  
 **Verdict:** Commit message misleading. Tool schemas are **not** derived from router; they are local. Router only provides model catalog + endpoint routing.
 
 ---

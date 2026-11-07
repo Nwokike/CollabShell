@@ -1,4 +1,4 @@
-# CollabShell Master Findings — Baseline v2.1.2 → 76a9d4b
+# ColabShell Master Findings — Baseline v2.1.2 → 76a9d4b
 
 **Baseline:** tag `v2.1.2` (50fe98b) → HEAD `76a9d4b` (squashed commit of all changes since v2.1.2, **147 files, +31,759 / -1,392 lines**).
 
@@ -46,7 +46,7 @@
 | A15 | **info** | `src/services/credit_service.py`, `src/services/ai_credits.py` | Credit ledger math matches DDGS: 3-phase settlement, soft metering, floor rule, idempotent commit, 240s auto-rollback | **Verified correct — no action needed** | audit-03 #16 |
 | A16 | **info** | `src/services/usage_cache.py` | Cache logic correct: 24h TTL, read-through with fallback, writes only on fresh non-cached response | **Verified correct — no action needed** | audit-03 #17 |
 | A17 | **info** | `src/components/credit_pill.py`, `src/components/usage_chip.py` | Reactive components match DDGS pattern (context + use_state + use_effect) | **Verified correct — no action needed** | audit-03 #18 |
-| A18 | **info** | — | No dead code from "Notifications removed" / "Pro placeholder removed" — these commits not in CollabShell history | **Verified — no action needed** | audit-03 #19 |
+| A18 | **info** | — | No dead code from "Notifications removed" / "Pro placeholder removed" — these commits not in ColabShell history | **Verified — no action needed** | audit-03 #19 |
 
 ---
 
@@ -216,7 +216,7 @@
 
 ## H. Reference-App Patterns to Adopt (DDGS Ads/Wallet/Premium; Router Protocol Checklist)
 
-| # | Severity | Pattern Area | DDGS Reference | CollabShell Gap | Action |
+| # | Severity | Pattern Area | DDGS Reference | ColabShell Gap | Action |
 |---|----------|--------------|----------------|-----------------|--------|
 | H1 | **critical** | Rewarded ad grants credits without showing ad | `ad_service.py:305-312` (returns `False`, no `on_close`) | Calls `on_close` for premium/desktop/no-ads → grants free credits | **Fix A1** — remove `on_close` call when returning `False` |
 | H2 | **critical** | `status_refusal` excludes HTTP 400 | `license_service.py:73-82` | Includes 400 → client bug revokes valid license | **Fix A2** — exclude 400 |

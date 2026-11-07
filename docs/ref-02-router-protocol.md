@@ -1,6 +1,6 @@
-# Router Protocol Reference — CollabShell Client Contract
+# Router Protocol Reference — ColabShell Client Contract
 
-This document specifies the **exact protocol** the CollabShell client must speak to interoperate with the Kiri Router family (`lm-router` desktop app and `kiri-router` Cloudflare Worker gateway). It is derived from source inspection of both server implementations and the CollabShell client at HEAD `76a9d4b`.
+This document specifies the **exact protocol** the ColabShell client must speak to interoperate with the Kiri Router family (`lm-router` desktop app and `kiri-router` Cloudflare Worker gateway). It is derived from source inspection of both server implementations and the ColabShell client at HEAD `76a9d4b`.
 
 ---
 
@@ -20,7 +20,7 @@ This document specifies the **exact protocol** the CollabShell client must speak
 | `POST` | `/acquire` | Embedded server: claim a port | internal | `lm-router/src/services/engine.py:295-308` |
 | `POST` | `/release` | Embedded server: release a port | internal | `lm-router/src/services/engine.py` (via `run.py`) |
 
-> **Note**: `lm-router` embeds `kiri-router`'s `run.py` as its gateway engine (fetched live from `router.kiri.ng`). The HTTP surface is identical. CollabShell's router client (`src/services/router.py`, `router_engine.py`) speaks this same API.
+> **Note**: `lm-router` embeds `kiri-router`'s `run.py` as its gateway engine (fetched live from `router.kiri.ng`). The HTTP surface is identical. ColabShell's router client (`src/services/router.py`, `router_engine.py`) speaks this same API.
 
 ### 1.2 Request/Response Schemas
 
@@ -230,7 +230,7 @@ data: [DONE]
 3. If none: bind first free port, start `run.py` server, return `(server, port)`.
 4. If all ports busy: raise `SystemExit` (no port available).
 
-**CollabShell client implementation** (`router.py:277-331`, `router_engine.py:295-297`):
+**ColabShell client implementation** (`router.py:277-331`, `router_engine.py:295-297`):
 - `ensure_router()` orchestrates attach-or-embed.
 - `probe_router()` scans with adapter check (critical — see Finding #3 in audit).
 - `_router_server` module state tracks **only embedded** instance; foreign servers are never stopped.
@@ -415,7 +415,7 @@ data: {"type":"response.completed","response":{"id":"resp-123","model":"gpt-4o-m
 data: [DONE]
 ```
 
-### 5.3 Client Consumption (CollabShell)
+### 5.3 Client Consumption (ColabShell)
 **Source**: `kani_backend.py:540-620` — uses kani's `full_round_stream` with custom `ReasoningEngine` that tees SSE frames:
 - `on_token` callback receives content deltas
 - `on_thought` callback receives reasoning deltas (via `ThoughtTap` in `reasoning.py`)
@@ -423,11 +423,11 @@ data: [DONE]
 
 ---
 
-## 6. CollabShell Client Compliance Audit
+## 6. ColabShell Client Compliance Audit
 
 ### 6.1 HTTP API Compliance
 
-| Endpoint | CollabShell Implementation | Status | Severity |
+| Endpoint | ColabShell Implementation | Status | Severity |
 |----------|---------------------------|--------|----------|
 | `GET /health` | `router.py:121-134` `_health()` — **checks `adapter`** | ✅ Match | — |
 | `GET /v1/models` | `model_catalog.py:311-362` `refresh_catalog()` | ⚠️ Diverges | High |
@@ -445,7 +445,7 @@ data: [DONE]
 
 ### 6.2 Server Lifecycle Compliance
 
-| Behavior | CollabShell Implementation | Status | Severity |
+| Behavior | ColabShell Implementation | Status | Severity |
 |----------|---------------------------|--------|----------|
 | Port scan 8082..8092 | `router.py:105-134` `_probe_existing_router()` | ✅ Match | — |
 | Adapter verification on scan | `router.py:121-124` — checks `adapter == "kiri-router"` | ✅ Match | — |
@@ -459,7 +459,7 @@ data: [DONE]
 
 ### 6.3 Ledger / Credits Compliance
 
-| Rule | CollabShell Implementation | Status | Severity |
+| Rule | ColabShell Implementation | Status | Severity |
 |------|---------------------------|--------|----------|
 | Floor rule (≥1 if text) | `ai_credits.py:85-92` `charged_steps()` | ✅ Match | — |
 | Reserve before turn | `ai_credits.py:146` — **before router check** | ⚠️ Wrong order | Medium |
@@ -472,7 +472,7 @@ data: [DONE]
 
 ### 6.4 Model Catalog Compliance
 
-| Behavior | CollabShell Implementation | Status | Severity |
+| Behavior | ColabShell Implementation | Status | Severity |
 |----------|---------------------------|--------|----------|
 | Tier from `rate_hint.tier` | `model_catalog.py:73-83` `tier_of()` | ✅ Match | — |
 | Chat-eligible = chat.completion* | `model_catalog.py:85-87` `_is_chat_row()` | ✅ Match | — |
@@ -485,7 +485,7 @@ data: [DONE]
 
 ### 6.5 Streaming Compliance
 
-| Feature | CollabShell Implementation | Status |
+| Feature | ColabShell Implementation | Status |
 |---------|---------------------------|--------|
 | Content deltas via `on_token` | `kani_backend.py:580-590` | ✅ |
 | Reasoning deltas via `on_thought` | `reasoning.py` `ThoughtTap` + `kani_backend.py:550-555` | ✅ |
@@ -496,7 +496,7 @@ data: [DONE]
 
 ## 7. Perfect Client Checklist
 
-A fully compliant CollabShell client MUST:
+A fully compliant ColabShell client MUST:
 
 ### HTTP API
 - [ ] **Verify `adapter == "kiri-router"` on ALL `/health` probes** (scan + held port)
@@ -573,7 +573,7 @@ A fully compliant CollabShell client MUST:
 - `lm-router/src/services/router_guide.py` — System prompt for model
 - `lm-router/src/services/router_tools.py` — Gateway status/tools for agent
 
-### CollabShell Client
+### ColabShell Client
 - `src/services/router.py` — Probe, attach/embed, lifecycle
 - `src/services/router_engine.py` — Engine download, validation, cache
 - `src/services/router_watchdog.py` — Status loop, boot attach
@@ -586,4 +586,4 @@ A fully compliant CollabShell client MUST:
 
 ---
 
-*Generated from source inspection of `lm-router`, `kiri-router`, and CollabShell at HEAD `76a9d4b`. This document is the authoritative protocol reference for CollabShell's router client.*
+*Generated from source inspection of `lm-router`, `kiri-router`, and ColabShell at HEAD `76a9d4b`. This document is the authoritative protocol reference for ColabShell's router client.*

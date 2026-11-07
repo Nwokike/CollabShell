@@ -78,6 +78,11 @@ def AppShell() -> Control:
             # a screen action so it works from every screen including the
             # fullscreen subviews.
             bindings.append((Binding("k", ctrl=True), _open_palette))
+            # The assistant has its own direct shortcut (Alt+A), not just a
+            # palette entry — the owner wants AI reachable from the keyboard.
+            bindings.append(
+                (Binding("a", alt=True), lambda: controller.open_assistant())
+            )
         return bindings
 
     def _palette_commands():

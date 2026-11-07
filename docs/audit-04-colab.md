@@ -2,7 +2,7 @@
 
 **Scope**: All Colab remote-session code in `src/services/colab/` and `src/screens/session/`  
 **Baseline**: tag `v2.1.2` vs HEAD (`76a9d4b`, squashed commit of all changes since v2.1.2)  
-**Source of truth**: Installed `colab_cli` package at `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/colab_cli/` (version 0.7.4)
+**Source of truth**: Installed `colab_cli` package at `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/colab_cli/` (version 0.7.4)
 
 ---
 

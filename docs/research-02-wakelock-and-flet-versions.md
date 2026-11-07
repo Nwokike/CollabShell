@@ -1,7 +1,7 @@
-# CollabShell Research: Wake Lock, Flet Versions, and flet_ads Rewarded Usage
+# ColabShell Research: Wake Lock, Flet Versions, and flet_ads Rewarded Usage
 
 **Generated:** 2026-11-02  
-**Project:** `/home/maikel/Desktop/kiri-apps/CollabShell`  
+**Project:** `/home/maikel/Desktop/kiri-apps/ColabShell`  
 **Venv:** `.venv/lib/python3.14/site-packages/` (flet 1.0.4)
 
 ---
@@ -11,7 +11,7 @@
 ### 1.1 Flet's Built-in Wakelock Service
 
 Flet 1.0.4 exposes a **`Wakelock` service** at:
-- **Source:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/flet/controls/services/wakelock.py:7-32`
+- **Source:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/flet/controls/services/wakelock.py:7-32`
 - **Exported in:** `flet/__init__.py:621, 1229, 1771`
 
 ```python
@@ -79,7 +79,7 @@ async def main(page: Page):
 - `page.window.on_event` — listen for `WindowEventType.MINIMIZE`, `HIDE`, `CLOSE` (lines 17-70, 341-345)
 - `page.on_app_lifecycle_state_change` — receives `AppLifecycleState.HIDE`/`PAUSE`/`DETACH` (page.py:629-634, types.py:1106-1181)
 
-**Conclusion for CollabShell:** 
+**Conclusion for ColabShell:** 
 - **Wakelock service** keeps **screen on** (useful for terminal sessions, long-running tasks visible to user)
 - **Does NOT prevent background kill on Android** — app will be killed in doze/standby when minimized
 - **Desktop:** App stays alive by default; only dies on explicit user close
@@ -88,7 +88,7 @@ async def main(page: Page):
 
 ## 2. Version Landscape — 2026-11-02
 
-| Package | Installed | Latest (PyPI) | Delta | Release Date | Key Changelog Highlights for CollabShell |
+| Package | Installed | Latest (PyPI) | Delta | Release Date | Key Changelog Highlights for ColabShell |
 |---------|-----------|---------------|-------|--------------|------------------------------------------|
 | **flet** | 1.0.4 | **1.0.5** | +0.0.1 | 2026-10-21 | Services stability, `Wakelock` service added, `page.on_app_lifecycle_state_change` events |
 | **flet_ads** | 1.0.4 | **1.0.5** | +0.0.1 | 2026-10-21 | Google Mobile Ads SDK update; no new controls (`RewardedAd` still missing) |
@@ -107,16 +107,16 @@ async def main(page: Page):
 - flet_platform_assets: https://pypi.org/project/flet-platform-assets/
 - flet_cli: https://pypi.org/project/flet-cli/
 
-### Relevant to CollabShell
+### Relevant to ColabShell
 - **flet 1.0.5** — Wakelock service stabilized; consider upgrade
-- **flet_notifications 1.1.0-dev** — Adds `LocalNotifications.start_foreground_service()` for Android background execution — **critical if CollabShell needs true background keep-alive**
+- **flet_notifications 1.1.0-dev** — Adds `LocalNotifications.start_foreground_service()` for Android background execution — **critical if ColabShell needs true background keep-alive**
 - **flet_ads 1.0.5** — Still no `RewardedAd`; rewarded interstitial pattern unchanged
 
 ---
 
 ## 3. flet_ads 1.0.4 — Correct Rewarded Ad Usage
 
-### 3.1 Available Controls & Events (Source: `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/flet_ads/`)
+### 3.1 Available Controls & Events (Source: `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/flet_ads/`)
 
 | Control | File:Line | Base | Events (from BaseAd + own) |
 |---------|-----------|------|---------------------------|
@@ -186,9 +186,9 @@ async def _close(e):
 3. **Only actual ad close → calls `on_close`** (lines 293-300)
 4. Uses **interstitial ad unit ID** (no `RewardedAd` control exists in flet_ads)
 
-### 3.4 CollabShell Divergence — `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/ad_service.py:273-324`
+### 3.4 ColabShell Divergence — `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/ad_service.py:273-324`
 
-**Current CollabShell code (AUDIT-03 #1, #10):**
+**Current ColabShell code (AUDIT-03 #1, #10):**
 ```python
 async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
     if state.is_premium or not _HAS_ADS or not self._is_mobile():
@@ -260,7 +260,7 @@ def before_update(self):
 | **Prevent Android kill when minimized** | **Not possible with current Flet APIs.** Options:<br>1. Wait for `flet_notifications 1.1.0` foreground service support<br>2. Custom platform channel to Android `ForegroundService` (MethodChannel)<br>3. Accept that minimized app may be killed by doze | High — requires native Android work |
 | **Desktop: prevent close on minimize** | Already default behavior. Use `page.window.prevent_close = True` + `on_event` handler if confirmation needed | Low |
 
-**Immediate action for CollabShell:**
+**Immediate action for ColabShell:**
 ```python
 # In main.py or app entry:
 from flet import Wakelock
@@ -357,8 +357,8 @@ async def show_rewarded_interstitial(self, on_close: Callable) -> bool:
 | flet_ads platform restriction | `.venv/lib/python3.14/site-packages/flet_ads/base_ad.py:69-75` |
 | DDGS ad_service rewarded | `/home/maikel/Desktop/kiri-apps/DDGS/src/services/ad_service.py:273-324` |
 | DDGS ad_service interstitial | `/home/maikel/Desktop/kiri-apps/DDGS/src/services/ad_service.py:146-218` |
-| CollabShell ad_service | `/home/maikel/Desktop/kiri-apps/CollabShell/src/services/ad_service.py:273-324` |
-| CollabShell wallet_dialog | `/home/maikel/Desktop/kiri-apps/CollabShell/src/components/wallet_dialog.py:153-174` |
+| ColabShell ad_service | `/home/maikel/Desktop/kiri-apps/ColabShell/src/services/ad_service.py:273-324` |
+| ColabShell wallet_dialog | `/home/maikel/Desktop/kiri-apps/ColabShell/src/components/wallet_dialog.py:153-174` |
 
 ---
 

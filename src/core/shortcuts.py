@@ -108,6 +108,7 @@ SHORTCUT_DOCS: dict[str, tuple[str, list[tuple[str, str]]]] = {
         "General",
         [
             ("Ctrl+K", "Open the command palette"),
+            ("Alt+A", "Open the Assistant chat"),
             ("F1", "Show this shortcuts help"),
             (
                 "Ctrl+1 .. 5",

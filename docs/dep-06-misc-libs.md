@@ -1,7 +1,7 @@
-# Misc Libraries Audit — CollabShell (since v2.1.2)
+# Misc Libraries Audit — ColabShell (since v2.1.2)
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` (branch `main`, HEAD `76a9d4b`)  
-**Source of truth:** `/home/maikel/Desktop/kiri-apps/CollabShell/.venv/lib/python3.14/site-packages/`  
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` (branch `main`, HEAD `76a9d4b`)  
+**Source of truth:** `/home/maikel/Desktop/kiri-apps/ColabShell/.venv/lib/python3.14/site-packages/`  
 **Scope:** Third-party packages imported in `src/` and `scripts/` that are **not** covered in:
 - `dep-01-flet-core.md` (flet, flet_ads, flet_terminal)
 - `dep-03-colab-libs.md` (colab_cli, google_auth_oauthlib, oauthlib, requests via colab_cli)

@@ -1,7 +1,7 @@
 # Research: proot-distro-flet notification / wakelock / foreground-service pattern (committed tree)
 
 Source: /home/maikel/Desktop/kiri-apps/proot-distro-flet (read-only study, 2026-11-03). This is the
-proven pattern to port into CollabShell (session instead of container).
+proven pattern to port into ColabShell (session instead of container).
 
 ## 1. pyproject.toml snippets to copy
 
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.flet.android]
-legacy_packaging = true            # CollabShell already has this (9fc237b)
+legacy_packaging = true            # ColabShell already has this (9fc237b)
 split_per_abi = true
 res_dir = "android_res"            # notification small-icon drawables
 
@@ -25,7 +25,7 @@ res_dir = "android_res"            # notification small-icon drawables
 "android.permission.FOREGROUND_SERVICE" = true
 "android.permission.FOREGROUND_SERVICE_SPECIAL_USE" = true
 "android.permission.POST_NOTIFICATIONS" = true
-"android.permission.WAKE_LOCK" = true   # CollabShell already added
+"android.permission.WAKE_LOCK" = true   # ColabShell already added
 
 [tool.flet.android.service."com.dexterous.flutterlocalnotifications.ForegroundService"]
 exported = false
@@ -77,7 +77,7 @@ permission at startup/before FGS), `300253f` (camelCase foregroundServiceType), 
 FOREGROUND_SERVICE_SPECIAL_USE in AAB manifest audit), `112d094` (WAKE_LOCK, wakelock cleanup guard,
 on_close no-op, icon).
 
-## 6. Port-to-CollabShell checklist (session, not terminal)
+## 6. Port-to-ColabShell checklist (session, not terminal)
 - deps: `uv add flet==1.1.0.dev4 flet-ads==1.1.0.dev4 flet-notifications==1.1.0.dev4` (+ flet-cli/
   flet-desktop/flet-platform-assets 1.1.0.dev4; flet-terminal stays 0.4.2) — see research-05.
 - pyproject android block per §1 (permissions, service, meta_data subtype, res_dir + icon).

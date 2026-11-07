@@ -1,6 +1,6 @@
 # Investigate-06 — Banner ad placement & Copy Output visibility
 
-**Repo:** `/home/maikel/Desktop/kiri-apps/CollabShell` — HEAD `0dfa74e` = tag **v2.2.0** (build 15, "one commit over v2.1.2"). Comparison baseline: tag **v2.1.2** (`50fe98b`). Gold-standard reference: DDGS at `/home/maikel/Desktop/kiri-apps/DDGS/src/`.
+**Repo:** `/home/maikel/Desktop/kiri-apps/ColabShell` — HEAD `0dfa74e` = tag **v2.2.0** (build 15, "one commit over v2.1.2"). Comparison baseline: tag **v2.1.2** (`50fe98b`). Gold-standard reference: DDGS at `/home/maikel/Desktop/kiri-apps/DDGS/src/`.
 **Date:** 2026-11-04. Read-only investigation; this file is the only artifact.
 
 ---
@@ -38,7 +38,7 @@ There are exactly **two** banner constructors, both mobile-only and both collaps
 
 **Derived rule** (owner statement + existing codebase pattern + DDGS reference):
 
-1. **One banner per major screen, inline in the content flow near the top** — that is the established CollabShell pattern (`files:598` right after the toolbar, `session_selector:86` right after the CTA, `home:341/343` inline, `settings:93/99` SPONSOR sections). A single banner parked at the very bottom of a scroll column (history) reads as an afterthought and is the complaint.
+1. **One banner per major screen, inline in the content flow near the top** — that is the established ColabShell pattern (`files:598` right after the toolbar, `session_selector:86` right after the CTA, `home:341/343` inline, `settings:93/99` SPONSOR sections). A single banner parked at the very bottom of a scroll column (history) reads as an afterthought and is the complaint.
 2. **Action dialogs that gate a valuable action (export) carry a banner inside the dialog.**
 3. **Notebook cells keep their existing placement** (every 2nd cell + bottom) — owner: "already set, don't touch".
 4. **Chat gets NO per-reply banner** — the app-level (tab-screen) banners already exist; do not port DDGS's `_pooled_ad` per-reply banners into `assistant_view`.
