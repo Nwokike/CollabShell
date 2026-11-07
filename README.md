@@ -10,7 +10,7 @@
   <a href="https://play.google.com/store/apps/details?id=ng.kiri.collabshell"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
   <a href="https://github.com/Nwokike/ColabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /></a>
   <a href="https://github.com/Nwokike/ColabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /></a>
-  <img src="https://img.shields.io/badge/Built_with-Flet_0.86-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
+  <img src="https://img.shields.io/badge/Built_with-Flet_1.1.0-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
 
@@ -20,18 +20,18 @@
 
 | Platform | Download | Notes |
 | :---: | :---: | :--- |
-| 🤖 **Android** | [![Play Store](https://img.shields.io/badge/Google_Play-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=ng.kiri.collabshell) | Recommended for Android mobile users |
+| 🤖 **Android (Play Store)** | [![Play Store](https://img.shields.io/badge/Google_Play-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=ng.kiri.collabshell) | Recommended for Android mobile users |
+| 📱 **Android (APK)** | [![Download APK](https://img.shields.io/badge/Download_APK-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Direct APK download for 64-bit ARM64 devices |
 | 🪟 **Windows** | [![Windows Release](https://img.shields.io/badge/Download_Windows_Release-0078D6?style=flat-square&logo=windows&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_Setup.exe) | Automated standalone setup installer with desktop shortcut integration |
 | 🐧 **Linux (Debian/Ubuntu)** | [![Linux DEB](https://img.shields.io/badge/Download_Linux_DEB-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_amd64.deb) | Desktop package tailored for Ubuntu, Debian, Linux Mint & Pop!_OS |
 | 🎩 **Linux (Fedora/RHEL)** | [![Linux RPM](https://img.shields.io/badge/Download_Linux_RPM-E91E63?style=flat-square&logo=redhat&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_x86_64.rpm) | Desktop package tailored for Fedora, openSUSE, RHEL & CentOS |
 | 📦 **Linux (Universal Portable)** | [![Linux TAR.GZ](https://img.shields.io/badge/Download_Linux_TAR.GZ-9C27B0?style=flat-square&logo=linux&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_linux_x86_64.tar.gz) | Universal standalone portable archive for Arch, Alpine, Steam Deck & all distros |
 
-### Android Architecture Build Splits
+### Android Architecture Build
 
 | Variant | Download | Notes |
 | :--- | :---: | :--- |
-| 📱 **ARM64** (most phones) | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/ColabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
-| 📱 **ARMv7** (older phones) | [**collabshell-armeabi-v7a.apk**](https://github.com/Nwokike/ColabShell/releases/latest/download/collabshell-armeabi-v7a.apk) | Legacy 32-bit Android devices |
+| 📱 **ARM64** | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
 
 ---
 
@@ -51,20 +51,20 @@
 
 ## Screenshots
 
-| Home | New session | Notebook | Run output |
-|:----:|:-----------:|:--------:|:----------:|
-| ![Home](screenshots/home_active_sessions_dark.png) | ![New session](screenshots/new_session_dialog_dark.png) | ![Notebook](screenshots/session_notebook_dark.png) | ![Run output](screenshots/session_run_code_dark.png) |
+| Home | New session | Notebook | Terminal |
+|:----:|:-----------:|:--------:|:--------:|
+| ![Home](screenshots/home_active_sessions_dark.png) | ![New session](screenshots/new_session_dialog_dark.png) | ![Notebook](screenshots/session_notebook_dark.png) | ![Terminal](screenshots/terminal_matrix_green_dark.png) |
 
-| Assistant chat | Assistant working | AI notebook tab | Terminal AI |
-|:------------:|:---------------:|:-------------:|:-----------:|
-| ![Assistant chat](screenshots/assistant_chat_dark.png) | ![Assistant working](screenshots/assistant_thinking_dark.png) | ![AI notebook tab](screenshots/assistant_notebook_tab_dark.png) | ![Terminal AI](screenshots/terminal_explain_dark.png) |
+| Run output | Assistant chat | Cell AI | Terminal AI |
+|:----------:|:--------------:|:-------:|:-----------:|
+| ![Run output](screenshots/session_run_code_dark.png) | ![Assistant chat](screenshots/assistant_chat_dark.png) | ![Cell AI](screenshots/session_cell_ai_dark.png) | ![Terminal AI](screenshots/terminal_explain_dark.png) |
 
 ---
 
 ## Features
 
 - **Desktop Keyboard Shortcuts (F1 for the cheat sheet)** — Jupyter-standard notebook shortcuts (Shift+Enter run & advance, Ctrl+Enter run in place, Alt+Enter run & insert, Ctrl+S export `.ipynb`), leak-free terminal combos intercepted before the PTY (Ctrl+Shift+T/W/F/L/C/V, Ctrl+Shift+1..9, zoom), and Files shortcuts (F5 refresh, Alt+Up parent, Ctrl+A select all).
-- **React-Like Declarative UI (Flet 0.86)** — The entire app is built on Flet's new functional component model (`@ft.component`, `@ft.observable`, `use_state`, `use_effect`): state mutations trigger surgical re-renders instead of full-page repaints.
+- **React-Like Declarative UI (Flet 1.1.0)** — The entire app is built on Flet's new functional component model (`@ft.component`, `@ft.observable`, `use_state`, `use_effect`): state mutations trigger surgical re-renders instead of full-page repaints.
 - **Colab Shell-Branded Design System** — Adaptive light and dark themes styled to the Google Colab branding palette; terminal, cards, and glass surfaces all follow the active mode automatically.
 - **Interactive TTY Terminal Emulation** — Dedicated PTY terminal engine connecting directly to Colab WebSocket endpoints (`/api/terminals`), with inline theme cycling, one-tap reconnect, and zoom.
 - **Universal Storage & History Normalization** — Monkey-patched backend state persistence (`storage_patch.py`) guaranteeing history and execution logs save reliably across Android and Linux desktops.
@@ -80,7 +80,7 @@
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Flet 0.86 (declarative components) | Cross-platform React-like UI with observable state models and surgical re-renders |
+| **Frontend** | Flet 1.1.0 (declarative components) | Cross-platform React-like UI with observable state models and surgical re-renders |
 | **Client Service** | `google-colab-cli` SDK | Wrapper for Colab session management and code execution |
 | **Local Database** | Flat JSON Storage (`storage.json`) | Key-value store for app settings, theme state, and credentials |
 | **Auth Provider** | Google OAuth2 | Secure user authentication to manage personal Google Cloud instances |
