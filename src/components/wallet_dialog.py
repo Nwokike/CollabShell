@@ -1,6 +1,6 @@
 """AI credit pill + wallet dialog — copied verbatim from DDGS's wallet.py.
 
-The only adaptations are CollabShell's plumbing: the dialog takes
+The only adaptations are ColabShell's plumbing: the dialog takes
 (page, state, services), credits come from services.credits, the pill refresh
 goes through page._assistant_session._refresh_credits, and the premium
 deep-link sets the shell route instead of DDGS's controller attribute.

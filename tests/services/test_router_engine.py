@@ -229,5 +229,5 @@ def test_the_download_sends_a_user_agent(monkeypatch):
     monkeypatch.setattr(router_engine.httpx, "AsyncClient", FakeClient)
     out = _run(router_engine._download("https://router.kiri.ng/run.py"))
     assert out == GOOD
-    assert seen["headers"]["User-Agent"].startswith("CollabShell/"), seen
+    assert seen["headers"]["User-Agent"].startswith("ColabShell/"), seen
     assert seen.get("http2") is False, "http2 must be off for this endpoint"

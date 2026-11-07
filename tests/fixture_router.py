@@ -4,7 +4,7 @@ Neither reference calls a live gateway from its tests. DDGS writes a
 contract-complete engine source to a tmp path and points `engine_cache_path` at
 it (`tests/test_engine_service.py:22-36`); lm-router goes further and binds a
 real HTTP server speaking the contract (`tests/fixture_engine.py`). This is that
-second pattern, sized to what CollabShell's router actually consumes.
+second pattern, sized to what ColabShell's router actually consumes.
 
 It exists to exercise the one path nothing else covers: `load_engine()` ->
 `acquire_server()` binding a real port. Every other router test probes with a

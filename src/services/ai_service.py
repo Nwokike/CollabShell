@@ -102,7 +102,7 @@ def _system_prompt(skill_text: str | None = None) -> str:
     built-in rules rather than failing the turn.
     """
     base = (
-        "You are the assistant inside CollabShell, a desktop client for remote "
+        "You are the assistant inside ColabShell, a desktop client for remote "
         "Google Colab runtimes. You operate a live session: one kernel on a "
         "rented VM.\n"
         "\n"

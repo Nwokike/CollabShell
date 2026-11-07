@@ -21,7 +21,7 @@ def resolve_storage_dir() -> str:
     if storage_env:
         storage_dir = os.path.join(storage_env, "colab-cli")
     else:
-        # __file__ …/Collab/src/core/storage_patch.py → project root
+        # __file__ …/Colab/src/core/storage_patch.py → project root
         project_root = Path(__file__).resolve().parent.parent.parent
         storage_dir = os.path.join(project_root, "storage")
     return storage_dir

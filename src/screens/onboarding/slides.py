@@ -158,7 +158,7 @@ def build_page_3(
                 text_align=ft.TextAlign.CENTER,
             ),
             ft.Text(
-                "Required to create and manage Collab Shell sessions",
+                "Required to create and manage Colab Shell sessions",
                 size=tokens.FONT_SM,
                 color=ft.Colors.ON_SURFACE_VARIANT,
                 text_align=ft.TextAlign.CENTER,

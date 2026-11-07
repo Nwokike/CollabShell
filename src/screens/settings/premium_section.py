@@ -3,12 +3,12 @@
 The owner's rule: exactly KTV Player's premium on every count — the rows,
 the order, the dialogs, the copy, the busy/error states. Nothing added,
 nothing removed. Only the app name and the benefit sentence are this app's:
-KTV's channel-pack line describes a product CollabShell does not have, so
+KTV's channel-pack line describes a product ColabShell does not have, so
 the same sentence shape carries this app's real benefit (500 credits a day).
 
 Structure (KTV settings_screen.py:942-1235):
 
-    status row      "CollabShell Premium" + honest subtitle + check mark
+    status row      "ColabShell Premium" + honest subtitle + check mark
     kiri rows       (free only) every catalog product, the recovery ID with
                     Copy, then error-with-Retry or loading-while-in-flight
     restore row     always: Restore purchases
@@ -50,7 +50,7 @@ _MONTHS = (
 )
 
 # One catalog fetch per launch, not one per repaint of this card. (KTV uses
-# ft.on_mounted(_load_license) for re-fetch-on-mount, but CollabShell's
+# ft.on_mounted(_load_license) for re-fetch-on-mount, but ColabShell's
 # section builders are plain functions called from the SettingsScreen
 # component body, and test_a_plain_section_builder_never_registers_a_hook
 # forbids flet hooks there — so the once-per-launch flag is the port.)
@@ -209,7 +209,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
         )
         page.show_dialog(
             ft.AlertDialog(
-                title=ft.Text(f"Unlock CollabShell Premium — {product_label}", size=15),
+                title=ft.Text(f"Unlock ColabShell Premium — {product_label}", size=15),
                 content=field,
                 actions=[
                     ft.TextButton("Cancel", on_click=lambda e: page.pop_dialog()),
@@ -411,7 +411,7 @@ def build_premium_section(page: ft.Page, state, services) -> ft.Column:
                 size=18,
                 color=ft.Colors.PRIMARY if is_premium else ft.Colors.ON_SURFACE_VARIANT,
             ),
-            title="CollabShell Premium",
+            title="ColabShell Premium",
             subtitle=_premium_subtitle(
                 is_premium,
                 getattr(license_svc, "claims", None),

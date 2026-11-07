@@ -1,17 +1,17 @@
 ---
 name: collabshell-operator
-description: Operate Google Colab runtimes through CollabShell's notebook, terminal, and files. Use when asked to create a session, run Python or shell on the remote VM, read or edit notebook cells, inspect files, install packages, mount Drive, or explain output.
+description: Operate Google Colab runtimes through ColabShell's notebook, terminal, and files. Use when asked to create a session, run Python or shell on the remote VM, read or edit notebook cells, inspect files, install packages, mount Drive, or explain output.
 ---
 
-# Skill: CollabShell Session Operator
+# Skill: ColabShell Session Operator
 
-Operate live Google Colab runtimes from inside CollabShell: create sessions,
+Operate live Google Colab runtimes from inside ColabShell: create sessions,
 run Python and shell on the remote VM, read and edit notebook cells, sync
 files, and capture work as notebooks or scripts.
 
 ## Mental model (read this first)
 
-- **CollabShell is a GUI over the `colab_cli` Python SDK.** You are not driving
+- **ColabShell is a GUI over the `colab_cli` Python SDK.** You are not driving
   the `colab` command-line tool. Several defaults differ from it, and the CLI
   documentation will mislead you.
 - **A session == a live Jupyter kernel on a rented VM.** Creating one allocates
@@ -25,7 +25,7 @@ files, and capture work as notebooks or scripts.
 - **Notebook tabs share ONE kernel.** Multiple tabs are separate documents, not
   separate runtimes — a variable set in one tab is visible in the others.
 - **The VM is ephemeral, but the app keeps it alive while you work.** While the
-  app is open, CollabShell pings the session so it is not idle-reclaimed; if a
+  app is open, ColabShell pings the session so it is not idle-reclaimed; if a
   call still hits a stale token or a reclaimed VM, the app re-syncs and retries
   once transparently — you do not need to give up on the session. Only files
   the user saved (or wrote to Drive) survive a real VM loss.

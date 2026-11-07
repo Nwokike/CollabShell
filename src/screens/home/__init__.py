@@ -200,7 +200,7 @@ def HomeScreen() -> ft.Control:
         content=ft.Column(
             controls=[
                 ft.Text(
-                    "What CollabShell Can Do",
+                    "What ColabShell Can Do",
                     size=tokens.FONT_MD,
                     weight=ft.FontWeight.W_600,
                 ),

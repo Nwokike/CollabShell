@@ -93,7 +93,7 @@ def build_banner_ad(page: ft.Page | None = None) -> Control:
         return ft.Container(width=0, height=0)
 
     # Premium users never see ads — the owner's rule for every premium app.
-    # (Sherlock is free-only and omits this; CollabShell has premium.)
+    # (Sherlock is free-only and omits this; ColabShell has premium.)
     from core.state import state
 
     if getattr(state, "is_premium", False):

@@ -3,7 +3,7 @@
 Ported from DDGS `src/services/kani_backend.py`. Owner decision (recorded in
 project memory): kani[openai] speaks the OpenAI wire our embedded router uses;
 the gateway fallback is DROPPED — the router is the single AI source. The outer
-contracts CollabShell already has are kept exactly: the emit protocol, credits
+contracts ColabShell already has are kept exactly: the emit protocol, credits
 per model step, the approval gate, step rows, the candidate walk.
 
 The five non-obvious things kani's shape forces, all verified against the
@@ -288,6 +288,25 @@ class DDGSKani(Kani):
     async def do_function_call(self, call, tool_call_id: str | None = None):
         token = _current_call_id.set(tool_call_id or "")
         try:
+            # Models sometimes emit raw backslashes inside string arguments
+            # (regex, Windows paths) — invalid JSON escapes that made kani fail
+            # the whole call and burn every candidate on the same parse error
+            # (the 11/7 log). Repair the escapes in place and let the call
+            # through; FunctionCall is a mutable pydantic model and kwargs is a
+            # cached_property, so drop the cached failed parse after rewriting.
+            try:
+                _ = call.kwargs  # force the cached parse
+            except Exception:
+                import json as _json
+                import re as _re
+
+                repaired = _re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", call.arguments or "")
+                try:
+                    _json.loads(repaired)
+                    call.arguments = repaired
+                    call.__dict__.pop("kwargs", None)
+                except Exception:
+                    pass  # unrecoverable — the error path below handles it
             return await super().do_function_call(call, tool_call_id=tool_call_id)
         except asyncio.CancelledError:
             raise
@@ -296,12 +315,11 @@ class DDGSKani(Kani):
             # already turns these into a FUNCTION message + one re-ask. Let it.
             raise
         except Exception as exc:
-            # Anything else (a malformed payload that escaped kani's wrap, an
-            # unexpected tool-body failure) must not kill the round: kani's
-            # loop dereferences .message/.is_model_turn on the result, so a
-            # bare str would AttributeError and burn the whole candidate walk.
-            # Return a proper FunctionCallResult carrying a FUNCTION message —
-            # the model reads it, corrects the call, and the round continues.
+            # Anything else (an unexpected tool-body failure) must not kill the
+            # round: kani's loop dereferences .message/.is_model_turn on the
+            # result, so a bare str would AttributeError and burn the candidate
+            # walk. Return a proper FunctionCallResult carrying a FUNCTION
+            # message — the model reads it, corrects the call, round continues.
             name = getattr(call, "name", "?")
             logger.warning("AI tool %s call failed: %s", name, exc)
             return FunctionCallResult(
@@ -321,7 +339,7 @@ class DDGSKani(Kani):
 
 # Kani's round loop and batch gather are its own and neither needs changing for
 # anything this app does; only call identity is added, above.
-CollabShellKani = DDGSKani
+ColabShellKani = DDGSKani
 
 
 def _chat_messages(items: list[dict], *, limit: int | None = None) -> list[ChatMessage]:
@@ -541,7 +559,7 @@ async def run_turn(
         # with the tools stripped, so an over-cap turn still answers from what
         # it gathered instead of failing at the boundary.
         at_cap = 0 < max_rounds <= model_steps
-        kani = CollabShellKani(
+        kani = ColabShellKani(
             engine,
             system_prompt=system_prompt or None,
             chat_history=list(history_msgs),

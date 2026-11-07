@@ -19,7 +19,7 @@ logger = logging.getLogger("colab_keepalive")
 # Colab idle-prunes VMs after ~7-8 min without kernel activity; stay well
 # inside that window.
 KEEPALIVE_INTERVAL_SEC = 240.0
-KEEPALIVE_CODE = "pass  # CollabShell keep-alive: resets Colab's idle timer\n"
+KEEPALIVE_CODE = "pass  # ColabShell keep-alive: resets Colab's idle timer\n"
 
 
 class SessionKeepAlive:

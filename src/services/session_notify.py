@@ -78,7 +78,7 @@ class SessionNotificationService:
             await self.request_permission()
             await self.notifications.start_foreground_service(
                 id=FGS_ID,
-                title="Collab Shell",
+                title="Colab Shell",
                 body=f"Colab session running: {session_name}",
                 payload=f"session:{session_name}",
                 start_type=ftn.AndroidServiceStartType.STICKY,

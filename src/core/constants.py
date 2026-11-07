@@ -86,7 +86,7 @@ ROUTER_STATUS_INTERVAL_BG_S = 30.0
 ROUTER_START_TIMEOUT_S = 60.0
 # router.kiri.ng answers 403 to default library user-agents, so the engine
 # could never be fetched without this header.
-ENGINE_USER_AGENT = f"CollabShell/{APP_VERSION}"
+ENGINE_USER_AGENT = f"ColabShell/{APP_VERSION}"
 
 # One assistant step = one model call (a streamed reply, or one tool round).
 # The Settings "what credits are for" copy is generated from these, never

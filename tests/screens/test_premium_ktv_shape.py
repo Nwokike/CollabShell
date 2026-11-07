@@ -65,7 +65,7 @@ def test_first_paint_is_loading_not_a_false_error():
 
 def test_status_row_names_the_app_and_carries_a_check_mark():
     text = _card()
-    assert '"CollabShell Premium"' in text
+    assert '"ColabShell Premium"' in text
     assert "VERIFIED_ROUNDED" in text
     assert "CHECK_CIRCLE" in text and "CIRCLE_OUTLINED" in text
     assert "_premium_subtitle" in text
@@ -152,7 +152,7 @@ def test_row_order_is_status_products_recovery_restore():
     texts = _flatten(card)
     order = []
     for needle in (
-        "CollabShell Premium",
+        "ColabShell Premium",
         "Lifetime",
         "Your recovery ID",
         "Restore purchases",
@@ -170,7 +170,7 @@ def test_email_dialog_is_exactly_one_field():
     """KTV:1003-1025 — the dialog is the field and nothing else."""
     text = _card()
     assert "KeyboardType.EMAIL" in text
-    assert "Unlock CollabShell Premium —" in text
+    assert "Unlock ColabShell Premium —" in text
     assert '"Continue"' in text
 
 

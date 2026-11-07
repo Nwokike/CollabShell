@@ -1273,11 +1273,12 @@ def test_tool_call_failure_returns_function_result_not_bare_str():
     class _FakeEngine:
         max_context_size = 128_000
 
-    kani = kani_backend.CollabShellKani(engine=_FakeEngine())
+    kani = kani_backend.ColabShellKani(engine=_FakeEngine())
 
-    class _Call:
-        # kani passes the FunctionCall itself; it has .name directly.
-        name = "write_cells"
+    from kani.models import FunctionCall
+
+    # kani passes the FunctionCall itself (mutable pydantic, .name + .arguments).
+    _call = FunctionCall(name="write_cells", arguments='{"cells": "x = 1"}')
 
     # A non-FunctionCallException must become a FunctionCallResult.
     async def boom(*args, **kwargs):
@@ -1286,7 +1287,7 @@ def test_tool_call_failure_returns_function_result_not_bare_str():
     orig = kani_backend.Kani.do_function_call
     kani_backend.Kani.do_function_call = boom
     try:
-        result = asyncio.run(kani.do_function_call(_Call(), tool_call_id="t1"))
+        result = asyncio.run(kani.do_function_call(_call, tool_call_id="t1"))
     finally:
         kani_backend.Kani.do_function_call = orig
     assert isinstance(result, FunctionCallResult), type(result)
@@ -1302,9 +1303,40 @@ def test_tool_call_failure_returns_function_result_not_bare_str():
     kani_backend.Kani.do_function_call = boom2
     try:
         try:
-            asyncio.run(kani.do_function_call(_Call(), tool_call_id="t2"))
+            asyncio.run(kani.do_function_call(_call, tool_call_id="t2"))
             raise AssertionError("FunctionCallException must propagate")
         except FunctionCallException:
             pass
     finally:
         kani_backend.Kani.do_function_call = orig
+
+
+def test_invalid_json_escapes_in_tool_arguments_are_repaired():
+    r"""A model emitting a raw backslash in a string arg (\d in a regex, a
+    Windows path) produces an invalid JSON escape. The override repairs it
+    in place so the call executes instead of burning every candidate."""
+    import asyncio
+
+    from kani.models import FunctionCall
+
+    from services import kani_backend
+
+    class _FakeEngine:
+        max_context_size = 128_000
+
+    kani = kani_backend.ColabShellKani(engine=_FakeEngine())
+
+    seen = {}
+
+    async def fake_tool(source: str) -> str:
+        seen["source"] = source
+        return "ok"
+
+    kani.functions = {"write_cells": kani_backend.AIFunction(fake_tool, name="write_cells")}
+    # one raw backslash in the JSON string — an invalid escape (\\d in regex)
+    bad_json = '{"source": "re.match(a' + chr(92) + 'db)"}'
+    call = FunctionCall(name="write_cells", arguments=bad_json)
+    result = asyncio.run(kani.do_function_call(call, tool_call_id="t9"))
+    # the call went through with the repaired arguments: \d -> \\d -> \d
+    assert seen["source"] == "re.match(a" + chr(92) + "db)"
+    assert result.message.role.value == "function"

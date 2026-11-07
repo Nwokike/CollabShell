@@ -272,3 +272,55 @@ def test_daily_cap_reads_premium_live_from_state():
         assert svc.daily_cap() == 500
     finally:
         state.is_premium = False
+
+
+# ── licence: a /status 404 must not revoke a token that verifies offline ─────
+
+
+def test_status_refusal_keeps_a_valid_cached_token():
+    """The 11/7 log: 'server refusal HTTP 404' on a background /status cleared
+    a valid lifetime token and dropped the owner to free mid-session. A
+    read-only status refusal must not clear a cache that still verifies."""
+    import asyncio
+
+    from services import license_service as ls
+
+    class _Storage:
+        def __init__(self):
+            self.data = {}
+
+        async def get(self, key, default=None):
+            return self.data.get(key, default)
+
+        async def set(self, key, value):
+            self.data[key] = str(value)
+
+    async def go():
+        storage = _Storage()
+        svc = ls.KiriLicenseService(storage, app_id="ng.kiri.collabshell")
+        # Plant a VALID cached token by stubbing verify_token to accept it.
+        real_verify = ls.verify_token
+        ls.verify_token = lambda token, key, app: ls.LicenseClaims(
+            ent="kiri", app=app, product="lifetime", scope="", mode="",
+            status="active", paid_through=None, issued_at=0, expires_at=None,
+        ) if token == "good" else (_ for _ in ()).throw(ls.TokenRejected("bad", "x"))
+        try:
+            await storage.set(ls.SETTING_TOKEN, "good")
+            assert await svc.apply_cached_token() is True  # premium from cache
+
+            async def fake_post(path, body):
+                raise ls.LicenseUnavailable("license not found", status_code=404, is_refusal=True)
+
+            svc._post = fake_post
+            try:
+                await svc._query("/status", "KIRI-L-X", issue_token=False)
+                raise AssertionError("should have raised")
+            except ls.LicenseUnavailable:
+                pass
+            # The cached token survived — no revoke happened.
+            assert (await storage.get(ls.SETTING_TOKEN, "")) == "good"
+            assert svc._unlocked is True, "the 404 must not revoke the valid cache"
+        finally:
+            ls.verify_token = real_verify
+
+    asyncio.run(go())

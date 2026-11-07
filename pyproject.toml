@@ -1,7 +1,7 @@
 [project]
 name = "collabshell"
 version = "2.2.0"
-description = "Collab Shell: Notebook and TTY client for Google Colab"
+description = "Colab Shell: Notebook and TTY client for Google Colab"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -29,7 +29,7 @@ dependencies = [
 
 [tool.flet]
 org = "ng.kiri"
-product = "Collab Shell"
+product = "Colab Shell"
 build_number = 13
 # The light desktop client does not bundle flet-terminal (terminals render as
 # unknown controls under `flet run`); the full client does.
@@ -40,7 +40,7 @@ path = "src"
 
 
 [tool.flet.boot_screen]
-startup_message = "Initializing Collab Shell..."
+startup_message = "Initializing Colab Shell..."
 
 [tool.flet.android]
 # Compress native libs in the APK (pre-0.86 behaviour): since 0.86 flet stores

@@ -5,7 +5,7 @@ shims and nothing else changed:
 
   * **storage** — ktv-player reads a global ``db_manager``; we take an injected
     storage object exposing ``async get(key, default)`` / ``async set(key, value)``
-    (CollabShell's StorageService). The ``token = ""`` clear semantics are kept
+    (ColabShell's StorageService). The ``token = ""`` clear semantics are kept
     rather than ``delete_key``, matching both KTV and this app's retired-key
     policy of never deleting on-device keys.
   * **http** — a ``_http_client()`` factory so tests can substitute a mock
@@ -188,6 +188,16 @@ class KiriLicenseService:
             self._unlocked,
         )
         self._notify_change()
+
+    async def _cached_claims(self) -> LicenseClaims | None:
+        """The stored token's claims when it still verifies offline, else None."""
+        token = (await self.storage.get(SETTING_TOKEN, "")) or ""
+        if not token:
+            return None
+        try:
+            return verify_token(token, self.public_key, self.app_id)
+        except TokenRejected:
+            return None
 
     async def apply_cached_token(self) -> bool:
         """Unlock from the stored token with no network. False is not an error:
@@ -377,6 +387,23 @@ class KiriLicenseService:
             )
         except LicenseUnavailable as ex:
             if ex.is_refusal:
+                # A read-only /status refusal must NOT clear a cached token
+                # that still verifies offline — the 11/7 phone log's
+                # "server refusal HTTP 404" on /status revoked a valid
+                # lifetime licence and dropped the user to free mid-session.
+                # The signed token is the ground truth; only a restore with
+                # no valid cache (or a token the server itself disproves)
+                # may revoke.
+                if not issue_token:
+                    cached = await self._cached_claims()
+                    if cached is not None:
+                        logger.warning(
+                            "status refusal HTTP %s ignored: cached token still "
+                            "verifies offline (status=%s)",
+                            ex.status_code,
+                            cached.status,
+                        )
+                        raise
                 await self._revoke(f"server refusal HTTP {ex.status_code}")
                 raise
             logger.info("License request transient failure, retrying once: %s", ex)

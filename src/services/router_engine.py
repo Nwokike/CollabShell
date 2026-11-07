@@ -14,7 +14,7 @@ Three properties this module exists to guarantee, each learned the hard way:
    load it, and only `os.replace` after it loads.
 2. **The engine download must never share the event loop the model calls run
    on.** DDGS keeps this entire path in sync urllib + threads for that reason
-   (an anyio study established it). CollabShell's call sites are already async,
+   (an anyio study established it). ColabShell's call sites are already async,
    so this is `async` — but the rule is unchanged and asserted in tests.
 3. **The cache is the CACHE tier.** Per `.flet/README.md` the OS may purge it
    under storage pressure, and that is fine: one download rebuilds the file.

@@ -37,7 +37,7 @@ ThoughtCB = Callable[[str], None]
 
 # Same UA rule as the engine fetch: router.kiri.ng answers 403 to default
 # library user-agents.
-USER_AGENT = f"CollabShell/{APP_VERSION}"
+USER_AGENT = f"ColabShell/{APP_VERSION}"
 
 # Fields seen in the wild, across providers.
 _REASONING_KEYS = ("reasoning_content", "reasoning", "reasoning_details")
