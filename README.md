@@ -51,83 +51,13 @@
 
 ## Screenshots
 
-### Onboarding & Security Verification
-<table>
-  <tr>
-    <td width="50%"><img src="screenshots/onboarding_google_sign_in_dark.png" width="100%" alt="Google Sign In Slide" /></td>
-    <td width="50%"><img src="screenshots/onboarding_google_verified_dark.png" width="100%" alt="Google Auth Verified" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Google Sign-In Onboarding — native auth guide for managing instances</em></td>
-    <td align="center"><em>Verification Flow — OAuth2 verification sandboxed securely on your device</em></td>
-  </tr>
-</table>
+| Home | New session | Notebook | Run output |
+|:----:|:-----------:|:--------:|:----------:|
+| ![Home](screenshots/home_active_sessions_dark.png) | ![New session](screenshots/new_session_dialog_dark.png) | ![Notebook](screenshots/session_notebook_dark.png) | ![Run output](screenshots/session_run_code_dark.png) |
 
-### Dashboard & Provisioning
-<table>
-  <tr>
-    <td width="33%"><img src="screenshots/home_empty_light.png" width="100%" alt="Home View Light Theme" /></td>
-    <td width="33%"><img src="screenshots/new_session_dialog_dark.png" width="100%" alt="New Session Provisioning Sheet" /></td>
-    <td width="33%"><img src="screenshots/home_active_sessions_dark.png" width="100%" alt="Active Sessions Dashboard" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Initial Dashboard (Light Theme) — clean starting view for creating cloud instances</em></td>
-    <td align="center"><em>Session Provisioning — select accelerators (CPU, GPU, TPU v5e/v6e) and set run names</em></td>
-    <td align="center"><em>Active Runtimes Dashboard (Dark Theme) — list active instances with direct shortcut links</em></td>
-  </tr>
-</table>
-
-### Interactive Notebook & Code Editor
-<table>
-  <tr>
-    <td width="33%"><img src="screenshots/session_notebook_dark.png" width="100%" alt="Notebook Session Workspace" /></td>
-    <td width="33%"><img src="screenshots/session_markdown_cell_dark.png" width="100%" alt="Live Rendered Markdown Cell" /></td>
-    <td width="33%"><img src="screenshots/session_run_code_dark.png" width="100%" alt="Code Cell Real-Time Execution" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Interactive Editor — mount Google Drive, toggle keep-alive, and edit code cells</em></td>
-    <td align="center"><em>Rich Markdown editor — write documentation with live render support</em></td>
-    <td align="center"><em>Result Output Console — view streaming code execution output in real time</em></td>
-  </tr>
-</table>
-
-### Remote File Manager
-<table>
-  <tr>
-    <td width="50%"><img src="screenshots/files_browser_download_dark.png" width="100%" alt="Remote File Browser Multi Select" /></td>
-    <td width="50%"><img src="screenshots/files_upload_native_save_dark.png" width="100%" alt="Native File Download Toast & Upload" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Remote File Manager — breadcrumb navigation, multi-select files for bulk Download & Delete</em></td>
-    <td align="center"><em>Native Download & Upload — save files directly to device Downloads folder with toast alerts</em></td>
-  </tr>
-</table>
-
-### Interactive PTY Terminal & AI TUI Execution
-<table>
-  <tr>
-    <td width="50%"><img src="screenshots/session_ollama_terminal_dark.png" width="100%" alt="Ollama LLM Terminal" /></td>
-    <td width="50%"><img src="screenshots/session_opencode_tui_dark.png" width="100%" alt="OpenCode AI TUI Terminal" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Ollama LLM Execution — run open-weight AI models live inside Colab TTY terminal</em></td>
-    <td align="center"><em>OpenCode AI Coding Assistant — interactive terminal TUI with full soft-key controls</em></td>
-  </tr>
-</table>
-
-### Terminal Customization & App Settings
-<table>
-  <tr>
-    <td width="33%"><img src="screenshots/terminal_settings_modal_dark.png" width="100%" alt="Terminal Theme Modal" /></td>
-    <td width="33%"><img src="screenshots/terminal_matrix_green_dark.png" width="100%" alt="Matrix Green Terminal" /></td>
-    <td width="33%"><img src="screenshots/settings_dark.png" width="100%" alt="App Settings Dark" /></td>
-  </tr>
-  <tr>
-    <td align="center"><em>Terminal Customization — select themes (JetBrains Dark, Dracula, Matrix Green, Colab Light), cursor blink & zoom</em></td>
-    <td align="center"><em>Matrix Green Theme — customized TTY styling with built-in output search bar</em></td>
-    <td align="center"><em>Settings Manager — toggle app themes, inspect Activity Terminal logs & re-authenticate</em></td>
-  </tr>
-</table>
+| Assistant chat | Assistant working | AI notebook tab | Terminal AI |
+|:------------:|:---------------:|:-------------:|:-----------:|
+| ![Assistant chat](screenshots/assistant_chat_dark.png) | ![Assistant working](screenshots/assistant_thinking_dark.png) | ![AI notebook tab](screenshots/assistant_notebook_tab_dark.png) | ![Terminal AI](screenshots/terminal_explain_dark.png) |
 
 ---
 
