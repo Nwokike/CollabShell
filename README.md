@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=ng.kiri.collabshell"><img src="https://img.shields.io/badge/Google_Play-Android-3DDC84?style=for-the-badge&logo=google-play&logoColor=white" alt="Google Play Store" /></a>
-  <a href="https://github.com/Nwokike/ColabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /></a>
-  <a href="https://github.com/Nwokike/ColabShell/releases/latest"><img src="https://img.shields.io/badge/Download_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /></a>
+  <a href="https://github.com/Nwokike/Colab/releases/latest"><img src="https://img.shields.io/badge/Download_Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /></a>
+  <a href="https://github.com/Nwokike/Colab/releases/latest"><img src="https://img.shields.io/badge/Download_Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /></a>
   <img src="https://img.shields.io/badge/Built_with-Flet_1.1.0-00B0FF?style=for-the-badge&logo=flutter&logoColor=white" alt="Flet" />
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 </p>
@@ -21,17 +21,11 @@
 | Platform | Download | Notes |
 | :---: | :---: | :--- |
 | 🤖 **Android (Play Store)** | [![Play Store](https://img.shields.io/badge/Google_Play-414141?style=flat-square&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=ng.kiri.collabshell) | Recommended for Android mobile users |
-| 📱 **Android (APK)** | [![Download APK](https://img.shields.io/badge/Download_APK-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Direct APK download for 64-bit ARM64 devices |
-| 🪟 **Windows** | [![Windows Release](https://img.shields.io/badge/Download_Windows_Release-0078D6?style=flat-square&logo=windows&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_Setup.exe) | Automated standalone setup installer with desktop shortcut integration |
-| 🐧 **Linux (Debian/Ubuntu)** | [![Linux DEB](https://img.shields.io/badge/Download_Linux_DEB-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_amd64.deb) | Desktop package tailored for Ubuntu, Debian, Linux Mint & Pop!_OS |
-| 🎩 **Linux (Fedora/RHEL)** | [![Linux RPM](https://img.shields.io/badge/Download_Linux_RPM-E91E63?style=flat-square&logo=redhat&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_x86_64.rpm) | Desktop package tailored for Fedora, openSUSE, RHEL & CentOS |
-| 📦 **Linux (Universal Portable)** | [![Linux TAR.GZ](https://img.shields.io/badge/Download_Linux_TAR.GZ-9C27B0?style=flat-square&logo=linux&logoColor=white)](https://github.com/Nwokike/ColabShell/releases/latest/download/ColabShell_linux_x86_64.tar.gz) | Universal standalone portable archive for Arch, Alpine, Steam Deck & all distros |
-
-### Android Architecture Build
-
-| Variant | Download | Notes |
-| :--- | :---: | :--- |
-| 📱 **ARM64** | [**collabshell-arm64-v8a.apk**](https://github.com/Nwokike/CollabShell/releases/latest/download/collabshell-arm64-v8a.apk) | Modern 64-bit Android devices |
+| 📱 **Android (APK)** | [![Download APK](https://img.shields.io/badge/Download_APK-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/Nwokike/Colab/releases/latest/download/collabshell-arm64-v8a.apk) | Direct APK download for 64-bit ARM64 devices |
+| 🪟 **Windows** | [![Windows Release](https://img.shields.io/badge/Download_Windows_Release-0078D6?style=flat-square&logo=windows&logoColor=white)](https://github.com/Nwokike/Colab/releases/latest/download/ColabShell_Setup.exe) | Automated standalone setup installer with desktop shortcut integration |
+| 🐧 **Linux (Debian/Ubuntu)** | [![Linux DEB](https://img.shields.io/badge/Download_Linux_DEB-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Nwokike/Colab/releases/latest/download/ColabShell_amd64.deb) | Desktop package tailored for Ubuntu, Debian, Linux Mint & Pop!_OS |
+| 🎩 **Linux (Fedora/RHEL)** | [![Linux RPM](https://img.shields.io/badge/Download_Linux_RPM-E91E63?style=flat-square&logo=redhat&logoColor=white)](https://github.com/Nwokike/Colab/releases/latest/download/ColabShell_x86_64.rpm) | Desktop package tailored for Fedora, openSUSE, RHEL & CentOS |
+| 📦 **Linux (Universal Portable)** | [![Linux TAR.GZ](https://img.shields.io/badge/Download_Linux_TAR.GZ-9C27B0?style=flat-square&logo=linux&logoColor=white)](https://github.com/Nwokike/Colab/releases/latest/download/ColabShell_linux_x86_64.tar.gz) | Universal standalone portable archive for Arch, Alpine, Steam Deck & all distros |
 
 ---
 
