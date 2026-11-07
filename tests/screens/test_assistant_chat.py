@@ -197,10 +197,15 @@ def test_a_silent_task_still_gets_cancelled(tmp_path, monkeypatch):
 
     A model that stopped emitting has stopped polling its stop flag, so without
     a deadline the Stop button would hang the session forever. The backstop is
-    a scheduled coroutine: it is reached by running the loop's clock past the
-    grace window.
+    scheduled as a coroutine FUNCTION (page.run_task rejects a bare coroutine
+    object with "handler must be a coroutine function" — the phone's crash),
+    and it cancels only after the grace window.
     """
-    from core.constants import TURN_STOP_GRACE_S
+    import inspect
+
+    from core import constants
+
+    monkeypatch.setattr(constants, "TURN_STOP_GRACE_S", 0.0)
 
     session = _session(tmp_path, monkeypatch)
     scheduled = []
@@ -215,8 +220,6 @@ def test_a_silent_task_still_gets_cancelled(tmp_path, monkeypatch):
 
     session._task = FakeTask()
 
-    # Capture the backstop instead of running it, so the test can prove the
-    # deadline exists without sleeping through it.
     class CapturingPage:
         def __init__(self):
             self.views = []
@@ -226,23 +229,21 @@ def test_a_silent_task_still_gets_cancelled(tmp_path, monkeypatch):
         def update(self):
             pass
 
-        def run_task(self, coro):
-            scheduled.append(coro)
+        def run_task(self, fn, *args):
+            scheduled.append((fn, args))
 
     monkeypatch.setattr(session, "page", CapturingPage())
     session.stop()
     assert not cancelled, "stop must not cancel instantly"
     assert len(scheduled) == 1, "stop must schedule a backstop"
-    assert TURN_STOP_GRACE_S > 0
-    # Run the backstop to its first suspension: inside the grace window it
-    # must return without touching the turn, which is the whole point of
-    # scheduling it rather than cancelling now.
-    try:
-        scheduled[0].send(None)
-    except StopIteration:
-        pass  # returned without suspending: the in-window branch is proof
-    assert not cancelled, "the backstop must not cancel inside the grace window"
-    scheduled[0].close()
+    fn, args = scheduled[0]
+    assert inspect.iscoroutinefunction(fn), (
+        "run_task needs a coroutine FUNCTION — a bare coroutine object raises "
+        "TypeError on device (the 11/7 phone log)"
+    )
+    # Run the backstop: grace is 0, so it passes the window and cancels.
+    asyncio.run(fn(*args))
+    assert cancelled == [True], "the backstop must cancel after the grace window"
 
 
 def test_stop_on_a_finished_task_does_nothing(tmp_path, monkeypatch):

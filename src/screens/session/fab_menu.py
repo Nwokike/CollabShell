@@ -48,6 +48,7 @@ def build_session_fab(
     on_new_terminal=None,
     on_clear_terminal=None,
     on_copy=None,
+    on_copy_all=None,
     on_paste=None,
     # Terminal settings (FAB inherits the flet_terminal settings menu)
     term_settings: dict | None = None,
@@ -74,6 +75,7 @@ def build_session_fab(
             [
                 _item("New Terminal", ft.Icons.ADD_ROUNDED, on_new_terminal),
                 _item("Copy Selection", ft.Icons.COPY_ALL_ROUNDED, on_copy),
+                _item("Copy Full Output", ft.Icons.COPY_ALL_ROUNDED, on_copy_all),
                 _item("Paste", ft.Icons.CONTENT_PASTE_ROUNDED, on_paste),
                 _item("Clear Terminal", ft.Icons.CLEAR_ALL_ROUNDED, on_clear_terminal),
                 ft.PopupMenuItem(),

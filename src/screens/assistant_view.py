@@ -978,15 +978,18 @@ class ChatSession:
             deadline = time.monotonic() + TURN_STOP_GRACE_S
 
             async def _backstop() -> None:
+                # Wait the grace period, then hard-cancel only if the turn
+                # never noticed the flag. Scheduled as a coroutine FUNCTION —
+                # page.run_task rejects a bare coroutine object ("handler must
+                # be a coroutine function"), which is what the phone log showed.
+                await asyncio.sleep(TURN_STOP_GRACE_S)
                 if self._task is None or self._task.done():
                     return
                 if time.monotonic() < deadline:
                     return
                 self._task.cancel()
 
-            # Called, not referenced: the coroutine is what is scheduled, so
-            # the deadline inside it is the only thing that can cancel.
-            self.page.run_task(_backstop())
+            self.page.run_task(_backstop)
 
     def _set_busy_ui(self, busy: bool) -> None:
         self.send_btn.icon = ft.Icons.STOP_ROUNDED if busy else ft.Icons.SEND_ROUNDED

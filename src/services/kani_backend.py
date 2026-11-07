@@ -47,6 +47,8 @@ import openai
 from kani import AIFunction, ChatMessage, Kani
 from kani.engines.base import BaseCompletion
 from kani.engines.openai import OpenAIEngine
+from kani.exceptions import FunctionCallException
+from kani.internal import FunctionCallResult
 from kani.models import ChatRole
 
 logger = logging.getLogger("kani_backend")
@@ -287,6 +289,30 @@ class DDGSKani(Kani):
         token = _current_call_id.set(tool_call_id or "")
         try:
             return await super().do_function_call(call, tool_call_id=tool_call_id)
+        except asyncio.CancelledError:
+            raise
+        except FunctionCallException:
+            # kani's own retry path (kani.py:197 -> handle_function_call_exception)
+            # already turns these into a FUNCTION message + one re-ask. Let it.
+            raise
+        except Exception as exc:
+            # Anything else (a malformed payload that escaped kani's wrap, an
+            # unexpected tool-body failure) must not kill the round: kani's
+            # loop dereferences .message/.is_model_turn on the result, so a
+            # bare str would AttributeError and burn the whole candidate walk.
+            # Return a proper FunctionCallResult carrying a FUNCTION message —
+            # the model reads it, corrects the call, and the round continues.
+            name = getattr(call, "name", "?")
+            logger.warning("AI tool %s call failed: %s", name, exc)
+            return FunctionCallResult(
+                is_model_turn=True,
+                message=ChatMessage.function(
+                    name,
+                    f"(tool call '{name}' failed: {exc}) — fix the arguments "
+                    "(escape backslashes in strings properly) and call again.",
+                    tool_call_id=tool_call_id,
+                ),
+            )
         finally:
             # Without the reset a value could outlive its call and a later
             # tool would report a stale id, closing the wrong row.

@@ -466,7 +466,10 @@ def build_tools(session_name: str, services, state, ask_confirm=None) -> list:
             try:
                 ok = await _with_recovery(
                     lambda: services.colab.download(
-                        path, session_name=_live_session(), auth_method=state.auth_method
+                        path,
+                        local,
+                        session_name=_live_session(),
+                        auth_method=state.auth_method,
                     )
                 )
                 if not ok:

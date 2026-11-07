@@ -259,6 +259,7 @@ def SessionScreen(session_name: str, mode: str, on_back) -> ft.Control:
             on_new_terminal=lambda e: _call(term_actions, "new_terminal"),
             on_clear_terminal=lambda e: _call(term_actions, "clear_terminal"),
             on_copy=lambda e: _call(term_actions, "copy"),
+            on_copy_all=lambda e: _call(term_actions, "copy_all"),
             on_paste=lambda e: _call(term_actions, "paste"),
             # Terminal settings (FAB inherits the flet_terminal settings menu)
             term_settings={

@@ -1255,3 +1255,56 @@ def test_an_unknown_depth_is_ignored_rather_than_sent():
     for value in ("xhigh", "deep", "42", "high;rm -rf"):
         state.ai_thinking = value
         assert _thinking_depth() is None, value
+
+
+def test_tool_call_failure_returns_function_result_not_bare_str():
+    """kani 1.10.0's round loop dereferences .message/.is_model_turn on the
+    result of do_function_call — a bare str would AttributeError and burn the
+    candidate walk (the 11/7 phone log's Invalid \\escape flood). The override
+    must return a FunctionCallResult carrying a FUNCTION message."""
+    import asyncio
+
+    from kani.exceptions import FunctionCallException, NoSuchFunction
+    from kani.internal import FunctionCallResult
+    from kani.models import ChatMessage
+
+    from services import kani_backend
+
+    class _FakeEngine:
+        max_context_size = 128_000
+
+    kani = kani_backend.CollabShellKani(engine=_FakeEngine())
+
+    class _Call:
+        # kani passes the FunctionCall itself; it has .name directly.
+        name = "write_cells"
+
+    # A non-FunctionCallException must become a FunctionCallResult.
+    async def boom(*args, **kwargs):
+        raise RuntimeError("Invalid \\escape")
+
+    orig = kani_backend.Kani.do_function_call
+    kani_backend.Kani.do_function_call = boom
+    try:
+        result = asyncio.run(kani.do_function_call(_Call(), tool_call_id="t1"))
+    finally:
+        kani_backend.Kani.do_function_call = orig
+    assert isinstance(result, FunctionCallResult), type(result)
+    assert result.is_model_turn is True
+    assert isinstance(result.message, ChatMessage)
+    assert result.message.role.value == "function"
+    assert "write_cells" in result.message.content
+
+    # kani's own FunctionCallException must propagate (its retry path owns it).
+    async def boom2(*args, **kwargs):
+        raise NoSuchFunction("nope")
+
+    kani_backend.Kani.do_function_call = boom2
+    try:
+        try:
+            asyncio.run(kani.do_function_call(_Call(), tool_call_id="t2"))
+            raise AssertionError("FunctionCallException must propagate")
+        except FunctionCallException:
+            pass
+    finally:
+        kani_backend.Kani.do_function_call = orig

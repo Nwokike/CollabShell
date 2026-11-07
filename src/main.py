@@ -440,6 +440,11 @@ class AppController:
             self._sync_session_notification()
             try:
                 page.route = route
+            except RuntimeError:
+                # The page's session was GC'd mid-VM-restart. The client drives
+                # on_route_change anyway, so this is log noise, not a broken
+                # navigation — say so at debug, not as an exception traceback.
+                logger.debug("route set skipped: session destroyed")
             except Exception:
                 logger.exception("Suppressed exception")
 
@@ -1012,6 +1017,12 @@ class AppController:
         if self.page is None:
             return
         try:
+            # Touch the session BEFORE fn(*args) runs: run_task creates the
+            # coroutine first and only then reads session.connection.loop, so
+            # on a destroyed session it raised AFTER creating the coroutine —
+            # the "coroutine was never awaited" spam in the phone log. Checking
+            # first means the coroutine is never created on a dead session.
+            _ = self.page.session
             self.page.run_task(fn, *args)
         except Exception:
             logger.debug("run_task skipped (session gone): %s", fn, exc_info=True)

@@ -167,6 +167,27 @@ def _make_entry_handlers(
             logger_.exception("run_task failed")
 
     async def _connect():
+        # If this tab already has a PTY (client with a term_name) that merely
+        # died with the app session (VM restart, backgrounded socket), re-
+        # attach to the SAME shell instead of minting a new PTY — otherwise
+        # every resume spawns a fresh shell per tab (the 2,3,4,5,6 flood).
+        existing = entry.client
+        if (
+            existing is not None
+            and getattr(existing, "term_name", None)
+            and not existing.alive
+        ):
+            if ps.active_id == entry.id:
+                ps.status = f"Reconnecting Terminal {entry.id}…"
+                ps.status_ok = False
+                ps.connecting = True
+            ok = await existing.reconnect()
+            if ok:
+                entry.ready = True
+                return
+            # reconnect() failed (PTY gone): fall through and mint a fresh one.
+            entry.client = None
+
         session_info = await _get_terminal_session(colab_service, session_name)
         if not session_info:
             ps.status = "Session not found."
@@ -643,9 +664,7 @@ def TerminalPanel(
         try:
             # One shared Clipboard service: constructing ft.Clipboard() per
             # copy auto-registers another instance on the page under Flet 1.0.
-            if _copy_selection.clipboard is None:
-                _copy_selection.clipboard = ft.Clipboard()
-            await _copy_selection.clipboard.set(text)
+            await _clipboard().set(text)
             entry.mt.clear_selection()
             if snack:
                 snack("📋 Copied to clipboard")
@@ -653,7 +672,75 @@ def TerminalPanel(
             if snack:
                 snack(f"Copy failed: {ex}", is_error=True)
 
-    _copy_selection.clipboard = None
+    def _clipboard() -> ft.Clipboard:
+        """The single shared Clipboard instance (one construction site)."""
+        if _clipboard.instance is None:
+            _clipboard.instance = ft.Clipboard()
+        return _clipboard.instance
+
+    _clipboard.instance = None
+
+    # proot's ANSI stripper (screens/terminal/menu.py): the scrollback is the
+    # RAW PTY stream — CSI/OSC/charset escapes all sit in it; the readable copy
+    # strips them.
+    import re as _re
+
+    _ANSI_RE = _re.compile(
+        r"\x1b\[[0-?]*[ -/]*[@-~]"  # CSI … final byte
+        r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"  # OSC … BEL or ST
+        r"|\x1b[=>cNOM78]"  # keypad / charset / RIS singles
+    )
+
+    def _show_full_output_dialog() -> None:
+        """Copy FULL OUTPUT — the whole scrollback, not just what's on screen.
+
+        Ported from proot-distro's terminal menu ("Copy Full Output"): flet-
+        terminal's native select_all only reaches the rendered viewport, but
+        we own every byte in the per-tab scrollback ring buffer.
+        """
+        entry = _active_entry()
+        if entry is None or not entry.scrollback:
+            if snack:
+                snack("Nothing in the terminal yet.")
+            return
+        raw = b"".join(entry.scrollback)
+        text = _ANSI_RE.sub("", raw.decode("utf-8", "replace"))
+        # Collapse the blank runs the stripped clears leave behind.
+        text = _re.sub(r"\n{3,}", "\n\n", text).strip()
+
+        def _copy(_e) -> None:
+            page.run_task(_clipboard().set, text)
+            if snack:
+                snack(f"📋 Full output copied ({len(text):,} chars)")
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text(
+                    f"Full output — terminal {entry.id}",
+                    size=tokens.FONT_MD,
+                    weight=ft.FontWeight.W_700,
+                ),
+                content=ft.Container(
+                    content=ft.Text(
+                        text or "(empty)",
+                        font_family="RobotoMono",
+                        size=tokens.FONT_XS,
+                        selectable=True,
+                    ),
+                    width=420,
+                    height=360,
+                ),
+                actions=[
+                    ft.FilledButton(
+                        f"Copy all ({len(text):,} chars)",
+                        icon=ft.Icons.COPY_ALL_ROUNDED,
+                        on_click=_copy,
+                    ),
+                    ft.TextButton("Close", on_click=lambda _e: page.pop_dialog()),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+        )
 
     if register_actions:
         register_actions(
@@ -664,6 +751,7 @@ def TerminalPanel(
                 "cycle_theme": _cycle_theme,
                 "clear_terminal": _clear_terminal,
                 "copy": lambda: page.run_task(_copy_selection),
+                "copy_all": _show_full_output_dialog,
                 "paste": lambda: (
                     _active_entry().mt.paste()
                     if _active_entry() and _active_entry().mt
